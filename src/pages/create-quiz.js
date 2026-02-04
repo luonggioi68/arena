@@ -299,7 +299,7 @@ export default function CreateQuiz() {
             <div className="p-6 space-y-6">
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2"><label className="block text-sm font-bold text-[#15803d] mb-1">1. Chủ đề:</label><input value={aiTopic} onChange={(e) => setAiTopic(e.target.value)} placeholder="VD: Mạng máy tính..." className="w-full border p-2.5 rounded-lg outline-none focus:border-emerald-500" /></div>
-                <div><label className="block text-sm font-bold text-[#15803d] mb-1">2. Trình độ:</label><select value={aiLevel} onChange={(e) => setAiLevel(e.target.value)} className="w-full border p-2.5 rounded-lg"><option>Lớp 6</option><option>Lớp 7</option><option>Lớp 8</option><option>Lớp 9</option><option>Lớp 10</option><option>Lớp 11</option><option>Lớp 12</option></select></div>
+                <div><label className="block text-sm font-bold text-[#15803d] mb-1">2. Trình độ:</label><select value={aiLevel} onChange={(e) => setAiLevel(e.target.value)} className="w-full border p-2.5 rounded-lg"><option>Lớp 1</option><option>Lớp 2</option><option>Lớp 3</option><option>Lớp 4</option><option>Lớp 5</option><option>Lớp 6</option><option>Lớp 7</option><option>Lớp 8</option><option>Lớp 9</option><option>Lớp 10</option><option>Lớp 11</option><option>Lớp 12</option></select></div>
               </div>
               <div><label className="block text-sm font-bold text-[#15803d] mb-1 flex items-center gap-2">3. Nguồn tài liệu:</label><textarea value={aiSource} onChange={(e) => setAiSource(e.target.value)} placeholder="Dán nội dung bài học vào đây..." className="w-full border p-2 rounded-lg h-16 text-sm outline-none focus:border-emerald-500"/></div>
               <div className="space-y-4">
