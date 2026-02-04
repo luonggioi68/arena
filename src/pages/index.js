@@ -133,7 +133,7 @@ export default function HomePage() {
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#050505] to-black -z-20"></div>
       <div className="fixed inset-0 bg-[linear-gradient(to_right,#111_1px,transparent_1px),linear-gradient(to_bottom,#111_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20 -z-10 pointer-events-none"></div>
 
-      {/* BANNER 2 BÊN (15%) */}
+      {/* BANNER 2 BÊN */}
       {homeConfig.leftBanner && (<div className="fixed top-0 left-0 w-[15%] h-full hidden 2xl:block z-0 pointer-events-none"><img src={homeConfig.leftBanner} className="w-full h-full object-cover opacity-80 mask-image-right"/></div>)}
       {homeConfig.rightBanner && (<div className="fixed top-0 right-0 w-[15%] h-full hidden 2xl:block z-0 pointer-events-none"><img src={homeConfig.rightBanner} className="w-full h-full object-cover opacity-80 mask-image-left"/></div>)}
 
@@ -146,28 +146,28 @@ export default function HomePage() {
               </div>
           )}
           
-          <div className="relative z-20 container mx-auto h-full px-6 flex justify-between items-center">
+          <div className="relative z-20 container mx-auto h-full px-4 md:px-6 flex justify-between items-center">
               {/* LOGO */}
               <div className="flex items-center gap-4">
                   {homeConfig.logoTitleImage ? (
-                      <img src={homeConfig.logoTitleImage} alt="Logo" className="h-14 md:h-16 object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] hover:scale-105 transition-transform"/>
+                      <img src={homeConfig.logoTitleImage} alt="Logo" className="h-12 md:h-16 object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] hover:scale-105 transition-transform"/>
                   ) : (
-                      <div className="flex items-center gap-3 group cursor-pointer">
-                        <div className="bg-gradient-to-br from-cyan-600 to-blue-700 p-2.5 rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.4)] border border-white/10 group-hover:rotate-12 transition-transform duration-500"><Gamepad2 className="text-white" size={28} /></div>
-                        <div className="leading-none">
-                            <h1 className="text-3xl font-black italic tracking-tighter text-white uppercase drop-shadow-md">EDU <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">ARENA</span></h1>
-                            <p className="text-[9px] font-bold text-slate-300 uppercase tracking-[0.4em] drop-shadow-sm">Connect </p>
+                      <div className="flex items-center gap-2 md:gap-3 group cursor-pointer">
+                        <div className="bg-gradient-to-br from-cyan-600 to-blue-700 p-2 md:p-2.5 rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.4)] border border-white/10 group-hover:rotate-12 transition-transform duration-500"><Gamepad2 className="text-white" size={24} /></div>
+                        <div className="leading-none hidden md:block">
+                            <h1 className="text-2xl md:text-3xl font-black italic tracking-tighter text-white uppercase drop-shadow-md">EDU <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">ARENA</span></h1>
+                            <p className="text-[9px] font-bold text-slate-300 uppercase tracking-[0.4em] drop-shadow-sm">Connect System</p>
                         </div>
                       </div>
                   )}
               </div>
 
-              {/* USER */}
+              {/* USER / LOGIN [FIX: ANIMATION THỤT VÀO ĐẨY RA] */}
               <div className="flex items-center gap-4">
                 {user ? (
                   <div className="flex items-center gap-4 bg-black/40 pl-2 pr-6 py-1.5 rounded-full border border-white/10 backdrop-blur-md hover:bg-black/60 transition-all group shadow-lg">
                       <div className="relative">
-                          <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}&background=random`} className="w-9 h-9 rounded-full border-2 border-cyan-500 shadow-[0_0_10px_#22d3ee]" />
+                          <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}&background=random`} className="w-8 h-8 md:w-9 md:h-9 rounded-full border-2 border-cyan-500 shadow-[0_0_10px_#22d3ee]" />
                           <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-black rounded-full"></div>
                       </div>
                       <div className="hidden md:block">
@@ -181,26 +181,36 @@ export default function HomePage() {
                       </div>
                   </div>
                 ) : (
-                  <button onClick={handleLogin} className="relative px-6 py-2.5 rounded-xl bg-cyan-600/90 text-white font-black text-xs uppercase tracking-widest shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:bg-cyan-500 hover:scale-105 transition-all overflow-hidden group border border-cyan-400/30">
+                  // NÚT LOGIN: Mặc định là hình vuông icon, hover/click sẽ dài ra hiện chữ
+                  <button onClick={handleLogin} className="group relative h-10 w-12 hover:w-44 transition-all duration-500 ease-in-out bg-cyan-600/90 text-white rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:bg-cyan-500 overflow-hidden flex items-center border border-cyan-400/30">
                       <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500 skew-x-12"></div>
-                      <span className="relative flex items-center gap-2"><LogIn size={14} /> GV Đăng nhập</span>
+                      
+                      {/* Icon luôn hiện ở bên trái */}
+                      <div className="absolute left-0 w-12 h-10 flex items-center justify-center z-10">
+                          <LogIn size={20} className="drop-shadow-md"/>
+                      </div>
+                      
+                      {/* Text chỉ hiện khi hover */}
+                      <span className="pl-12 pr-4 font-black text-xs uppercase tracking-widest whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-100">
+                          GV Đăng nhập
+                      </span>
                   </button>
                 )}
               </div>
           </div>
       </header>
 
-      {/* 2. BODY CONTENT ([FIX] THU GỌN WIDTH ĐỂ KHÔNG TRÀN RA BANNER) */}
-      <div className="flex-1 relative w-full 2xl:max-w-[70%] mx-auto flex flex-col justify-center px-4 md:px-8 overflow-hidden z-10">
+      {/* 2. BODY CONTENT ([FIX] CHO PHÉP CUỘN NỘI DUNG Ở GIỮA) */}
+      <div className="flex-1 relative w-full 2xl:max-w-[70%] mx-auto flex flex-col px-4 md:px-8 overflow-y-auto custom-scrollbar z-10 py-6 md:justify-center">
           <main className="w-full">
             
-            <div className="mb-6 2xl:mb-10 text-center">
+            <div className="mb-6 2xl:mb-10 text-center mt-4 md:mt-0">
                 <h2 className="text-lg md:text-2xl font-black text-slate-400 uppercase tracking-[0.3em] mb-2 opacity-80 animate-pulse text-shadow-glow">Choose Your Battle</h2>
                 <div className="h-0.5 w-20 bg-gradient-to-r from-transparent via-cyan-500 to-transparent mx-auto"></div>
             </div>
 
-            {/* GRID 6 MỤC (Compact & Centered) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 w-full">
+            {/* GRID 6 MỤC - Mobile sẽ cuộn được vì bao ngoài là overflow-y-auto */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 w-full pb-10">
               <CyberCard title="Chiến Binh Arena" subtitle="Đấu trường sinh tử" icon={Sword} color="purple" delay={0} onClick={() => openGamePortal('CLASSIC')}/>
               <CyberCard title="Biệt Đội Arena" subtitle="Hợp sức tác chiến" icon={Shield} color="orange" delay={100} onClick={() => openGamePortal('RACE')}/>
               <CyberCard title="Nhanh Như Chớp" subtitle="Tốc độ sấm sét" icon={Zap} color="cyan" delay={200} onClick={() => openGamePortal('LIGHTNING')}/>
@@ -213,17 +223,17 @@ export default function HomePage() {
 
       {/* 3. FOOTER */}
       <footer className="h-[40px] shrink-0 bg-[#0a0a0a]/90 backdrop-blur border-t border-white/5 relative z-20 flex items-center justify-between px-6">
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 md:gap-6">
             <div className="flex items-center gap-2 group cursor-help" title="Số người đang online (Mô phỏng)">
                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-green-400 transition-colors">
+                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-green-400 transition-colors">
                     Online: <span className="text-white">{onlineUsers}</span>
                 </p>
             </div>
             <div className="h-3 w-px bg-white/10"></div>
             <div className="flex items-center gap-2 group cursor-help" title="Tổng lượt truy cập thực tế">
                 <Eye size={12} className="text-purple-500"/>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-purple-400 transition-colors">
+                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-purple-400 transition-colors">
                     Visits: <span className="text-white font-mono">{realVisitorCount.toLocaleString()}</span>
                 </p>
             </div>
