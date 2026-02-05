@@ -36,23 +36,26 @@ export default function ArenaHostController() {
         const data = snapshot.val();
         if (data.quiz) setQuiz(data.quiz);
         if (data.viewMode) setViewMode(data.viewMode);
-        if (data.config) setGameConfig(data.config); // Lấy cấu hình thời gian
-        if (data.players) setPlayers(Object.values(data.players)); else setPlayers([]);
+        if (data.config) setGameConfig(data.config);
+        
+        // Cập nhật danh sách người chơi
+        if (data.players) {
+            setPlayers(Object.values(data.players));
+        } else {
+            setPlayers([]);
+        }
         
         const svState = data.gameState || 'WAITING';
         setGameState(prev => {
             if (prev !== svState) {
-                // [CẬP NHẬT LOGIC TIMER]
                 if (svState === 'PREPARE') {
-                    // Câu đầu tiên chờ 3s (Bắt đầu), các câu sau chờ 1s
                     setTimer(data.currentQuestion === 0 ? 3 : 1); 
                 }
                 else if (svState === 'RESULT') {
-                    setTimer(3); // Xem kết quả 3s
+                    setTimer(3); 
                 }
                 else if (svState === 'QUESTION' && data.quiz) {
                     const qType = data.quiz.questions[data.currentQuestion].type;
-                    // Lấy thời gian từ config, nếu không có thì dùng mặc định
                     const time = data.config?.[`time${qType}`] || 15;
                     setTimer(time);
                 }
@@ -67,6 +70,22 @@ export default function ArenaHostController() {
         if(bgmRef.current) bgmRef.current.pause();
     };
   }, [pin]);
+
+  // [MỚI] TỰ ĐỘNG KẾT THÚC GAME NẾU KHÔNG CÒN AI
+  useEffect(() => {
+    // Chỉ kiểm tra khi game ĐANG DIỄN RA (Prepare, Question, Result)
+    // Không kiểm tra ở Lobby (WAITING) để tránh đóng phòng khi giáo viên đang đợi
+    if (['PREPARE', 'QUESTION', 'RESULT'].includes(gameState)) {
+        if (players.length === 0) {
+            // Cập nhật trạng thái về FINISHED trên server
+            update(ref(db, `rooms/${pin}`), { 
+                gameState: 'FINISHED' 
+            });
+            alert("⚠️ Đã hết người chơi trong phòng! Game tự động kết thúc.");
+            router.push('/dashboard');
+        }
+    }
+  }, [players, gameState, pin, router]);
 
   // 2. XỬ LÝ NHẠC
   useEffect(() => {

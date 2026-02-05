@@ -90,7 +90,33 @@ export default function InteractiveStudent() {
       }, 1000);
       return () => clearInterval(interval);
   }, [board?.timerEnd]);
+// --- TỰ ĐỘNG KẾT THÚC GAME KHI KHÔNG CÒN AI ---
+useEffect(() => {
+  // 1. Chỉ chạy khi đã có dữ liệu game
+  if (!gameData || !gameData.gameState) return;
 
+  const state = gameData.gameState;
+  const players = gameData.players || {};
+  const playerCount = Object.keys(players).length;
+
+  // 2. Nếu đang trong trận (QUESTION hoặc RESULT) mà số người chơi = 0
+  // (Tức là học sinh đã thoát hết sạch)
+  if ((state === 'QUESTION' || state === 'RESULT') && playerCount === 0) {
+      
+      // Cập nhật trạng thái về FINISHED
+      update(ref(db, `rooms/${pin}`), { 
+          gameState: 'FINISHED' 
+      });
+      
+      // Thông báo cho Giáo viên và quay về Dashboard
+      alert("⚠️ CẢNH BÁO: Tất cả chiến binh đã rời bỏ chiến trường!\nGame sẽ tự động kết thúc.");
+      router.push('/dashboard');
+  }
+
+  // 3. (Tùy chọn) Nếu đang ở Sảnh chờ (LOBBY) quá lâu mà không có ai (tránh treo server)
+  // Thầy có thể thêm logic timeout ở đây nếu muốn.
+  
+}, [gameData]); // Chạy lại mỗi khi dữ liệu game thay đổi
   // Xử lý Upload Đa năng (Ảnh + File)
   const handleFileUpload = async (e) => {
       const file = e.target.files[0]; if (!file) return;
