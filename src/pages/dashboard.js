@@ -49,20 +49,20 @@ export default function Dashboard() {
   const topBannerInput = useRef(null);
   const leftBannerInput = useRef(null);
   const rightBannerInput = useRef(null);
-  const logoTitleInput = useRef(null); // [NEW] Ref cho Logo
+  const logoTitleInput = useRef(null); 
 
   const [userConfig, setUserConfig] = useState({ 
       cloudinaryName: 'dcnsjzq0i', 
       cloudinaryPreset: 'gameedu', 
       geminiKey: '', 
-      geminiModel: 'gemini-1.5-flash', 
+      // [FIX] Đổi về model ổn định nhất
+      geminiModel: 'gemini-3-flash-preview', 
       timeMCQ: 15, 
       timeTF: 30, 
       timeSA: 30,
       submissionCode: ''
   });
   
-  // [NEW] Thêm logoTitleImage vào state
   const [homeConfig, setHomeConfig] = useState({ topBanner: '', leftBanner: '', rightBanner: '', logoTitleImage: '' });
   
   const [activeTab, setActiveTab] = useState('LIBRARY'); 
@@ -282,7 +282,7 @@ export default function Dashboard() {
             </div>
         )}
 
-        {/* TAB SETTINGS (ĐÃ THÊM LOGO UPLOAD) */}
+        {/* TAB SETTINGS (ĐÃ SỬA: MODEL GEMINI 1.5) */}
         {activeTab === 'SETTINGS' && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-500 max-w-5xl mx-auto pb-10">
                 <header className="mb-8"><h1 className="text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg mb-2">QUẢN TRỊ HỆ THỐNG</h1><p className="text-slate-400 font-medium">Cấu hình API và Quyền truy cập</p></header>
@@ -332,7 +332,16 @@ export default function Dashboard() {
                                 <div className="space-y-4">
                                     <h3 className="text-purple-400 font-bold uppercase text-sm border-b border-white/10 pb-2">Trí tuệ nhân tạo (Gemini)</h3>
                                     <div><label className="block text-xs font-bold text-slate-400 mb-1">Gemini API Key</label><input type="password" value={userConfig.geminiKey} onChange={e=>setUserConfig({...userConfig, geminiKey: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500 font-mono"/></div>
-                                    <div><label className="block text-xs font-bold text-slate-400 mb-1">Phiên bản Model</label><select value={userConfig.geminiModel} onChange={e=>setUserConfig({...userConfig, geminiModel: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500"><option value="gemini-1.5-flash">Gemini 1.5 Flash(Nhanh)</option><option value="gemini-3-flash-preview">Gemini 3 flash Preview (Ổn định)</option></select></div>
+                                    
+                                    {/* [CẬP NHẬT] DROPDOWN CHỌN MODEL CHUẨN */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 mb-1">Phiên bản Model</label>
+                                        <select value={userConfig.geminiModel} onChange={e=>setUserConfig({...userConfig, geminiModel: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500">
+                                            <option value="gemini-3-flash-preview">gemini-3-flash-preview (Khuyên dùng)</option>
+                                            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                            <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                             <div className="pt-4 border-t border-white/10">
