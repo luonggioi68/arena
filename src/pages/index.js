@@ -157,7 +157,7 @@ export default function HomePage() {
                         {/* [FIX] Bỏ class 'hidden md:block' để hiển thị text trên mobile */}
                         <div className="leading-none">
                             <h1 className="text-2xl md:text-3xl font-black italic tracking-tighter text-white uppercase drop-shadow-md">EDU <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">ARENA</span></h1>
-                            <p className="text-[9px] font-bold text-slate-300 uppercase tracking-[0.4em] drop-shadow-sm">Connect System</p>
+                            <p className="text-[9px] font-bold text-slate-300 uppercase tracking-[0.4em] drop-shadow-sm">Connect</p>
                         </div>
                       </div>
                   )}
@@ -215,7 +215,7 @@ export default function HomePage() {
               <CyberCard title="Chiến Binh Arena" subtitle="Đấu trường sinh tử" icon={Sword} color="purple" delay={0} onClick={() => openGamePortal('CLASSIC')}/>
               <CyberCard title="Biệt Đội Arena" subtitle="Hợp sức tác chiến" icon={Shield} color="orange" delay={100} onClick={() => openGamePortal('RACE')}/>
               <CyberCard title="Nhanh Như Chớp" subtitle="Tốc độ sấm sét" icon={Zap} color="cyan" delay={200} onClick={() => openGamePortal('LIGHTNING')}/>
-              <CyberCard title="Đấu Trường Đi Thi" subtitle="Khảo thí online" icon={BookOpen} color="green" delay={300} onClick={() => router.push('/exam')}/>
+              <CyberCard title="Arena Thi Online" subtitle="Khảo thí thi online" icon={BookOpen} color="green" delay={300} onClick={() => router.push('/exam')}/>
               <CyberCard title="Bảng Tương Tác" subtitle="Kết nối thời gian thực" icon={Users} color="blue" delay={400} onClick={() => router.push('/connect')}/>
               <CyberCard title="Cổng Nộp Bài" subtitle="Dành cho học sinh" icon={UploadCloud} color="pink" delay={500} onClick={() => router.push('/submit')}/>
             </div>
