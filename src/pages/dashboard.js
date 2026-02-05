@@ -55,7 +55,7 @@ export default function Dashboard() {
       cloudinaryName: 'dcnsjzq0i', 
       cloudinaryPreset: 'gameedu', 
       geminiKey: '', 
-      geminiModel: 'gemini-3-flash-preview', 
+      geminiModel: 'gemini-1.5-flash', 
       timeMCQ: 15, 
       timeTF: 30, 
       timeSA: 30,
