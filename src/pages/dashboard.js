@@ -337,8 +337,8 @@ export default function Dashboard() {
                                     <div>
                                         <label className="block text-xs font-bold text-slate-400 mb-1">Phiên bản Model</label>
                                         <select value={userConfig.geminiModel} onChange={e=>setUserConfig({...userConfig, geminiModel: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500">
-                                            <option value="gemini-3-flash-preview">gemini-3-flash-preview (Khuyên dùng)</option>
-                                            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                           <option value="gemini-3-flash-preview">gemini-3-flash-preview(free)</option>
+                                             <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
                                             <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
                                         </select>
                                     </div>

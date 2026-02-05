@@ -7,9 +7,7 @@ import { Plus, Trash2, Save, ArrowLeft, CheckCircle, Sparkles, X, Loader2, List,
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import mammoth from "mammoth";
 
-// --- CẤU HÌNH API ---
-const GEN_AI_KEY = "AIzaSyCnm53pFKuXeNtoyLeWtnuuk8l0ycMUNRg"; 
-const genAI = new GoogleGenerativeAI(GEN_AI_KEY);
+// [SỬA ĐỔI] KHÔNG CẤU HÌNH CỐ ĐỊNH Ở ĐÂY NỮA
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dcnsjzq0i/image/upload"; 
 const UPLOAD_PRESET = "gameedu"; 
 
@@ -41,7 +39,7 @@ export default function CreateQuiz() {
   // Dữ liệu đề thi
   const [title, setTitle] = useState('');
   const [assignedClass, setAssignedClass] = useState('');
-  const [duration, setDuration] = useState(45); // [MỚI] Mặc định 45 phút
+  const [duration, setDuration] = useState(45);
   
   const [scoreConfig, setScoreConfig] = useState({
     p1: 6, 
@@ -83,7 +81,7 @@ export default function CreateQuiz() {
             const data = snap.data();
             setTitle(data.title);
             setAssignedClass(data.assignedClass || '');
-            setDuration(data.duration || 45); // [MỚI] Load thời gian
+            setDuration(data.duration || 45);
             if (data.scoreConfig) setScoreConfig(data.scoreConfig);
             
             const loadedQs = data.questions.map(q => ({
@@ -206,20 +204,38 @@ export default function CreateQuiz() {
     pushCurrentQ(); return newQuestions;
   };
 
+  // [QUAN TRỌNG] HÀM GỌI AI ĐÃ ĐƯỢC SỬA ĐỂ LẤY CẤU HÌNH TỪ DATABASE
   const handleGenerateAI = async () => {
     if (!aiTopic) return alert("Thầy chưa nhập chủ đề!");
     const countTN = parseInt(matrix.tn_biet) + parseInt(matrix.tn_hieu) + parseInt(matrix.tn_vd);
     const countDS = parseInt(matrix.ds_count);
     const countTL = parseInt(matrix.tl_biet) + parseInt(matrix.tl_hieu) + parseInt(matrix.tl_vd);
     if (countTN + countDS + countTL === 0) return alert("Vui lòng nhập số lượng câu hỏi!");
+    
     setAiLoading(true);
     try {
-       const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+       // 1. LẤY CẤU HÌNH TỪ FIRESTORE (Thay vì dùng biến cứng)
+       const userConfigDoc = await getDoc(doc(firestore, "user_configs", user.uid));
+       if (!userConfigDoc.exists()) {
+           throw new Error("Chưa tìm thấy cấu hình API Key. Vui lòng vào trang Cấu hình để cập nhật.");
+       }
+       const config = userConfigDoc.data();
+       const apiKey = config.geminiKey;
+       // Nếu không có model trong DB thì dùng bản mặc định 1.5-flash
+       const modelName = config.geminiModel || "gemini-1.5-flash"; 
+
+       if (!apiKey) throw new Error("Chưa nhập API Key trong phần Cấu hình!");
+
+       // 2. KHỞI TẠO AI VỚI KEY ĐỘNG
+       const dynamicGenAI = new GoogleGenerativeAI(apiKey);
+       const model = dynamicGenAI.getGenerativeModel({ model: modelName });
+
       const prompt = `
         Đóng vai chuyên gia giáo dục soạn đề thi tất cả các môn trong chương trình GDPT 2018.
         Tuyệt đối bám sát vào sách giáo khoa hiện hành của Bộ GDĐT Việt Nam. 
         Lời dẫn câu hỏi phải rõ ràng, dễ hiểu, ngắn gọn. Không được sử dụng từ ngữ như theo sách giáo khoa, theo tài liệu tham khảo,...
         Câu hỏi trắc nghiệm không được có đáp án là "Tất cả các đáp án trên/không đáp án nào đúng","Cả A,B đúng",...
+        Viết code python/c++,... không được dùng dấu nháy đơn, nháy kép trong câu hỏi và câu trả lời.
         Chủ đề: ${aiTopic}. Trình độ: ${aiLevel}. Tài liệu: ${aiSource}
         HÃY TẠO DANH SÁCH CÂU HỎI THEO MA TRẬN SAU:
         - PHẦN 1 (Trắc nghiệm): Tổng ${countTN} câu (${matrix.tn_biet} Biết, ${matrix.tn_hieu} Hiểu, ${matrix.tn_vd} Vận dụng).
@@ -231,6 +247,7 @@ export default function CreateQuiz() {
             { "type": "TF", "part": 2, "q": "...", "items": [ { "text": "...", "isTrue": true }, ... ] },
             { "type": "SA", "part": 3, "q": "...", "correct": "..." }
         ]`;
+      
       const result = await model.generateContent(prompt);
       const text = result.response.text();
       const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -241,7 +258,12 @@ export default function CreateQuiz() {
       setShowAiModal(false);
       setMatrix({ tn_biet: 0, tn_hieu: 0, tn_vd: 0, ds_count: 0, ds_biet: 0, ds_hieu: 0, ds_vd: 0, tl_biet: 0, tl_hieu: 0, tl_vd: 0 });
       alert(`🎉 Đã tạo thành công ${aiQuestions.length} câu hỏi!`);
-    } catch (error) { alert("AI gặp lỗi! Thầy thử lại."); } finally { setAiLoading(false); }
+    } catch (error) { 
+        console.error(error);
+        alert("Lỗi AI: " + error.message); 
+    } finally { 
+        setAiLoading(false); 
+    }
   };
 
   const addQuestion = (type) => {
@@ -267,7 +289,7 @@ export default function CreateQuiz() {
       const quizData = { 
           title, 
           assignedClass, 
-          duration: parseInt(duration) || 45, // [MỚI] Lưu thời gian
+          duration: parseInt(duration) || 45, 
           scoreConfig,
           authorId: user.uid, 
           questions, 
@@ -287,7 +309,7 @@ export default function CreateQuiz() {
       <input type="file" accept="image/*" ref={qImgRef} onChange={onFileChange} className="hidden" />
       <input type="file" accept="image/*" ref={aImgRef} onChange={onFileChange} className="hidden" />
 
-      {/* MODAL AI (Giữ nguyên) */}
+      {/* MODAL AI */}
       {showAiModal && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in duration-200">
@@ -295,7 +317,7 @@ export default function CreateQuiz() {
               <h2 className="text-xl font-bold flex items-center gap-2"><BrainCircuit /> AI SOẠN ĐỀ (MA TRẬN MỚI)</h2>
               <button onClick={() => setShowAiModal(false)}><X size={24}/></button>
             </div>
-            {/* ... Nội dung modal giữ nguyên ... */}
+            
             <div className="p-6 space-y-6">
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2"><label className="block text-sm font-bold text-[#15803d] mb-1">1. Chủ đề:</label><input value={aiTopic} onChange={(e) => setAiTopic(e.target.value)} placeholder="VD: Mạng máy tính..." className="w-full border p-2.5 rounded-lg outline-none focus:border-emerald-500" /></div>
@@ -365,7 +387,7 @@ export default function CreateQuiz() {
                   />
               </div>
               
-              {/* [MỚI] Thời gian làm bài */}
+              {/* Thời gian làm bài */}
               <div>
                   <label className="block text-xs font-bold text-gray-400 uppercase mb-1 flex items-center gap-1"><Clock size={14}/> Thời gian làm bài (Phút)</label>
                   <input 
