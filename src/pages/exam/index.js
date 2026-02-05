@@ -138,7 +138,7 @@ export default function ExamLogin() {
                     <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Ngày sinh</label>
                         <div className="relative">
-                            <input type="date" className="w-full bg-[#0f172a] border-2 border-slate-700 text-white p-3 rounded-xl outline-none focus:border-indigo-500 font-bold text-center appearance-none" value={studentInfo.dob} onChange={(e) => setStudentInfo({...studentInfo, dob: e.target.value})}/>
+                            <input type="text" className="w-full bg-[#0f172a] border-2 border-slate-700 text-white p-3 rounded-xl outline-none focus:border-indigo-500 font-bold text-center appearance-none" value={studentInfo.dob} onChange={(e) => setStudentInfo({...studentInfo, dob: e.target.value})}/>
                         </div>
                     </div>
                 </div>

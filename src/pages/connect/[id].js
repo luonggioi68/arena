@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { firestore } from '@/lib/firebase';
-import { doc, collection, addDoc, serverTimestamp, onSnapshot, query, where, orderBy, updateDoc, getDoc } from 'firebase/firestore';
-import { Shield, Lock, Send, Image as ImageIcon, X, PenTool, Heart, LogIn, ZoomIn, Loader2, Home, ArrowLeft, Timer } from 'lucide-react';
+import { doc, collection, addDoc, serverTimestamp, onSnapshot, query, where, orderBy, getDoc, updateDoc } from 'firebase/firestore';
+import { Shield, Lock, Send, Paperclip, X, PenTool, Heart, LogIn, ZoomIn, Loader2, Home, ArrowLeft, Timer, FileText, Download, Hash } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
-// Import Lightbox & Zoom
+// Import Lightbox
 import Lightbox from "yet-another-react-lightbox";
 import Zoom from "yet-another-react-lightbox/plugins/zoom";
 import "yet-another-react-lightbox/styles.css";
@@ -22,18 +22,19 @@ export default function InteractiveStudent() {
   const [board, setBoard] = useState(null);
   const [notes, setNotes] = useState([]);
   
-  // State Cấu hình động (Lấy từ GV)
+  // Config
   const [cloudConfig, setCloudConfig] = useState({ name: "dcnsjzq0i", preset: "gameedu" });
 
   // State soạn thảo
   const [isWriting, setIsWriting] = useState(false);
   const [content, setContent] = useState('');
-  const [image, setImage] = useState(null); 
+  
+  // State lưu file đính kèm đa năng
+  const [attachment, setAttachment] = useState(null); // { url, type, name }
+  
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
   const [zoomedImage, setZoomedImage] = useState(null);
-
-  // [MỚI] State Đồng hồ đếm ngược
   const [timeLeft, setTimeLeft] = useState(null);
 
   // 1. TỰ ĐỘNG ĐĂNG NHẬP
@@ -44,15 +45,13 @@ export default function InteractiveStudent() {
       }
   }, [queryName]);
 
-  // 2. LOAD DATA & CONFIG
+  // 2. LOAD DATA
   useEffect(() => {
     if (!id) return;
     const unsubBoard = onSnapshot(doc(firestore, "interactive_boards", id), async (boardDoc) => {
         if(boardDoc.exists()) {
             const boardData = boardDoc.data();
             setBoard(boardData);
-            
-            // Lấy cấu hình Cloudinary của giáo viên tạo bảng
             if (boardData.authorId) {
                 try {
                     const configSnap = await getDoc(doc(firestore, "user_configs", boardData.authorId));
@@ -77,72 +76,58 @@ export default function InteractiveStudent() {
     return () => unsubBoard();
   }, [id, authorized]);
 
-  // [MỚI] Logic Đồng hồ đếm ngược (Đồng bộ với GV)
+  // Logic Đồng hồ
   useEffect(() => {
-      if (!board?.timerEnd) {
-          setTimeLeft(null);
-          return;
-      }
-
+      if (!board?.timerEnd) { setTimeLeft(null); return; }
       const interval = setInterval(() => {
-          const now = Date.now();
-          const remaining = board.timerEnd - now;
-
-          if (remaining <= 0) {
-              setTimeLeft("HẾT GIỜ");
-              clearInterval(interval);
-          } else {
+          const remaining = board.timerEnd - Date.now();
+          if (remaining <= 0) { setTimeLeft("HẾT GIỜ"); clearInterval(interval); } 
+          else {
               const m = Math.floor(remaining / 60000);
               const s = Math.floor((remaining % 60000) / 1000);
               setTimeLeft(`${m}:${s < 10 ? '0' : ''}${s}`);
           }
       }, 1000);
-
       return () => clearInterval(interval);
   }, [board?.timerEnd]);
 
-  // Handle Upload
-  const handleImageUpload = async (e) => {
+  // Xử lý Upload Đa năng (Ảnh + File)
+  const handleFileUpload = async (e) => {
       const file = e.target.files[0]; if (!file) return;
       
-      // [CẬP NHẬT] Tăng giới hạn lên 10MB
-      if (file.size > 10 * 1024 * 1024) {
-          alert("⚠️ Ảnh quá lớn (>10MB). Vui lòng chọn ảnh nhỏ hơn.");
-          return;
-      }
+      // Giới hạn 10MB
+      if (file.size > 10 * 1024 * 1024) return alert("⚠️ File quá lớn (>10MB)!");
 
       setUploading(true);
       const formData = new FormData(); 
       formData.append("file", file); 
       formData.append("upload_preset", cloudConfig.preset);
-      const cloudUrl = `https://api.cloudinary.com/v1_1/${cloudConfig.name}/image/upload`;
+      
+      const cloudUrl = `https://api.cloudinary.com/v1_1/${cloudConfig.name}/auto/upload`;
 
       try {
           const res = await fetch(cloudUrl, { method: "POST", body: formData });
           const data = await res.json();
-          if (data.secure_url) setImage(data.secure_url);
-          else alert("Lỗi tải ảnh (Kiểm tra cấu hình Cloudinary)!");
+          if (data.secure_url) {
+              setAttachment({
+                  url: data.secure_url,
+                  type: data.resource_type, // 'image', 'raw' (file), 'video'
+                  name: file.name,
+                  format: data.format
+              });
+          } else { alert("Lỗi tải file!"); }
       } catch (err) { alert("Lỗi kết nối!"); } finally { setUploading(false); }
-  };
-
-  const handleContentClick = (e, noteContent) => {
-      if (e.target.tagName === 'IMG') {
-          e.stopPropagation(); 
-          setZoomedImage(e.target.src); 
-      }
   };
 
   const handleLogin = (e) => { e.preventDefault(); if (name.trim()) setAuthorized(true); else alert("Vui lòng nhập tên!"); };
 
-  // [NÂNG CẤP] Xử lý ảnh dán (Base64) -> Tự động Upload lên Cloudinary
   const handleSubmit = async () => {
-      if (!content.trim() && !image) return alert("Viết gì đó đi chiến binh!");
+      if (!content.trim() && !attachment) return alert("Nội dung trống!");
       
       setUploading(true);
       try {
           let finalContent = content;
-          
-          // Quét và upload ảnh dán (Base64) nếu có
+          // Xử lý ảnh dán trực tiếp (Base64 -> Cloudinary)
           if (content.includes('src="data:image')) {
               const parser = new DOMParser();
               const doc = parser.parseFromString(content, 'text/html');
@@ -154,11 +139,10 @@ export default function InteractiveStudent() {
                       formData.append('file', img.src);
                       formData.append('upload_preset', cloudConfig.preset);
                       const cloudUrl = `https://api.cloudinary.com/v1_1/${cloudConfig.name}/image/upload`;
-                      
                       try {
                           const res = await fetch(cloudUrl, { method: "POST", body: formData });
                           const data = await res.json();
-                          if (data.secure_url) img.src = data.secure_url; // Thay thế src Base64 bằng URL thật
+                          if (data.secure_url) img.src = data.secure_url; 
                       } catch (err) { console.error("Lỗi upload ảnh dán:", err); }
                   }
               });
@@ -166,26 +150,65 @@ export default function InteractiveStudent() {
               finalContent = doc.body.innerHTML;
           }
 
-          // Kiểm tra lại dung lượng lần cuối cho chắc
-          const contentSize = new Blob([finalContent]).size;
-          if (contentSize > 1000000) {
-             return alert("Bài viết vẫn quá lớn. Vui lòng sử dụng nút 'Thêm Ảnh' thay vì dán ảnh trực tiếp.");
-          }
-
           await addDoc(collection(firestore, `interactive_boards/${id}/notes`), {
               content: finalContent,
-              image: image || null,
+              // Lưu thông tin file đính kèm
+              image: attachment?.url || null, 
+              fileType: attachment?.type || null,
+              fileName: attachment?.name || null,
+              
               author: name,
               createdAt: serverTimestamp(),
               approved: false, likes: 0
           });
-          setContent(''); setImage(null); setIsWriting(false);
+          setContent(''); setAttachment(null); setIsWriting(false);
           alert("Đã gửi! Bài viết đang chờ giáo viên duyệt.");
       } catch (e) { alert("Lỗi: " + e.message); } finally { setUploading(false); }
   };
 
   const handleLike = async (noteId, currentLikes) => {
       await updateDoc(doc(firestore, `interactive_boards/${id}/notes`, noteId), { likes: (currentLikes || 0) + 1 });
+  };
+
+  // HÀM XỬ LÝ CLICK VÀO ẢNH DÁN TRONG NỘI DUNG
+  const handleContentClick = (e) => {
+      // Nếu click vào thẻ IMG, chặn sự kiện và mở Lightbox
+      if (e.target.tagName === 'IMG') {
+          e.preventDefault();
+          e.stopPropagation();
+          setZoomedImage(e.target.src);
+      }
+  };
+
+  // Helper render file đính kèm (Upload)
+  const renderAttachment = (note) => {
+      if (!note.image) return null;
+      
+      // Nếu là ảnh 
+      if (note.fileType === 'image' || (!note.fileType && note.image.match(/\.(jpeg|jpg|gif|png)$/))) {
+          return (
+              <div className="mt-2" onClick={() => setZoomedImage(note.image)}>
+                  <div className="relative inline-block group/img cursor-zoom-in">
+                      <img src={note.image} className="h-28 w-auto object-cover rounded-lg border-2 border-white/20 shadow-lg transform group-hover/img:rotate-2 transition-all duration-300 hover:border-orange-400" alt="Sticker"/>
+                      <div className="absolute -bottom-2 -right-2 bg-black/60 text-white p-1 rounded-full opacity-0 group-hover/img:opacity-100 transition-opacity"><ZoomIn size={14}/></div>
+                  </div>
+              </div>
+          );
+      }
+      
+      // Nếu là file tài liệu
+      return (
+          <div className="mt-2">
+              <a href={note.image} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 bg-white/10 rounded-xl hover:bg-white/20 transition border border-white/10 group/file">
+                  <div className="bg-blue-600 p-2 rounded-lg text-white"><FileText size={20}/></div>
+                  <div className="flex-1 min-w-0 text-left">
+                      <p className="text-xs font-bold text-white truncate max-w-[150px]">{note.fileName || 'Tài liệu đính kèm'}</p>
+                      <p className="text-[10px] text-slate-400 uppercase">Nhấn để tải</p>
+                  </div>
+                  <Download size={16} className="text-slate-400 group-hover/file:text-white transition"/>
+              </a>
+          </div>
+      );
   };
 
   if (!authorized) return (
@@ -205,146 +228,114 @@ export default function InteractiveStudent() {
   return (
     <div className="min-h-screen bg-[#0f172a] text-white font-sans selection:bg-orange-500 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
       
-      <style jsx global>{`
-        .ql-editor img { max-height: 150px !important; width: auto !important; border-radius: 8px; cursor: zoom-in; border: 2px solid rgba(255,255,255,0.1); transition: transform 0.2s; display: inline-block; margin: 5px; }
-        .ql-editor img:hover { transform: scale(1.05); border-color: #f97316; }
-        .yarl__portal { z-index: 9999 !important; }
+      {/* CSS cho ảnh dán: nhỏ gọn + click để zoom */}
+      <style jsx global>{` 
+        .ql-editor img { 
+            max-height: 150px !important; 
+            width: auto !important; 
+            border-radius: 8px; 
+            cursor: zoom-in; 
+            border: 2px solid rgba(255,255,255,0.1); 
+            transition: transform 0.2s; 
+            display: inline-block; 
+            margin: 5px; 
+        } 
+        .ql-editor img:hover { 
+            transform: scale(1.05) rotate(2deg); 
+            border-color: #f97316; 
+        } 
+        .yarl__portal { z-index: 9999 !important; } 
       `}</style>
 
       {/* HEADER */}
       <div className="h-[60px] bg-slate-950/90 border-b border-orange-500/30 px-4 flex justify-between items-center fixed top-0 w-full z-30 backdrop-blur-md shadow-lg">
           <div className="flex items-center gap-3">
-              <button onClick={() => router.push('/')} className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white p-2 rounded-lg transition-all" title="Về Trang Chủ">
-                  <Home size={18} />
-              </button>
-              
+              <button onClick={() => router.push('/')} className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white p-2 rounded-lg transition-all" title="Về Trang Chủ"><Home size={18} /></button>
               <div className="h-6 w-px bg-white/10 mx-1"></div>
-
               <div className="bg-orange-600 p-1.5 rounded-lg"><Shield size={18} className="text-white" fill="currentColor"/></div>
-              <span className="font-black italic uppercase text-sm md:text-base tracking-wider text-orange-100 hidden md:block">Chiến Binh Arena Tương Tác</span>
+              
+              {/* [ĐÃ BỔ SUNG] TIÊU ĐỀ + MÃ PHÒNG */}
+              <div className="flex flex-col">
+                  <span className="font-black italic uppercase text-sm md:text-base tracking-wider text-orange-100 hidden md:block">Chiến Binh Arena Tương Tác</span>
+                  {board?.code && (
+                      <span className="flex items-center gap-1 bg-cyan-900/30 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded text-[10px] font-black font-mono tracking-widest shadow-sm w-fit mt-0.5">
+                          <Hash size={10}/> {board.code}
+                      </span>
+                  )}
+              </div>
           </div>
-          
           <div className="flex items-center gap-4">
-              {/* [MỚI] ĐỒNG HỒ ĐẾM NGƯỢC */}
-              {timeLeft && (
-                  <div className={`flex items-center gap-2 font-mono text-xl md:text-2xl font-black ${timeLeft === "HẾT GIỜ" ? "text-red-500 animate-bounce" : "text-green-400"}`}>
-                      <Timer size={20} className={timeLeft !== "HẾT GIỜ" ? "animate-pulse" : ""} />
-                      {timeLeft}
-                  </div>
-              )}
-
+              {timeLeft && (<div className={`flex items-center gap-2 font-mono text-xl md:text-2xl font-black ${timeLeft === "HẾT GIỜ" ? "text-red-500 animate-bounce" : "text-green-400"}`}><Timer size={20} className={timeLeft !== "HẾT GIỜ" ? "animate-pulse" : ""} />{timeLeft}</div>)}
               <div className="hidden md:block h-6 w-px bg-white/10"></div>
-
               <div className="flex items-center gap-3">
                   <span className="text-xs md:text-sm text-slate-300 font-bold uppercase tracking-wide bg-slate-800 px-3 py-1 rounded-full border border-white/10 truncate max-w-[100px] md:max-w-none">{name}</span>
-                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${board?.status === 'OPEN' ? 'bg-green-900/50 border-green-500/50 text-green-400' : 'bg-red-900/50 border-red-500/50 text-red-400'}`}>
-                      <div className={`w-2 h-2 rounded-full ${board?.status === 'OPEN' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-                      <span className="text-[10px] font-black uppercase hidden md:block">{board?.status === 'OPEN' ? 'ONLINE' : 'LOCKED'}</span>
-                  </div>
+                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${board?.status === 'OPEN' ? 'bg-green-900/50 border-green-500/50 text-green-400' : 'bg-red-900/50 border-red-500/50 text-red-400'}`}><div className={`w-2 h-2 rounded-full ${board?.status === 'OPEN' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div><span className="text-[10px] font-black uppercase hidden md:block">{board?.status === 'OPEN' ? 'ONLINE' : 'LOCKED'}</span></div>
               </div>
           </div>
       </div>
 
       {/* BOARD CONTENT */}
       <div className="pt-[80px] p-4 pb-32 max-w-7xl mx-auto">
-          {board?.status === 'LOCKED' && (
-              <div className="text-center py-12 opacity-70 animate-pulse">
-                  <Lock size={60} className="mx-auto mb-4 text-red-500"/>
-                  <p className="uppercase font-bold tracking-widest text-red-300">Bảng đang tạm khóa</p>
-                  <button onClick={() => router.push('/')} className="mt-4 bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-sm font-bold transition">Thoát ra</button>
-              </div>
-          )}
-
-          {notes.length === 0 ? (
-              <div className="text-center py-20 text-slate-600">
-                  <p className="italic">Chưa có bài viết nào được duyệt...</p>
-              </div>
-          ) : (
+          {board?.status === 'LOCKED' && (<div className="text-center py-12 opacity-70 animate-pulse"><Lock size={60} className="mx-auto mb-4 text-red-500"/><p className="uppercase font-bold tracking-widest text-red-300">Bảng đang tạm khóa</p><button onClick={() => router.push('/')} className="mt-4 bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-sm font-bold transition">Thoát ra</button></div>)}
+          {notes.length === 0 ? (<div className="text-center py-20 text-slate-600"><p className="italic">Chưa có bài viết nào được duyệt...</p></div>) : (
               <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
                   {notes.map((note) => (
                       <div key={note.id} className="break-inside-avoid bg-slate-800/60 backdrop-blur-md border border-white/10 rounded-2xl p-4 shadow-xl hover:border-orange-500/50 transition-all hover:-translate-y-1 group">
-                          <div className="flex justify-between items-center mb-3">
-                              <span className="font-black text-orange-400 text-xs uppercase tracking-wide bg-black/30 px-2 py-1 rounded truncate max-w-[120px]">{note.author}</span>
-                              <span className="text-[10px] text-slate-500">{new Date(note.createdAt?.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                          </div>
+                          <div className="flex justify-between items-center mb-3"><span className="font-black text-orange-400 text-xs uppercase tracking-wide bg-black/30 px-2 py-1 rounded truncate max-w-[120px]">{note.author}</span><span className="text-[10px] text-slate-500">{new Date(note.createdAt?.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div>
                           
-                          <div className="text-sm text-slate-200 mb-3 break-words leading-relaxed ql-editor p-0" dangerouslySetInnerHTML={{ __html: note.content }} onClick={(e) => handleContentClick(e, note.content)}></div>
+                          {/* [FIX] GÁN SỰ KIỆN CLICK VÀO NỘI DUNG ĐỂ PHÓNG TO ẢNH */}
+                          <div 
+                            className="text-sm text-slate-200 mb-3 break-words leading-relaxed ql-editor p-0" 
+                            dangerouslySetInnerHTML={{ __html: note.content }} 
+                            onClick={handleContentClick}
+                          ></div>
                           
-                          {note.image && (
-                              <div className="rounded-xl overflow-hidden border border-white/10 mb-3 cursor-zoom-in relative group/img" onClick={() => setZoomedImage(note.image)}>
-                                  <img src={note.image} className="w-full h-auto object-cover transform group-hover/img:scale-105 transition-transform duration-500"/>
-                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity"><ZoomIn className="text-white"/></div>
-                              </div>
-                          )}
+                          {/* Render Attachment (File Upload) */}
+                          {renderAttachment(note)}
                           
-                          <div className="flex justify-end pt-3 border-t border-white/5">
-                              <button onClick={() => handleLike(note.id, note.likes)} className={`flex items-center gap-1.5 text-xs font-bold transition px-3 py-1.5 rounded-full ${note.likes > 0 ? 'text-pink-400 bg-pink-500/10' : 'text-slate-500 hover:text-pink-400 hover:bg-white/5'}`}>
-                                  <Heart size={14} fill={note.likes > 0 ? "currentColor" : "none"}/> {note.likes || 0}
-                              </button>
-                          </div>
+                          <div className="flex justify-end pt-3 border-t border-white/5 mt-2"><button onClick={() => handleLike(note.id, note.likes)} className={`flex items-center gap-1.5 text-xs font-bold transition px-3 py-1.5 rounded-full ${note.likes > 0 ? 'text-pink-400 bg-pink-500/10' : 'text-slate-500 hover:text-pink-400 hover:bg-white/5'}`}><Heart size={14} fill={note.likes > 0 ? "currentColor" : "none"}/> {note.likes || 0}</button></div>
                       </div>
                   ))}
               </div>
           )}
       </div>
 
-      {/* FAB: VIẾT BÀI */}
-      {board?.status === 'OPEN' && (
-          <button onClick={() => setIsWriting(true)} className="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-r from-orange-500 to-red-600 rounded-full shadow-[0_0_30px_rgba(234,88,12,0.6)] flex items-center justify-center text-white z-40 hover:scale-110 transition-transform active:scale-95 animate-bounce-slow">
-              <PenTool size={28}/>
-          </button>
-      )}
+      {/* FAB */}
+      {board?.status === 'OPEN' && (<button onClick={() => setIsWriting(true)} className="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-r from-orange-500 to-red-600 rounded-full shadow-[0_0_30px_rgba(234,88,12,0.6)] flex items-center justify-center text-white z-40 hover:scale-110 transition-transform active:scale-95 animate-bounce-slow"><PenTool size={28}/></button>)}
 
-      {/* MODAL VIẾT BÀI */}
+      {/* MODAL EDITOR */}
       {isWriting && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in duration-200">
               <div className="bg-slate-900 w-full max-w-xl md:rounded-[2rem] rounded-t-[2rem] border-t-4 md:border-4 border-orange-500 shadow-2xl p-6 relative animate-in slide-in-from-bottom duration-300">
                   <button onClick={() => setIsWriting(false)} className="absolute top-4 right-4 text-slate-500 hover:text-white bg-white/10 p-2 rounded-full"><X size={20}/></button>
                   <h3 className="font-black text-white italic uppercase mb-6 text-xl flex items-center gap-2"><PenTool size={20} className="text-orange-500"/> Soạn thảo chiến thư</h3>
+                  <div className="bg-white text-black rounded-xl overflow-hidden mb-4 border-2 border-slate-700 shadow-inner"><ReactQuill theme="snow" value={content} onChange={setContent} placeholder="Nội dung thảo luận..." modules={{ toolbar: [[{'header':[1,2,false]}], ['bold', 'italic', 'underline', 'strike'], [{'color': []}, {'background': []}], [{'list': 'ordered'}, {'list': 'bullet'}], ['clean']] }} className="h-48"/></div>
                   
-                  {/* EDITOR */}
-                  <div className="bg-white text-black rounded-xl overflow-hidden mb-4 border-2 border-slate-700 shadow-inner">
-                      <ReactQuill 
-                        theme="snow" 
-                        value={content} 
-                        onChange={setContent} 
-                        placeholder="Nội dung thảo luận..."
-                        modules={{ toolbar: [[{'header':[1,2,false]}], ['bold', 'italic', 'underline', 'strike'], [{'color': []}, {'background': []}], [{'list': 'ordered'}, {'list': 'bullet'}], ['clean']] }}
-                        className="h-48"
-                      />
-                  </div>
-
-                  {/* UPLOAD ẢNH */}
+                  {/* UPLOAD ĐA NĂNG */}
                   <div className="flex items-center gap-4 mb-6 bg-slate-800 p-3 rounded-xl border border-white/10">
-                      <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
+                      <input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
                       <button onClick={() => fileInputRef.current.click()} className="bg-slate-700 text-slate-200 px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-600 transition shadow-md">
-                          <ImageIcon size={18}/> {uploading ? 'Đang tải...' : 'Thêm Ảnh'}
+                          <Paperclip size={18}/> {uploading ? 'Đang tải...' : 'Đính kèm'}
                       </button>
-                      {image && (
-                          <div className="relative group cursor-zoom-in" onClick={() => setZoomedImage(image)}>
-                              <img src={image} className="h-16 w-auto object-cover rounded-lg border-2 border-green-500 shadow-md transition hover:scale-105"/>
-                              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 rounded-lg"><ZoomIn size={20} className="text-white"/></div>
-                              <button onClick={(e) => { e.stopPropagation(); setImage(null); }} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-0.5 shadow-sm hover:scale-110 transition"><X size={12}/></button>
+                      
+                      {attachment && (
+                          <div className="flex items-center gap-2 bg-slate-900 px-3 py-2 rounded-lg border border-green-500/50">
+                              {attachment.type === 'image' ? <ZoomIn size={16} className="text-green-400"/> : <FileText size={16} className="text-blue-400"/>}
+                              <span className="text-xs text-white truncate max-w-[150px]">{attachment.name}</span>
+                              <button onClick={() => setAttachment(null)} className="text-red-400 hover:text-red-300"><X size={14}/></button>
                           </div>
                       )}
-                      {!image && !uploading && <span className="text-xs text-slate-500 italic">Chưa có ảnh</span>}
+                      {!attachment && !uploading && <span className="text-xs text-slate-500 italic">Ảnh, PDF, Word, Excel...</span>}
                   </div>
 
                   <button onClick={handleSubmit} disabled={uploading} className="w-full bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white font-black py-4 rounded-xl text-xl shadow-lg uppercase italic flex items-center justify-center gap-2 disabled:opacity-50 transition-all active:scale-95">
-                      <Send size={24}/> {uploading ? 'Đang xử lý ảnh...' : 'Gửi Lên Bảng'}
+                      <Send size={24}/> {uploading ? 'Đang xử lý...' : 'Gửi Lên Bảng'}
                   </button>
               </div>
           </div>
       )}
 
-      <Lightbox
-        open={Boolean(zoomedImage)}
-        close={() => setZoomedImage(null)}
-        slides={[{ src: zoomedImage }]}
-        plugins={[Zoom]}
-        zoom={{ maxZoomPixelRatio: 5 }}
-        render={{ buttonPrev: () => null, buttonNext: () => null }} 
-      />
+      <Lightbox open={Boolean(zoomedImage)} close={() => setZoomedImage(null)} slides={[{ src: zoomedImage }]} plugins={[Zoom]} zoom={{ maxZoomPixelRatio: 5 }} render={{ buttonPrev: () => null, buttonNext: () => null }} />
     </div>
   );
 }

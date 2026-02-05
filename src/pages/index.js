@@ -147,14 +147,15 @@ export default function HomePage() {
           )}
           
           <div className="relative z-20 container mx-auto h-full px-4 md:px-6 flex justify-between items-center">
-              {/* LOGO */}
+              {/* LOGO (ĐÃ FIX: Hiện cả trên Mobile) */}
               <div className="flex items-center gap-4">
                   {homeConfig.logoTitleImage ? (
                       <img src={homeConfig.logoTitleImage} alt="Logo" className="h-12 md:h-16 object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] hover:scale-105 transition-transform"/>
                   ) : (
                       <div className="flex items-center gap-2 md:gap-3 group cursor-pointer">
                         <div className="bg-gradient-to-br from-cyan-600 to-blue-700 p-2 md:p-2.5 rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.4)] border border-white/10 group-hover:rotate-12 transition-transform duration-500"><Gamepad2 className="text-white" size={24} /></div>
-                        <div className="leading-none hidden md:block">
+                        {/* [FIX] Bỏ class 'hidden md:block' để hiển thị text trên mobile */}
+                        <div className="leading-none">
                             <h1 className="text-2xl md:text-3xl font-black italic tracking-tighter text-white uppercase drop-shadow-md">EDU <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">ARENA</span></h1>
                             <p className="text-[9px] font-bold text-slate-300 uppercase tracking-[0.4em] drop-shadow-sm">Connect System</p>
                         </div>
@@ -181,17 +182,17 @@ export default function HomePage() {
                       </div>
                   </div>
                 ) : (
-                  // NÚT LOGIN: Mặc định là hình vuông icon, hover/click sẽ dài ra hiện chữ
-                  <button onClick={handleLogin} className="group relative h-10 w-12 hover:w-44 transition-all duration-500 ease-in-out bg-cyan-600/90 text-white rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:bg-cyan-500 overflow-hidden flex items-center border border-cyan-400/30">
+                  // NÚT LOGIN [FIX]: Thụt vào (chỉ hiện icon), hover/click đẩy ra chữ
+                  <button onClick={handleLogin} className="group relative h-10 w-10 hover:w-44 transition-all duration-500 ease-in-out bg-cyan-600/90 text-white rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:bg-cyan-500 overflow-hidden flex items-center border border-cyan-400/30">
                       <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500 skew-x-12"></div>
                       
                       {/* Icon luôn hiện ở bên trái */}
-                      <div className="absolute left-0 w-12 h-10 flex items-center justify-center z-10">
+                      <div className="absolute left-0 w-10 h-10 flex items-center justify-center z-10 shrink-0">
                           <LogIn size={20} className="drop-shadow-md"/>
                       </div>
                       
-                      {/* Text chỉ hiện khi hover */}
-                      <span className="pl-12 pr-4 font-black text-xs uppercase tracking-widest whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-100">
+                      {/* Text chỉ hiện khi hover/active */}
+                      <span className="pl-10 pr-4 font-black text-xs uppercase tracking-widest whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">
                           GV Đăng nhập
                       </span>
                   </button>
@@ -200,7 +201,7 @@ export default function HomePage() {
           </div>
       </header>
 
-      {/* 2. BODY CONTENT ([FIX] CHO PHÉP CUỘN NỘI DUNG Ở GIỮA) */}
+      {/* 2. BODY CONTENT ([FIX] CHO PHÉP CUỘN TRÊN MOBILE: overflow-y-auto) */}
       <div className="flex-1 relative w-full 2xl:max-w-[70%] mx-auto flex flex-col px-4 md:px-8 overflow-y-auto custom-scrollbar z-10 py-6 md:justify-center">
           <main className="w-full">
             
@@ -209,19 +210,19 @@ export default function HomePage() {
                 <div className="h-0.5 w-20 bg-gradient-to-r from-transparent via-cyan-500 to-transparent mx-auto"></div>
             </div>
 
-            {/* GRID 6 MỤC - Mobile sẽ cuộn được vì bao ngoài là overflow-y-auto */}
+            {/* GRID 6 MỤC - Có thêm padding-bottom để không bị che bởi footer khi cuộn */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 w-full pb-10">
               <CyberCard title="Chiến Binh Arena" subtitle="Đấu trường sinh tử" icon={Sword} color="purple" delay={0} onClick={() => openGamePortal('CLASSIC')}/>
               <CyberCard title="Biệt Đội Arena" subtitle="Hợp sức tác chiến" icon={Shield} color="orange" delay={100} onClick={() => openGamePortal('RACE')}/>
               <CyberCard title="Nhanh Như Chớp" subtitle="Tốc độ sấm sét" icon={Zap} color="cyan" delay={200} onClick={() => openGamePortal('LIGHTNING')}/>
-              <CyberCard title="Arena Thi" subtitle="Khảo thí thi online" icon={BookOpen} color="green" delay={300} onClick={() => router.push('/exam')}/>
+              <CyberCard title="Đấu Trường Đi Thi" subtitle="Khảo thí online" icon={BookOpen} color="green" delay={300} onClick={() => router.push('/exam')}/>
               <CyberCard title="Bảng Tương Tác" subtitle="Kết nối thời gian thực" icon={Users} color="blue" delay={400} onClick={() => router.push('/connect')}/>
               <CyberCard title="Cổng Nộp Bài" subtitle="Dành cho học sinh" icon={UploadCloud} color="pink" delay={500} onClick={() => router.push('/submit')}/>
             </div>
           </main>
       </div>
 
-      {/* 3. FOOTER */}
+      {/* 3. FOOTER [FIX: BỎ CLASS HIDDEN TRÊN MOBILE] */}
       <footer className="h-[40px] shrink-0 bg-[#0a0a0a]/90 backdrop-blur border-t border-white/5 relative z-20 flex items-center justify-between px-6">
         <div className="flex items-center gap-4 md:gap-6">
             <div className="flex items-center gap-2 group cursor-help" title="Số người đang online (Mô phỏng)">
@@ -238,9 +239,12 @@ export default function HomePage() {
                 </p>
             </div>
         </div>
-        <p className="absolute left-1/2 -translate-x-1/2 text-slate-600 text-[9px] font-bold uppercase tracking-[0.3em] hover:text-cyan-600 transition-colors cursor-default hidden md:block">
-            © 2026 Lương Văn Giỏi - 0383477162
+        
+        {/* [FIX] Hiện Copyright trên cả Mobile (bỏ hidden md:block) */}
+        <p className="absolute left-1/2 -translate-x-1/2 text-slate-600 text-[8px] md:text-[9px] font-bold uppercase tracking-[0.3em] hover:text-cyan-600 transition-colors cursor-default whitespace-nowrap">
+            © 2026 Edu Arena Connect
         </p>
+        
         <div className="flex items-center gap-2 opacity-50">
             <Globe size={12} className="text-slate-500"/>
             <span className="text-[9px] font-bold text-slate-500">v1.0</span>

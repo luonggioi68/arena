@@ -12,6 +12,9 @@ export default function ArenaPlayerController() {
   const [playerId, setPlayerId] = useState(null);
   const [joined, setJoined] = useState(false);
   
+  // [FIX 1] Biến trạng thái để chặn lỗi khi thoát
+  const [isLeaving, setIsLeaving] = useState(false);
+
   const [gameData, setGameData] = useState(null); 
   const [quiz, setQuiz] = useState(null);         
   const [answer, setAnswer] = useState(null); 
@@ -58,12 +61,20 @@ export default function ArenaPlayerController() {
   // --- 1. LẮNG NGHE DỮ LIỆU ---
   useEffect(() => {
     if (!pin || !joined) return;
+    
+    // [FIX 1] Nếu đang thoát thì ngừng lắng nghe để tránh lỗi
+    if (isLeaving) return;
+
     const roomRef = ref(db, `rooms/${pin}`);
     
     return onValue(roomRef, (snapshot) => {
+      // [FIX 1] Kiểm tra chặn lần nữa
+      if (isLeaving) return;
+
       const data = snapshot.val();
       if (data) {
-        if (data.players && playerId && !data.players[playerId]) {
+        // [AUTO KICK] Chỉ kick nếu không phải do mình tự thoát
+        if (data.players && playerId && !data.players[playerId] && !isLeaving) {
             alert("Tín hiệu bị ngắt bởi trung tâm!");
             if (bgmRef.current) bgmRef.current.pause();
             router.push('/');
@@ -92,7 +103,7 @@ export default function ArenaPlayerController() {
         router.push('/');
       }
     });
-  }, [pin, joined, playerId]);
+  }, [pin, joined, playerId, isLeaving]);
 
   // --- 2. LOCAL TIMER ---
   useEffect(() => {
@@ -104,7 +115,7 @@ export default function ArenaPlayerController() {
 
   // --- 3. GAME LOOP ---
   useEffect(() => {
-    if (!gameData || !quiz) return;
+    if (!gameData || !quiz || isLeaving) return;
     const state = gameData.gameState;
     const qIndex = gameData.currentQuestion;
 
@@ -154,7 +165,10 @@ export default function ArenaPlayerController() {
                     origin: { y: 0.6 },
                     colors: ['#22d3ee', '#d946ef', '#f472b6', '#facc15']
                 });
-                update(ref(db, `rooms/${pin}/players/${playerId}`), { score: (gameData.players?.[playerId]?.score || 0) + points });
+                // [SAFETY] Kiểm tra tồn tại trước khi update
+                if (gameData.players && gameData.players[playerId]) {
+                    update(ref(db, `rooms/${pin}/players/${playerId}`), { score: (gameData.players[playerId].score || 0) + points });
+                }
             } else {
                 playSFX('wrong');
             }
@@ -165,7 +179,7 @@ export default function ArenaPlayerController() {
         if (bgmRef.current) bgmRef.current.pause();
         confetti({ particleCount: 300, spread: 100, origin: { y: 0.6 } });
     }
-  }, [gameData, quiz, submitted, answer, playerId, pin, showResult]);
+  }, [gameData, quiz, submitted, answer, playerId, pin, showResult, isLeaving]);
 
   // --- 4. JOIN & LEAVE ---
   const handleJoin = async (e) => {
@@ -195,13 +209,20 @@ export default function ArenaPlayerController() {
     }
   };
 
+  // [FIX 1] Hàm thoát an toàn
   const handleLeave = async () => {
+      // Bật cờ thoát ngay lập tức
+      setIsLeaving(true);
+      
       if (pin && playerId) {
           try {
+              // Xóa dữ liệu trên DB
               await remove(ref(db, `rooms/${pin}/players/${playerId}`));
           } catch (e) { console.error(e); }
       }
       if (bgmRef.current) bgmRef.current.pause();
+      
+      // Chuyển trang ngay, không đợi
       router.push('/');
   };
 
@@ -251,6 +272,9 @@ export default function ArenaPlayerController() {
       </div>
     </div>
   );
+
+  // [FIX 1] Nếu đang thoát thì hiển thị màn hình chờ/trống để tránh lỗi render
+  if (isLeaving) return <div className="min-h-screen bg-[#020617]"></div>;
 
   if (!gameData) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-cyan-500" size={50}/></div>;
   const currentState = gameData.gameState || 'WAITING';
@@ -324,7 +348,8 @@ export default function ArenaPlayerController() {
                     <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Điểm số</span>
                     <div className="flex items-center gap-2">
                         <Zap size={18} className="text-yellow-400 fill-yellow-400 animate-pulse"/> 
-                        <span className="font-black text-2xl text-yellow-400 drop-shadow-md">{gameData.players[playerId]?.score}</span>
+                        {/* [FIX 1] Sử dụng optional chaining (?.) an toàn hơn */}
+                        <span className="font-black text-2xl text-yellow-400 drop-shadow-md">{gameData.players?.[playerId]?.score || 0}</span>
                     </div>
                 </div>
             </div>
@@ -336,9 +361,14 @@ export default function ArenaPlayerController() {
             <div className="w-full max-w-4xl relative z-10 animate-in slide-in-from-bottom duration-500">
                 <div className={`bg-[#1e293b]/60 backdrop-blur-xl text-white rounded-[2rem] p-6 md:p-8 mb-6 shadow-2xl border border-white/10 relative overflow-hidden group`}>
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-cyan-500 to-purple-500"></div>
-                    <div className="absolute top-4 right-4 bg-white/5 border border-white/10 px-3 py-1 rounded-full text-xs font-bold text-cyan-200 uppercase tracking-widest flex items-center gap-2">
-                        <Star size={12} className="text-yellow-400" fill="currentColor"/> Nhiệm vụ #{gameData.currentQuestion + 1}
+                    
+                    {/* [FIX 2] Đưa Nhiệm Vụ ra khỏi vị trí absolute, dùng Flexbox để đẩy nội dung */}
+                    <div className="flex justify-end mb-4">
+                        <div className="bg-white/5 border border-white/10 px-3 py-1 rounded-full text-xs font-bold text-cyan-200 uppercase tracking-widest flex items-center gap-2 shadow-lg">
+                            <Star size={12} className="text-yellow-400" fill="currentColor"/> Nhiệm vụ #{gameData.currentQuestion + 1}
+                        </div>
                     </div>
+
                     {q?.img && <img src={q.img} className="max-h-40 md:max-h-56 w-auto rounded-xl mx-auto mb-6 border-2 border-slate-700 shadow-lg bg-black/40 object-contain"/>}
                     <h2 className={`text-lg md:text-2xl font-bold text-center leading-relaxed drop-shadow-md text-slate-100 ${q?.q.includes('\n') ? 'whitespace-pre-wrap font-mono text-left text-base' : ''}`}>{q?.q}</h2>
                 </div>
@@ -420,7 +450,7 @@ export default function ArenaPlayerController() {
     );
   }
 
-  // --- UI: TỔNG KẾT (ĐÃ LOẠI BỎ CHÍNH XÁC) ---
+  // --- UI: TỔNG KẾT ---
   if (currentState === 'FINISHED') {
     const finalScore = gameData.players?.[playerId]?.score || 0;
     const sorted = Object.values(gameData.players || {}).sort((a,b) => b.score - a.score);
