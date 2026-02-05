@@ -227,9 +227,7 @@ export default function HomePage() {
         <div className="flex items-center gap-4 md:gap-6">
             <div className="flex items-center gap-2 group cursor-help" title="Số người đang online (Mô phỏng)">
                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-green-400 transition-colors">
-                    Online: <span className="text-white">{onlineUsers}</span>
-                </p>
+               
             </div>
             <div className="h-3 w-px bg-white/10"></div>
             <div className="flex items-center gap-2 group cursor-help" title="Tổng lượt truy cập thực tế">
@@ -242,13 +240,10 @@ export default function HomePage() {
         
         {/* [FIX] Hiện Copyright trên cả Mobile (bỏ hidden md:block) */}
         <p className="absolute left-1/2 -translate-x-1/2 text-slate-600 text-[8px] md:text-[9px] font-bold uppercase tracking-[0.3em] hover:text-cyan-600 transition-colors cursor-default whitespace-nowrap">
-            © 2026 Edu Arena Connect
+            © 2026 Lương Văn Giỏi - 0383477162
         </p>
         
-        <div className="flex items-center gap-2 opacity-50">
-            <Globe size={12} className="text-slate-500"/>
-            <span className="text-[9px] font-bold text-slate-500">v1.0</span>
-        </div>
+     
       </footer>
 
       {/* MODAL */}
