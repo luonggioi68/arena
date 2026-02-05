@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { db } from '@/lib/firebase';
 import { ref, update, onValue } from 'firebase/database';
-import { Trophy, Clock, Monitor, Car, Hammer, Building, Volume2, VolumeX, Shield, Flame, ArrowLeft, SkipForward, Loader2, Crown, Check, X, FileSpreadsheet } from 'lucide-react';
+import { Trophy, Clock, Monitor, Car, Hammer, Building, Volume2, VolumeX, Shield, Flame, ArrowLeft, SkipForward, Loader2, Crown, Check, X, FileSpreadsheet, Flag } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import * as XLSX from 'xlsx';
 
@@ -18,7 +18,7 @@ export default function ArenaHostController() {
   const [isPaused, setIsPaused] = useState(false); 
   const [viewMode, setViewMode] = useState('CLASSIC'); 
   const [isMuted, setIsMuted] = useState(false);
-  const [gameConfig, setGameConfig] = useState({}); // Lưu cấu hình thời gian
+  const [gameConfig, setGameConfig] = useState({}); 
 
   const bgmRef = useRef(null);
 
@@ -38,7 +38,6 @@ export default function ArenaHostController() {
         if (data.viewMode) setViewMode(data.viewMode);
         if (data.config) setGameConfig(data.config);
         
-        // Cập nhật danh sách người chơi
         if (data.players) {
             setPlayers(Object.values(data.players));
         } else {
@@ -71,17 +70,12 @@ export default function ArenaHostController() {
     };
   }, [pin]);
 
-  // [MỚI] TỰ ĐỘNG KẾT THÚC GAME NẾU KHÔNG CÒN AI
+  // TỰ ĐỘNG KẾT THÚC GAME NẾU KHÔNG CÒN AI
   useEffect(() => {
-    // Chỉ kiểm tra khi game ĐANG DIỄN RA (Prepare, Question, Result)
-    // Không kiểm tra ở Lobby (WAITING) để tránh đóng phòng khi giáo viên đang đợi
     if (['PREPARE', 'QUESTION', 'RESULT'].includes(gameState)) {
         if (players.length === 0) {
-            // Cập nhật trạng thái về FINISHED trên server
-            update(ref(db, `rooms/${pin}`), { 
-                gameState: 'FINISHED' 
-            });
-            alert("⚠️ Đã hết người chơi trong phòng! Game tự động kết thúc.");
+            update(ref(db, `rooms/${pin}`), { gameState: 'FINISHED' });
+            alert("⚠️ Đã hết người chơi! Game kết thúc.");
             router.push('/dashboard');
         }
     }
@@ -123,6 +117,17 @@ export default function ArenaHostController() {
 
   const handleStartGame = () => update(ref(db, `rooms/${pin}`), { gameState: 'PREPARE', currentQuestion: 0 });
   const skipTimer = () => setTimer(0);
+  
+  // [MỚI] HÀM KẾT THÚC SỚM (VINH DANH NGAY)
+  const handleEarlyFinish = () => {
+      if (confirm("⚠️ KẾT THÚC SỚM?\nBạn có chắc muốn dừng trận đấu và vinh danh ngay lập tức?")) {
+          // Bắn pháo hoa hiệu ứng
+          confetti({ particleCount: 300, spread: 100, origin: { y: 0.6 } });
+          // Cập nhật trạng thái FINISHED
+          update(ref(db, `rooms/${pin}`), { gameState: 'FINISHED' });
+      }
+  };
+
   const changeGameMode = (mode) => update(ref(db, `rooms/${pin}`), { viewMode: mode });
   const toggleMute = () => setIsMuted(!isMuted);
 
@@ -134,6 +139,7 @@ export default function ArenaHostController() {
     XLSX.writeFile(wb, `KetQua_Arena_${pin}.xlsx`);
   };
 
+  // --- CÁC GIAO DIỆN VIEW MODE ---
   const RacingView = () => (
       <div className="w-full h-full bg-slate-900/90 rounded-3xl p-6 border-2 border-orange-500/30 relative overflow-hidden flex flex-col justify-center shadow-[0_0_50px_rgba(249,115,22,0.1)]">
           <div className="absolute right-10 top-0 bottom-0 w-4 bg-yellow-400/20 z-0 flex items-center justify-center border-l-4 border-dashed border-yellow-400"><span className="rotate-90 text-xs font-black text-yellow-400 tracking-[1em] animate-pulse">FINISH</span></div>
@@ -235,7 +241,23 @@ export default function ArenaHostController() {
         </div>
         <div className="flex items-center gap-3">
             <button onClick={toggleMute} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition text-white/50 hover:text-white">{isMuted ? <VolumeX size={20}/> : <Volume2 size={20} className="text-green-400"/>}</button>
-            {(gameState === 'QUESTION' || gameState === 'PREPARE') && <button onClick={skipTimer} className="bg-white/10 hover:bg-white/20 p-2 rounded-full transition text-white/50 hover:text-white"><SkipForward size={20}/></button>}
+            
+            {/* [MỚI] CỤM NÚT ĐIỀU KHIỂN GAME (KẾT THÚC SỚM + SKIP) */}
+            {['PREPARE', 'QUESTION', 'RESULT'].includes(gameState) && (
+                <div className="flex gap-2">
+                    {/* Nút Kết thúc sớm */}
+                    <button onClick={handleEarlyFinish} className="bg-red-500/20 hover:bg-red-600 p-2 rounded-full transition text-red-400 hover:text-white border border-red-500/30" title="Kết thúc sớm & Vinh danh">
+                        <Flag size={20}/>
+                    </button>
+                    {/* Nút Skip Timer */}
+                    {gameState !== 'RESULT' && (
+                        <button onClick={skipTimer} className="bg-white/10 hover:bg-white/20 p-2 rounded-full transition text-white/50 hover:text-white" title="Bỏ qua thời gian">
+                            <SkipForward size={20}/>
+                        </button>
+                    )}
+                </div>
+            )}
+
             <div className="bg-slate-900 px-6 py-2 rounded-xl border border-indigo-500/30 flex items-center gap-3 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
                 <span className={`text-3xl font-black font-mono tabular-nums ${timer <= 5 ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>{timer}s</span>
                 <Clock size={24} className={timer < 5 ? 'text-red-500' : 'text-indigo-400'} />

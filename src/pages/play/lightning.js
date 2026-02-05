@@ -25,8 +25,8 @@ export default function LightningArenaPlayer() {
   // State UI & Audio
   const [localScore, setLocalScore] = useState(0); 
   const [timeLeft, setTimeLeft] = useState(0);
-  const [isMuted, setIsMuted] = useState(false); // Trạng thái âm thanh
-  const bgmRef = useRef(null); // Ref cho nhạc nền
+  const [isMuted, setIsMuted] = useState(false); 
+  const bgmRef = useRef(null); 
 
   // State input
   const [mcqSelection, setMcqSelection] = useState(null);
@@ -37,13 +37,11 @@ export default function LightningArenaPlayer() {
       if (queryPin) setPin(queryPin);
   }, [queryPin]);
 
-  // --- HỆ THỐNG ÂM THANH (AUDIO SYSTEM) ---
-  
-  // 1. Khởi tạo nhạc nền
+  // --- AUDIO SYSTEM ---
   useEffect(() => {
       bgmRef.current = new Audio('/sounds/bgm.mp3');
       bgmRef.current.loop = true;
-      bgmRef.current.volume = 0.4; // Âm lượng vừa phải
+      bgmRef.current.volume = 0.4; 
       
       return () => {
           if (bgmRef.current) {
@@ -53,7 +51,6 @@ export default function LightningArenaPlayer() {
       };
   }, []);
 
-  // 2. Hàm phát SFX (Hiệu ứng)
   const playSFX = (type) => {
       if (isMuted) return;
       const audio = new Audio(type === 'correct' ? '/sounds/correct.mp3' : '/sounds/wrong.mp3');
@@ -61,11 +58,10 @@ export default function LightningArenaPlayer() {
       audio.play().catch(e => console.log("Audio play error:", e));
   };
 
-  // 3. Xử lý Mute/Unmute
   const toggleMute = () => {
       if (bgmRef.current) {
-          if (isMuted) bgmRef.current.play().catch(() => {}); // Đang tắt -> Bật
-          else bgmRef.current.pause(); // Đang bật -> Tắt
+          if (isMuted) bgmRef.current.play().catch(() => {});
+          else bgmRef.current.pause();
       }
       setIsMuted(!isMuted);
   };
@@ -125,7 +121,6 @@ export default function LightningArenaPlayer() {
     
     setJoined(true);
 
-    // [AUDIO] Bắt đầu phát nhạc nền khi vào trận (Cần tương tác người dùng để chạy)
     if (!isMuted && bgmRef.current) {
         bgmRef.current.play().catch(e => console.log("Autoplay blocked:", e));
     }
@@ -135,7 +130,7 @@ export default function LightningArenaPlayer() {
       if (pin && playerId) {
           try { await remove(ref(db, `rooms/${pin}/players/${playerId}`)); } catch (e) {}
       }
-      if (bgmRef.current) bgmRef.current.pause(); // Tắt nhạc
+      if (bgmRef.current) bgmRef.current.pause(); 
       router.push('/');
   };
 
@@ -153,13 +148,13 @@ export default function LightningArenaPlayer() {
                   const currentQState = data.questionsState?.[activeQ.index];
                   if (currentQState?.winner && currentQState.winner !== playerId) {
                       setFeedback('LATE');
-                      playSFX('wrong'); // [AUDIO] Bị cướp -> Tiếng sai
+                      playSFX('wrong'); 
                   }
               }
               if (data.status === 'FINISHED') {
                   setActiveQ(null);
-                  if (bgmRef.current) bgmRef.current.pause(); // Tắt nhạc nền
-                  playSFX('correct'); // Tiếng vỗ tay/kết thúc (dùng tạm tiếng correct)
+                  if (bgmRef.current) bgmRef.current.pause();
+                  playSFX('correct'); 
                   confetti({ particleCount: 300, spread: 150, origin: { y: 0.6 } });
               }
           } else { alert("Phòng hủy!"); router.push('/'); }
@@ -202,7 +197,7 @@ export default function LightningArenaPlayer() {
 
               if (result.committed) {
                   setFeedback('CORRECT');
-                  playSFX('correct'); // [AUDIO] Đúng
+                  playSFX('correct'); 
                   try { confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ['#fbbf24', '#ef4444'] }); } catch(e){}
                   setLocalScore(prev => prev + 100);
                   const pRef = ref(db, `rooms/${pin}/players/${playerId}`);
@@ -212,12 +207,12 @@ export default function LightningArenaPlayer() {
                   });
               } else { 
                   setFeedback('LATE');
-                  playSFX('wrong'); // [AUDIO] Chậm
+                  playSFX('wrong'); 
               }
           } catch (e) { setFeedback('LATE'); }
       } else {
           setFeedback('WRONG');
-          playSFX('wrong'); // [AUDIO] Sai
+          playSFX('wrong'); 
           setFailedQuestions(prev => [...prev, activeQ.index]); 
           const pRef = ref(db, `rooms/${pin}/players/${playerId}`);
           get(pRef).then(snap => {
@@ -299,18 +294,27 @@ export default function LightningArenaPlayer() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans flex flex-col overflow-hidden relative selection:bg-yellow-500 selection:text-black">
         <div className="fixed inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-900/10 via-[#050505] to-black pointer-events-none"></div>
-        <header className="h-[70px] md:h-[80px] bg-slate-900/80 backdrop-blur-md border-b border-white/10 flex items-center justify-between px-4 md:px-6 shrink-0 shadow-[0_10px_30px_rgba(0,0,0,0.8)] relative z-20">
+        
+        {/* [MỚI] LỚP BACKGROUND LOGO (NẰM DƯỚI CÙNG, KHÔNG CUỘN) */}
+        <div className="fixed top-[80px] left-0 w-full h-[40vh] flex flex-col items-center justify-center z-0 pointer-events-none opacity-100 animate-in zoom-in duration-700">
+            <div className="relative">
+                <div className="absolute inset-0 bg-yellow-500 blur-[80px] opacity-20 animate-pulse"></div>
+                <Zap size={150} className="text-yellow-400 drop-shadow-[0_0_50px_rgba(250,204,21,0.5)] animate-bounce-slow mx-auto" strokeWidth={1} fill="currentColor"/>
+            </div>
+            <h1 className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-red-600 italic uppercase tracking-tighter drop-shadow-2xl text-center mt-4 leading-none">NHANH NHƯ<br/>CHỚP</h1>
+            <p className="text-orange-200/50 font-bold uppercase tracking-[0.5em] text-xs mt-4">Tốc độ sấm sét</p>
+        </div>
+
+        <header className="h-[70px] md:h-[80px] bg-slate-900/90 backdrop-blur-md border-b border-white/10 flex items-center justify-between px-4 md:px-6 shrink-0 shadow-lg relative z-30">
             <div className="flex items-center gap-3">
                 <button onClick={handleLeave} className="bg-white/5 p-2 md:p-2.5 rounded-xl hover:bg-red-600 hover:text-white transition text-slate-400"><Home size={20}/></button>
-                
-                {/* [AUDIO] Nút Mute/Unmute */}
                 <button onClick={toggleMute} className={`p-2 md:p-2.5 rounded-xl transition ${isMuted ? 'bg-red-900/30 text-red-500' : 'bg-white/5 text-cyan-400 hover:text-white'}`}>
                     {isMuted ? <VolumeX size={20}/> : <Volume2 size={20}/>}
                 </button>
-
-                <div className="flex items-center gap-3 pl-2 md:pl-4 border-l border-white/10">
-                    <div className="bg-gradient-to-br from-yellow-400 to-red-600 p-1.5 md:p-2 rounded-lg shadow-[0_0_20px_#f59e0b] transform -skew-x-12 animate-pulse-slow"><Zap size={20} className="text-white fill-white transform skew-x-12"/></div>
-                    <div className="hidden md:block"><h1 className="text-xl md:text-2xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-500 to-red-500 leading-none drop-shadow-md">NHANH NHƯ CHỚP</h1></div>
+                {/* [FIX] Ẩn text trên mobile để Header gọn hơn */}
+                <div className="hidden md:flex items-center gap-3 pl-4 border-l border-white/10">
+                    <div className="bg-gradient-to-br from-yellow-400 to-red-600 p-2 rounded-lg shadow-md transform -skew-x-12"><Zap size={20} className="text-white fill-white transform skew-x-12"/></div>
+                    <div><h1 className="text-xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-500 to-red-500 leading-none">NHANH NHƯ CHỚP</h1></div>
                 </div>
             </div>
             <div className="flex items-center gap-4">
@@ -319,28 +323,30 @@ export default function LightningArenaPlayer() {
             </div>
         </header>
 
-        <main className="flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar relative z-10 flex items-center justify-center">
-            <div className="w-full max-w-7xl">
-                {/* [MOBILE] Responsive Grid: 3 cột trên mobile, 6-10 trên máy tính */}
-                <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2 md:gap-3 pb-20">
-                    {questions.map((q, idx) => {
-                        const qState = roomData.questionsState?.[idx] || {};
-                        const isSolved = !!qState.winner;
-                        const isMine = qState.winner === playerId;
-                        const hasFailed = failedQuestions.includes(idx);
+        {/* [MỚI] MAIN SCROLL: Đẩy content xuống thấp (pt-[250px]) để lộ logo */}
+        <main className="flex-1 overflow-y-auto custom-scrollbar relative z-10">
+            <div className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-[250px] md:pt-[100px] pb-32">
+                <div className="bg-slate-900/60 backdrop-blur-xl rounded-[2rem] border border-white/10 p-4 md:p-6 shadow-2xl">
+                    <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2 md:gap-3">
+                        {questions.map((q, idx) => {
+                            const qState = roomData.questionsState?.[idx] || {};
+                            const isSolved = !!qState.winner;
+                            const isMine = qState.winner === playerId;
+                            const hasFailed = failedQuestions.includes(idx);
 
-                        return (
-                            <button key={idx} disabled={isSolved || hasFailed} onClick={() => handleSelectQuestion(idx)} 
-                                className={`aspect-square rounded-lg md:rounded-xl relative flex flex-col items-center justify-center transition-all duration-300 transform border backdrop-blur-sm touch-manipulation
-                                    ${isSolved 
-                                        ? (isMine ? 'bg-gradient-to-br from-green-600/80 to-emerald-900/90 border-green-400/80 shadow-[0_0_20px_#22c55e] scale-95 z-0' : 'bg-slate-900/50 border-slate-800 opacity-40 grayscale scale-90 z-0') 
-                                        : (hasFailed ? 'bg-red-950/40 border-red-900/50 opacity-60 cursor-not-allowed' : 'bg-gradient-to-br from-white/5 to-white/0 border-white/10 hover:border-cyan-400 hover:shadow-[0_0_25px_#22d3ee] hover:bg-cyan-900/30 hover:scale-105 hover:z-20 active:scale-95')
-                                    }`}>
-                                {!isSolved && !hasFailed && (<><div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity rounded-xl"></div><Sparkles size={12} className="absolute top-1 right-1 text-cyan-200 opacity-0 group-hover:opacity-100 animate-pulse"/></>)}
-                                {isSolved ? (<>{isMine ? <CheckCircle size={18} className="text-green-300 drop-shadow-md mb-1"/> : <Lock size={14} className="text-slate-500 mb-1"/>}<div className={`text-[7px] md:text-[8px] font-black uppercase px-1 py-0.5 rounded w-[90%] truncate text-center ${isMine ? 'bg-green-950 text-green-400' : 'bg-transparent text-slate-500'}`}>{isMine ? 'YOU' : qState.winnerName}</div></>) : hasFailed ? (<Ban size={20} className="text-red-800"/>) : (<span className="text-lg md:text-2xl font-black text-white/70 drop-shadow-md group-hover:text-white transition-colors">{idx + 1}</span>)}
-                            </button>
-                        )
-                    })}
+                            return (
+                                <button key={idx} disabled={isSolved || hasFailed} onClick={() => handleSelectQuestion(idx)} 
+                                    className={`aspect-square rounded-lg md:rounded-xl relative flex flex-col items-center justify-center transition-all duration-300 transform border backdrop-blur-sm touch-manipulation
+                                        ${isSolved 
+                                            ? (isMine ? 'bg-gradient-to-br from-green-600/80 to-emerald-900/90 border-green-400/80 shadow-[0_0_20px_#22c55e] scale-95 z-0' : 'bg-slate-900/50 border-slate-800 opacity-40 grayscale scale-90 z-0') 
+                                            : (hasFailed ? 'bg-red-950/40 border-red-900/50 opacity-60 cursor-not-allowed' : 'bg-gradient-to-br from-white/10 to-white/5 border-white/20 hover:border-cyan-400 hover:shadow-[0_0_25px_#22d3ee] hover:bg-cyan-900/40 hover:scale-105 hover:z-20 active:scale-95')
+                                        }`}>
+                                    {!isSolved && !hasFailed && (<><div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity rounded-xl"></div><Sparkles size={12} className="absolute top-1 right-1 text-cyan-200 opacity-0 group-hover:opacity-100 animate-pulse"/></>)}
+                                    {isSolved ? (<>{isMine ? <CheckCircle size={18} className="text-green-300 drop-shadow-md mb-1"/> : <Lock size={14} className="text-slate-500 mb-1"/>}<div className={`text-[7px] md:text-[8px] font-black uppercase px-1 py-0.5 rounded w-[90%] truncate text-center ${isMine ? 'bg-green-950 text-green-400' : 'bg-transparent text-slate-500'}`}>{isMine ? 'YOU' : qState.winnerName}</div></>) : hasFailed ? (<Ban size={20} className="text-red-800"/>) : (<span className="text-lg md:text-2xl font-black text-white/90 drop-shadow-md group-hover:text-white transition-colors">{idx + 1}</span>)}
+                                </button>
+                            )
+                        })}
+                    </div>
                 </div>
             </div>
         </main>
