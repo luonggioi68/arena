@@ -397,13 +397,15 @@ export default function CreateQuiz() {
   const removeQuestion = (index) => { if (confirm("Xóa câu hỏi này?")) setQuestions(questions.filter((_, i) => i !== index)); };
 
   // --- HÀM LƯU ĐỀ THI ---
+// --- HÀM LƯU ĐỀ THI ---
   const handleSave = async () => {
     if (!title.trim()) return alert("Vui lòng nhập tên bài thi!");
     if (!subject) return alert("Vui lòng chọn Môn học!");
     setLoading(true);
     
-    // 1. Chuyển đổi dữ liệu sang MathML cho Game
+    // ... (Giữ nguyên đoạn xử lý questionsForGame) ...
     const questionsForGame = questions.map(q => {
+        // ... (Giữ nguyên code xử lý MathML) ...
         const baseQ = {
             ...q,
             q: convertToMathML(q.q || ""), 
@@ -428,11 +430,13 @@ export default function CreateQuiz() {
           duration: parseInt(duration) || 45, 
           scoreConfig: scoreConfig || { p1: 6, p3: 1 }, 
           authorId: user.uid, 
-          questions: questionsForGame, // Dữ liệu cho Game
-          rawQuestions: questions,     // Dữ liệu gốc để sửa
+          questions: questionsForGame, 
+          rawQuestions: questions,     
           status: 'OPEN',
-          // [NEW] Lưu thêm trường origin để phân biệt nguồn (LIBRARY hay GAME_REPO)
-          origin: origin 
+          origin: origin,
+          
+          // [FIX QUAN TRỌNG] Tự động Public nếu tạo trong Kho Game
+          isPublic: origin === 'GAME_REPO' ? true : false 
       };
       
       const cleanData = JSON.parse(JSON.stringify(quizData));
@@ -445,12 +449,8 @@ export default function CreateQuiz() {
       
       alert("Lưu thành công!");
       
-      // [NEW] Điều hướng về đúng nơi đã xuất phát
       if (origin === 'GAME_REPO') {
-          // Quay về Tab Kho Game ở Dashboard nếu tạo từ đó
-          // Lưu ý: Dashboard cần xử lý param ?tab=GAME_REPO để active tab tương ứng
           router.push('/dashboard'); 
-          // Hoặc nếu thầy đã implement tab param: router.push('/dashboard?tab=GAME_REPO');
       } else {
           router.push('/dashboard');
       }

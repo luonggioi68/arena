@@ -1,22 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { 
-    signInWithEmailAndPassword, 
-    createUserWithEmailAndPassword, 
-    onAuthStateChanged, 
-    signOut,
-    updateProfile
-} from 'firebase/auth'; 
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'; 
 import { auth, firestore } from '@/lib/firebase';
-import { 
-    collection, query, where, getDocs, doc, onSnapshot, setDoc, 
-    serverTimestamp, orderBy, limit, addDoc 
-} from 'firebase/firestore';
-import { 
-    Flame, ChevronLeft, Trophy, Star, X, Gamepad2, Shield, Crown, 
-    Swords, PlayCircle, LogIn, UserPlus, LogOut, Gift, LayoutGrid, 
-    CircleDashed, DollarSign, Grid3X3, User, Phone, Lock, Eye, EyeOff, AlertCircle, KeyRound, Check
-} from 'lucide-react';
+import { collection, query, where, getDocs, doc, onSnapshot, setDoc, serverTimestamp, orderBy, limit, addDoc } from 'firebase/firestore';
+import { Flame, ChevronLeft, Trophy, Star, X, Gamepad2, Shield, Crown, Swords, PlayCircle, LogIn, UserPlus, LogOut, Gift, LayoutGrid, CircleDashed, DollarSign, Grid3X3, User, Phone, Lock, Eye, EyeOff, AlertCircle, KeyRound, Check } from 'lucide-react';
 import useAuthStore from '@/store/useAuthStore';
 
 // Hàm tạo email ảo
@@ -35,7 +22,7 @@ export default function TrainingPage() {
   const [authMode, setAuthMode] = useState(null); 
   const [showPassword, setShowPassword] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
-  const [resetStep, setResetStep] = useState(1); // 1: Nhập SĐT, 2: Nhập Pass mới
+  const [resetStep, setResetStep] = useState(1);
   
   const [formData, setFormData] = useState({
       fullName: '', phone: '', password: '', confirmPassword: ''
@@ -44,9 +31,6 @@ export default function TrainingPage() {
   const [studentProfile, setStudentProfile] = useState(null);
   const [selectedQuiz, setSelectedQuiz] = useState(null); 
 
-  // ... (Giữ nguyên logic Auth Listener, Lấy Grade, Fetch Data như cũ) ...
-  // Để tiết kiệm không gian, tôi chỉ viết lại phần Logic AUTH mới bên dưới
-  
   // 1. AUTH LISTENER
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -68,17 +52,25 @@ export default function TrainingPage() {
     if (router.isReady && router.query.grade) setSelectedGrade(parseInt(router.query.grade));
   }, [router.isReady, router.query.grade]);
 
-  // 3. FETCH DATA
+  // 3. FETCH DATA (ĐÃ SỬA: BỎ ĐIỀU KIỆN status == OPEN)
   useEffect(() => {
       if (!selectedGrade) return;
       setLoading(true);
+      
       const fetchQuizzes = async () => {
           try {
-              const q = query(collection(firestore, "quizzes"), where("status", "==", "OPEN"), where("isPublic", "==", true));
+              // [FIX] Chỉ cần isPublic == true là hiện, không cần OPEN
+              const q = query(
+                  collection(firestore, "quizzes"), 
+                  where("isPublic", "==", true)
+              );
+              
               const querySnapshot = await getDocs(q);
               const grouped = {};
+              
               querySnapshot.forEach(doc => {
                   const data = doc.data();
+                  // Lọc lớp (chấp nhận cả chuỗi và số)
                   if (data.grade == selectedGrade) {
                       const subj = data.subject || "Thử Thách Khác";
                       if (!grouped[subj]) grouped[subj] = [];
@@ -86,9 +78,16 @@ export default function TrainingPage() {
                   }
               });
               setSubjectsData(grouped);
-          } catch (e) { console.error(e); } finally { setLoading(false); }
+          } catch (e) { 
+              console.error("Lỗi lấy đề:", e); 
+          } finally { 
+              setLoading(false); 
+          }
       };
+      
       fetchQuizzes();
+
+      // Bảng vàng
       const lbQuery = query(collection(firestore, "student_profiles"), where("grade", "==", selectedGrade.toString()), orderBy("totalScore", "desc"), limit(10));
       const unsubscribeLB = onSnapshot(lbQuery, (snapshot) => setLeaderboard(snapshot.docs.map(d => d.data())), (e) => console.warn(e));
       return () => unsubscribeLB();
@@ -96,8 +95,7 @@ export default function TrainingPage() {
 
   const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  // --- LOGIC AUTHENTICATION ---
-
+  // --- AUTH LOGIC ---
   const handleRegister = async (e) => {
       e.preventDefault();
       const { fullName, phone, password, confirmPassword } = formData;
@@ -120,7 +118,10 @@ export default function TrainingPage() {
           });
           alert("Đăng ký thành công!");
           setAuthMode(null);
-      } catch (error) { alert(error.message); } finally { setAuthLoading(false); }
+      } catch (error) { 
+          if(error.code === 'auth/email-already-in-use') alert("Số điện thoại này đã được sử dụng!");
+          else alert(error.message); 
+      } finally { setAuthLoading(false); }
   };
 
   const handleLogin = async (e) => {
@@ -132,65 +133,37 @@ export default function TrainingPage() {
       } catch (error) { alert("Sai thông tin đăng nhập!"); } finally { setAuthLoading(false); }
   };
 
-  // --- [UPDATE] LOGIC QUÊN MẬT KHẨU MỚI ---
-  
-  // Bước 1: Kiểm tra SĐT
   const handleCheckPhone = async (e) => {
       e.preventDefault();
       const { phone } = formData;
       if (!phone) return alert("Vui lòng nhập số điện thoại!");
-      
       setAuthLoading(true);
       try {
-          // Tìm trong collection student_profiles xem có SĐT này không
           const q = query(collection(firestore, "student_profiles"), where("phone", "==", phone));
           const snapshot = await getDocs(q);
-          
-          if (!snapshot.empty) {
-              // Tìm thấy -> Chuyển sang bước 2
-              setResetStep(2);
-          } else {
-              alert("Số điện thoại này chưa được đăng ký trong hệ thống!");
-          }
-      } catch (e) {
-          alert("Lỗi kiểm tra: " + e.message);
-      } finally {
-          setAuthLoading(false);
-      }
+          if (!snapshot.empty) setResetStep(2);
+          else alert("Số điện thoại này chưa được đăng ký!");
+      } catch (e) { alert("Lỗi: " + e.message); } finally { setAuthLoading(false); }
   };
 
-  // Bước 2: Thực hiện Reset (Gọi API)
   const handleResetPassword = async (e) => {
       e.preventDefault();
       const { phone, password, confirmPassword } = formData;
-      
-      if (password !== confirmPassword) return alert("Mật khẩu nhập lại không khớp!");
-      if (password.length < 6) return alert("Mật khẩu phải có ít nhất 6 ký tự!");
-
+      if (password !== confirmPassword) return alert("Mật khẩu không khớp!");
+      if (password.length < 6) return alert("Mật khẩu tối thiểu 6 ký tự!");
       setAuthLoading(true);
       try {
-          // GỌI API ROUTE ĐỂ RESET PASS (Cần tạo file API này)
           const response = await fetch('/api/reset-password', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ phone, newPassword: password })
           });
-
           const data = await response.json();
           if (response.ok) {
-              alert("✅ Đổi mật khẩu thành công! Hãy đăng nhập lại.");
-              setResetStep(1);
-              setAuthMode('LOGIN');
-              setFormData({ ...formData, password: '', confirmPassword: '' });
-          } else {
-              throw new Error(data.message || "Lỗi reset mật khẩu");
-          }
-      } catch (e) {
-          alert("Thất bại: " + e.message);
-          console.error(e);
-      } finally {
-          setAuthLoading(false);
-      }
+              alert("✅ Đổi mật khẩu thành công!");
+              setResetStep(1); setAuthMode('LOGIN'); setFormData({ ...formData, password: '', confirmPassword: '' });
+          } else { throw new Error(data.message); }
+      } catch (e) { alert("Thất bại: " + e.message); } finally { setAuthLoading(false); }
   };
 
   const handleLogout = async () => { if(confirm("Đăng xuất?")) await signOut(auth); };
@@ -222,9 +195,9 @@ export default function TrainingPage() {
       <main className="flex-1 container mx-auto px-2 md:px-4 py-6 overflow-y-auto custom-scrollbar">
           {loading ? ( <div className="flex justify-center py-20"><Flame className="animate-bounce text-red-500" size={48}/></div> ) : (
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full">
-                {/* LEFT */}
+                {/* LEFT - DANH SÁCH ĐỀ */}
                 <div className="lg:col-span-3 space-y-8 pb-20">
-                    {Object.keys(subjectsData).length === 0 ? ( <div className="text-center py-20 border border-white/5 rounded-2xl bg-white/5"><Swords size={48} className="mx-auto text-slate-600 mb-4"/><p className="text-slate-500 italic">Chưa có nhiệm vụ nào.</p></div> ) : (
+                    {Object.keys(subjectsData).length === 0 ? ( <div className="text-center py-20 border border-white/5 rounded-2xl bg-white/5"><Swords size={48} className="mx-auto text-slate-600 mb-4"/><p className="text-slate-500 italic">Chưa có nhiệm vụ nào trong KHO GAME cho cấp độ này.</p></div> ) : (
                         Object.entries(subjectsData).map(([subject, quizzes]) => (
                             <div key={subject} className="animate-in slide-in-from-bottom-4 duration-500">
                                 <div className="flex items-center gap-2 mb-4 border-l-4 border-red-600 pl-3"><h2 className="text-2xl font-black text-white uppercase italic tracking-tighter">{subject}</h2><span className="bg-[#222] text-slate-400 text-[10px] font-bold px-2 py-0.5 rounded border border-white/10">{quizzes.length} ĐỀ</span></div>
@@ -248,7 +221,7 @@ export default function TrainingPage() {
           )}
       </main>
 
-      {/* --- MODAL CHỌN GAME --- */}
+      {/* MODAL GAME */}
       {selectedQuiz && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in fade-in zoom-in duration-200">
             <div className="relative bg-[#111] border border-red-600/40 p-6 md:p-8 rounded-[2rem] w-full max-w-3xl shadow-[0_0_60px_rgba(220,38,38,0.2)] overflow-hidden">
@@ -265,7 +238,7 @@ export default function TrainingPage() {
         </div>
       )}
 
-      {/* --- MODAL LOGIN / REGISTER / FORGOT [UPDATE] --- */}
+      {/* MODAL AUTH */}
       {authMode && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in zoom-in duration-300">
            <div className="bg-[#1e1e24] border-2 border-orange-500 p-8 rounded-3xl w-full max-w-sm shadow-[0_0_50px_#f97316] relative">
@@ -295,50 +268,26 @@ export default function TrainingPage() {
                   </form>
               )}
 
-              {/* FORGOT PASSWORD [UPDATE] */}
+              {/* FORGOT */}
               {authMode === 'FORGOT' && (
                   <div className="space-y-4">
-                      <div className="text-center mb-6">
-                          <KeyRound size={48} className="mx-auto text-yellow-500 mb-2"/>
-                          <h3 className="text-2xl font-black text-white uppercase">KHÔI PHỤC</h3>
-                          <p className="text-xs text-slate-400">{resetStep === 1 ? 'Nhập SĐT để tìm tài khoản' : 'Thiết lập mật khẩu mới'}</p>
-                      </div>
-                      
+                      <div className="text-center mb-6"><KeyRound size={48} className="mx-auto text-yellow-500 mb-2"/><h3 className="text-2xl font-black text-white uppercase">KHÔI PHỤC</h3><p className="text-xs text-slate-400">{resetStep === 1 ? 'Nhập SĐT để tìm tài khoản' : 'Thiết lập mật khẩu mới'}</p></div>
                       {resetStep === 1 ? (
                           <form onSubmit={handleCheckPhone} className="space-y-4">
-                              <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3">
-                                  <Phone size={18} className="text-slate-500"/>
-                                  <input name="phone" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Số điện thoại đã đăng ký" type="tel"/>
-                              </div>
-                              <button disabled={authLoading} className="w-full bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-bold uppercase transition flex items-center justify-center gap-2">
-                                  {authLoading ? 'Đang kiểm tra...' : 'TIẾP TỤC'}
-                              </button>
+                              <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Phone size={18} className="text-slate-500"/><input name="phone" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Số điện thoại đã đăng ký" type="tel"/></div>
+                              <button disabled={authLoading} className="w-full bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-bold uppercase transition flex items-center justify-center gap-2">{authLoading ? 'Đang kiểm tra...' : 'TIẾP TỤC'}</button>
                           </form>
                       ) : (
                           <form onSubmit={handleResetPassword} className="space-y-4 animate-in slide-in-from-right">
-                              <div className="bg-green-900/30 p-3 rounded-lg border border-green-500/30 text-green-400 text-xs font-bold text-center flex items-center justify-center gap-2">
-                                  <Check size={14}/> Tài khoản hợp lệ: {formData.phone}
-                              </div>
-                              <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3">
-                                  <Lock size={18} className="text-slate-500"/>
-                                  <input name="password" type="password" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Mật khẩu mới"/>
-                              </div>
-                              <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3">
-                                  <Lock size={18} className="text-slate-500"/>
-                                  <input name="confirmPassword" type="password" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Nhập lại mật khẩu mới"/>
-                              </div>
-                              <button disabled={authLoading} className="w-full bg-gradient-to-r from-yellow-600 to-orange-600 text-white py-3 rounded-xl font-black uppercase shadow-lg hover:scale-105 transition">
-                                  {authLoading ? 'Đang cập nhật...' : 'ĐỔI MẬT KHẨU'}
-                              </button>
+                              <div className="bg-green-900/30 p-3 rounded-lg border border-green-500/30 text-green-400 text-xs font-bold text-center flex items-center justify-center gap-2"><Check size={14}/> Tài khoản hợp lệ: {formData.phone}</div>
+                              <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Lock size={18} className="text-slate-500"/><input name="password" type="password" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Mật khẩu mới"/></div>
+                              <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Lock size={18} className="text-slate-500"/><input name="confirmPassword" type="password" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Nhập lại mật khẩu mới"/></div>
+                              <button disabled={authLoading} className="w-full bg-gradient-to-r from-yellow-600 to-orange-600 text-white py-3 rounded-xl font-black uppercase shadow-lg hover:scale-105 transition">{authLoading ? 'Đang cập nhật...' : 'ĐỔI MẬT KHẨU'}</button>
                           </form>
                       )}
-                      
-                      <div className="text-center text-xs font-bold mt-4">
-                          <button type="button" onClick={() => { setAuthMode('LOGIN'); setResetStep(1); }} className="text-orange-500 hover:text-white">Quay lại đăng nhập</button>
-                      </div>
+                      <div className="text-center text-xs font-bold mt-4"><button type="button" onClick={() => { setAuthMode('LOGIN'); setResetStep(1); }} className="text-orange-500 hover:text-white">Quay lại đăng nhập</button></div>
                   </div>
               )}
-
            </div>
         </div>
       )}
@@ -350,9 +299,6 @@ const GameModeBtn = ({ title, desc, color, icon, onClick, fullWidth }) => (
     <button onClick={onClick} className={`group relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br ${color} hover:scale-105 transition-all duration-300 shadow-xl border border-white/10 flex flex-col items-center justify-center text-center ${fullWidth ? 'col-span-2 md:col-span-4 flex-row gap-4' : ''}`}>
         <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors"></div>
         <div className="bg-black/20 p-3 rounded-full mb-2 shadow-inner group-hover:rotate-12 transition-transform duration-500 text-white">{icon}</div>
-        <div className={fullWidth ? 'text-left' : ''}>
-            <div className="font-black text-white uppercase text-sm md:text-base leading-none mb-1 group-hover:text-yellow-300 transition-colors">{title}</div>
-            <div className="text-[10px] text-white/70 uppercase font-bold tracking-wider">{desc}</div>
-        </div>
+        <div className={fullWidth ? 'text-left' : ''}><div className="font-black text-white uppercase text-sm md:text-base leading-none mb-1 group-hover:text-yellow-300 transition-colors">{title}</div><div className="text-[10px] text-white/70 uppercase font-bold tracking-wider">{desc}</div></div>
     </button>
 );
