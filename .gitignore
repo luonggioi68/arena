@@ -43,3 +43,5 @@ node_modules
 .next
 .env.local
 .DS_Store
+service-account.json
+.env.local

@@ -265,7 +265,7 @@ export default function ArenaHostController() {
         </div>
       </div>
 
-     <main className="h-[90vh] p-4 flex flex-col overflow-hidden relative">
+      <main className="h-[90vh] p-4 flex flex-col overflow-hidden relative">
         {(gameState === 'WAITING' || gameState === 'LOBBY' || !gameState) && (
             <div className="h-full flex flex-col items-center justify-center animate-in zoom-in duration-300 z-50">
                 <div className="bg-slate-900/80 backdrop-blur-xl p-10 rounded-[3rem] border-2 border-indigo-500/30 shadow-2xl flex flex-col items-center w-full max-w-4xl">
@@ -300,11 +300,7 @@ export default function ArenaHostController() {
                     <div className="h-auto min-h-[22vh] max-h-[35vh] bg-slate-900 p-6 rounded-[2rem] border border-slate-800 text-center flex items-center justify-center shadow-2xl shrink-0 relative group overflow-y-auto custom-scrollbar">
                         <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 pointer-events-none"></div>
                         {currentQuestion.img && <img src={currentQuestion.img} className="h-24 w-auto rounded object-contain mr-4 border border-white/10"/>}
-                        {/* [SỬA 1] Hiển thị câu hỏi dạng HTML/MathML */}
-                        <h1 
-                            className={`text-xl md:text-3xl font-bold text-white leading-normal relative z-10 ${currentQuestion.q.includes('\n') ? 'whitespace-pre-wrap font-mono text-left text-lg' : 'italic'}`}
-                            dangerouslySetInnerHTML={{ __html: currentQuestion.q }}
-                        />
+                        <h1 className={`text-xl md:text-3xl font-bold text-white leading-normal relative z-10 ${currentQuestion.q.includes('\n') ? 'whitespace-pre-wrap font-mono text-left text-lg' : 'italic'}`}>{currentQuestion.q}</h1>
                     </div>
                 )}
                 <div className="flex-1 min-h-0 relative z-10">
@@ -318,8 +314,7 @@ export default function ArenaHostController() {
                                     {currentQuestion.a.map((ans, idx) => (
                                         <div key={idx} className={`rounded-[2rem] flex flex-col items-center justify-center text-xl md:text-2xl font-bold text-white p-6 text-center border-b-[8px] shadow-xl transition-all ${gameState === 'RESULT' ? (idx === currentQuestion.correct ? 'bg-green-600 border-green-800 opacity-100 scale-105' : 'bg-slate-700 border-slate-900 opacity-50') : 'bg-indigo-600/90 border-indigo-900 hover:bg-indigo-600'}`}>
                                           <div className="absolute top-4 left-4 w-10 h-10 rounded-full bg-black/20 flex items-center justify-center text-sm font-black">{String.fromCharCode(65+idx)}</div>
-                                          {/* [SỬA 2] Hiển thị đáp án dạng HTML/MathML */}
-                                          <span dangerouslySetInnerHTML={{ __html: ans }} />
+                                          <span>{ans}</span>
                                           {currentQuestion.aImages?.[idx] && <img src={currentQuestion.aImages[idx]} className="h-20 w-auto mt-2 rounded bg-white p-1"/>}
                                         </div>
                                     ))}
@@ -332,11 +327,7 @@ export default function ArenaHostController() {
                                         <tbody>
                                             {currentQuestion.items.map((item, idx) => (
                                                 <tr key={idx} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition">
-                                                    {/* [SỬA 3] Hiển thị nội dung ý con dạng HTML/MathML */}
-                                                    <td 
-                                                        className="py-6 pl-4 font-bold"
-                                                        dangerouslySetInnerHTML={{ __html: item.text }}
-                                                    />
+                                                    <td className="py-6 pl-4 font-bold">{item.text}</td>
                                                     <td className="py-6 text-center"><div className={`w-10 h-10 rounded-lg mx-auto flex items-center justify-center ${gameState === 'RESULT' && item.isTrue ? 'bg-green-500 shadow-[0_0_15px_#22c55e]' : 'bg-slate-700'}`}>{gameState === 'RESULT' && item.isTrue && <Check size={28} strokeWidth={4}/>}</div></td>
                                                     <td className="py-6 text-center"><div className={`w-10 h-10 rounded-lg mx-auto flex items-center justify-center ${gameState === 'RESULT' && !item.isTrue ? 'bg-green-500 shadow-[0_0_15px_#22c55e]' : 'bg-slate-700'}`}>{gameState === 'RESULT' && !item.isTrue && <Check size={28} strokeWidth={4}/>}</div></td>
                                                 </tr>
@@ -348,11 +339,7 @@ export default function ArenaHostController() {
                             {currentQuestion.type === 'SA' && (
                                 <div className="h-full flex flex-col items-center justify-center bg-slate-800/60 rounded-[2rem] border-2 border-dashed border-white/10">
                                     <div className="text-slate-400 uppercase font-black tracking-[0.5em] mb-6">ĐÁP ÁN CHÍNH XÁC</div>
-                                    {/* [SỬA 4] Hiển thị đáp án đúng SA dạng HTML/MathML */}
-                                    <div 
-                                        className="bg-white text-slate-950 text-6xl font-black px-16 py-8 rounded-3xl shadow-[0_10px_0_#cbd5e1] min-w-[60%] text-center uppercase tracking-wider"
-                                        dangerouslySetInnerHTML={{ __html: gameState === 'RESULT' ? currentQuestion.correct : "???" }}
-                                    />
+                                    <div className="bg-white text-slate-950 text-6xl font-black px-16 py-8 rounded-3xl shadow-[0_10px_0_#cbd5e1] min-w-[60%] text-center uppercase tracking-wider">{gameState === 'RESULT' ? currentQuestion.correct : "???"}</div>
                                 </div>
                             )}
                         </div>

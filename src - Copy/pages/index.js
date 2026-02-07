@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { auth, googleProvider, firestore } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, increment, onSnapshot, setDoc } from 'firebase/firestore'; 
 import useAuthStore from '@/store/useAuthStore';
-import { LogIn, LogOut, Sword, Shield, BookOpen, Users, X, ArrowRight, Gamepad2, Settings, UploadCloud, Zap, Eye, Target } from 'lucide-react';
+import { LogIn, LogOut, Sword, Shield, BookOpen, Users, X, ArrowRight, Gamepad2, Settings, UploadCloud, Zap, Activity, Globe, Eye } from 'lucide-react';
 
 export default function HomePage() {
   const router = useRouter();
@@ -15,44 +15,66 @@ export default function HomePage() {
   const [pin, setPin] = useState('');
   
   const [homeConfig, setHomeConfig] = useState({ topBanner: '', leftBanner: '', rightBanner: '', logoTitleImage: '' });
+  
+  // State Thống kê
   const [realVisitorCount, setRealVisitorCount] = useState(0); 
+  const [onlineUsers, setOnlineUsers] = useState(1); 
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => setUser(currentUser));
     return () => unsubscribe();
   }, [setUser]);
 
-  // --- LẤY CẤU HÌNH GIAO DIỆN ---
+  // --- 1. LẤY CẤU HÌNH GIAO DIỆN ---
   useEffect(() => {
       const fetchHomeConfig = async () => {
           try {
               const docSnap = await getDoc(doc(firestore, "system_config", "homepage"));
-              if (docSnap.exists()) setHomeConfig(docSnap.data());
+              if (docSnap.exists()) {
+                  setHomeConfig(docSnap.data());
+              }
           } catch (e) { console.error("Lỗi tải giao diện:", e); }
       };
       fetchHomeConfig();
   }, []);
 
-  // --- THỐNG KÊ ---
+  // --- 2. THỐNG KÊ ---
   useEffect(() => {
       const statsRef = doc(firestore, "system_stats", "visitor_counter");
       const incrementVisit = async () => {
           try {
               const docSnap = await getDoc(statsRef);
-              if (!docSnap.exists()) await setDoc(statsRef, { count: 1 });
-              else if (!sessionStorage.getItem('visited')) {
-                  await updateDoc(statsRef, { count: increment(1) });
-                  sessionStorage.setItem('visited', 'true');
+              if (!docSnap.exists()) {
+                  await setDoc(statsRef, { count: 1 });
+              } else {
+                  if (!sessionStorage.getItem('visited')) {
+                      await updateDoc(statsRef, { count: increment(1) });
+                      sessionStorage.setItem('visited', 'true');
+                  }
               }
-          } catch (e) {}
+          } catch (e) { console.error("Lỗi thống kê:", e); }
       };
       incrementVisit();
-      return onSnapshot(statsRef, (doc) => { if (doc.exists()) setRealVisitorCount(doc.data().count || 0); });
+      const unsubscribe = onSnapshot(statsRef, (doc) => {
+          if (doc.exists()) setRealVisitorCount(doc.data().count || 0);
+      });
+      return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+      const interval = setInterval(() => {
+          setOnlineUsers(prev => {
+              const change = Math.floor(Math.random() * 3) - 1;
+              return Math.max(1, prev + change); 
+          });
+      }, 4000);
+      return () => clearInterval(interval);
   }, []);
 
   const handleLogin = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
+      router.push('/dashboard');
     } catch (error) { alert("Đăng nhập thất bại!"); }
   };
 
@@ -70,12 +92,6 @@ export default function HomePage() {
     else if (targetGame === 'LIGHTNING') router.push(`/play/lightning?pin=${pin}`); 
   };
 
-  // --- XỬ LÝ CLICK VÀO LỚP ---
-  const handleGradeClick = (grade) => {
-      // Chuyển sang trang training kèm theo tham số grade trên URL
-      router.push(`/training?grade=${grade}`);
-  };
-
   // COMPONENT CARD GAME
   const CyberCard = ({ title, subtitle, icon: Icon, color, onClick, delay }) => {
       const colorMap = {
@@ -91,18 +107,18 @@ export default function HomePage() {
       return (
         <div 
             onClick={onClick} 
-            className={`group relative h-[120px] 2xl:h-[160px] cursor-pointer rounded-2xl border border-white/5 bg-slate-900/60 backdrop-blur-sm overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-8`}
+            className={`group relative h-[160px] 2xl:h-[200px] cursor-pointer rounded-2xl border border-white/5 bg-slate-900/60 backdrop-blur-sm overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-8`}
             style={{ animationDelay: `${delay}ms` }}
         >
             <div className={`absolute inset-0 border-2 ${theme.border} opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl ${theme.shadow} shadow-lg`}></div>
             <div className={`absolute inset-0 bg-gradient-to-br ${theme.bg} opacity-40 group-hover:opacity-60 transition-opacity`}></div>
             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 mix-blend-overlay"></div>
 
-            <div className="relative z-10 flex flex-col items-center justify-center h-full p-3 text-center">
-                <div className={`p-2 rounded-xl bg-black/40 border border-white/10 mb-2 group-hover:scale-110 transition-transform duration-300 ${theme.shadow} shadow-md`}>
-                    <Icon size={24} className={`${theme.icon} drop-shadow-md`} strokeWidth={1.5} />
+            <div className="relative z-10 flex flex-col items-center justify-center h-full p-4 text-center">
+                <div className={`p-2.5 rounded-xl bg-black/40 border border-white/10 mb-2 group-hover:scale-110 transition-transform duration-300 ${theme.shadow} shadow-md`}>
+                    <Icon size={28} className={`${theme.icon} drop-shadow-md`} strokeWidth={1.5} />
                 </div>
-                <h3 className="text-sm 2xl:text-base font-black italic uppercase text-white tracking-tighter leading-none mb-1 drop-shadow-lg">
+                <h3 className="text-base 2xl:text-lg font-black italic uppercase text-white tracking-tighter leading-none mb-1 drop-shadow-lg group-hover:tracking-normal transition-all">
                     {title}
                 </h3>
                 <p className={`text-[8px] font-bold uppercase tracking-[0.2em] ${theme.text} opacity-80 group-hover:opacity-100`}>{subtitle}</p>
@@ -122,7 +138,7 @@ export default function HomePage() {
       {homeConfig.rightBanner && (<div className="fixed top-0 right-0 w-[15%] h-full hidden 2xl:block z-0 pointer-events-none"><img src={homeConfig.rightBanner} className="w-full h-full object-cover opacity-80 mask-image-left"/></div>)}
 
       {/* 1. HEADER */}
-      <header className="h-[80px] shrink-0 z-[100] transition-all duration-300 bg-black/10 backdrop-blur-sm border-b border-white/5 shadow-[0_5px_30px_rgba(0,0,0,0.5)] relative">
+      <header className="h-[90px] shrink-0 z-[100] transition-all duration-300 bg-black/10 backdrop-blur-sm border-b border-white/5 shadow-[0_5px_30px_rgba(0,0,0,0.5)] relative">
           {homeConfig.topBanner && (
               <div className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden">
                   <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/60 z-10"></div>
@@ -131,27 +147,28 @@ export default function HomePage() {
           )}
           
           <div className="relative z-20 container mx-auto h-full px-4 md:px-6 flex justify-between items-center">
-              {/* LOGO */}
+              {/* LOGO (ĐÃ FIX: Hiện cả trên Mobile) */}
               <div className="flex items-center gap-4">
                   {homeConfig.logoTitleImage ? (
-                      <img src={homeConfig.logoTitleImage} alt="Logo" className="h-10 md:h-14 object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] hover:scale-105 transition-transform"/>
+                      <img src={homeConfig.logoTitleImage} alt="Logo" className="h-12 md:h-16 object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] hover:scale-105 transition-transform"/>
                   ) : (
                       <div className="flex items-center gap-2 md:gap-3 group cursor-pointer">
-                        <div className="bg-gradient-to-br from-cyan-600 to-blue-700 p-2 rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.4)] border border-white/10 group-hover:rotate-12 transition-transform duration-500"><Gamepad2 className="text-white" size={20} /></div>
+                        <div className="bg-gradient-to-br from-cyan-600 to-blue-700 p-2 md:p-2.5 rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.4)] border border-white/10 group-hover:rotate-12 transition-transform duration-500"><Gamepad2 className="text-white" size={24} /></div>
+                        {/* [FIX] Bỏ class 'hidden md:block' để hiển thị text trên mobile */}
                         <div className="leading-none">
-                            <h1 className="text-xl md:text-2xl font-black italic tracking-tighter text-white uppercase drop-shadow-md">EDU <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">ARENA</span></h1>
-                            <p className="text-[8px] font-bold text-slate-300 uppercase tracking-[0.4em] drop-shadow-sm">Connect</p>
+                            <h1 className="text-2xl md:text-3xl font-black italic tracking-tighter text-white uppercase drop-shadow-md">EDU <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">ARENA</span></h1>
+                            <p className="text-[9px] font-bold text-slate-300 uppercase tracking-[0.4em] drop-shadow-sm">Connect</p>
                         </div>
                       </div>
                   )}
               </div>
 
-              {/* USER / LOGIN */}
+              {/* USER / LOGIN [FIX: ANIMATION THỤT VÀO ĐẨY RA] */}
               <div className="flex items-center gap-4">
                 {user ? (
                   <div className="flex items-center gap-4 bg-black/40 pl-2 pr-6 py-1.5 rounded-full border border-white/10 backdrop-blur-md hover:bg-black/60 transition-all group shadow-lg">
                       <div className="relative">
-                          <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}&background=random`} className="w-8 h-8 rounded-full border-2 border-cyan-500 shadow-[0_0_10px_#22d3ee]" />
+                          <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}&background=random`} className="w-8 h-8 md:w-9 md:h-9 rounded-full border-2 border-cyan-500 shadow-[0_0_10px_#22d3ee]" />
                           <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-black rounded-full"></div>
                       </div>
                       <div className="hidden md:block">
@@ -165,11 +182,16 @@ export default function HomePage() {
                       </div>
                   </div>
                 ) : (
+                  // NÚT LOGIN [FIX]: Thụt vào (chỉ hiện icon), hover/click đẩy ra chữ
                   <button onClick={handleLogin} className="group relative h-10 w-10 hover:w-44 transition-all duration-500 ease-in-out bg-cyan-600/90 text-white rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:bg-cyan-500 overflow-hidden flex items-center border border-cyan-400/30">
                       <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500 skew-x-12"></div>
+                      
+                      {/* Icon luôn hiện ở bên trái */}
                       <div className="absolute left-0 w-10 h-10 flex items-center justify-center z-10 shrink-0">
                           <LogIn size={20} className="drop-shadow-md"/>
                       </div>
+                      
+                      {/* Text chỉ hiện khi hover/active */}
                       <span className="pl-10 pr-4 font-black text-xs uppercase tracking-widest whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">
                           GV Đăng nhập
                       </span>
@@ -179,65 +201,17 @@ export default function HomePage() {
           </div>
       </header>
 
-      {/* 2. BODY CONTENT */}
-      <div className="flex-1 relative w-full 2xl:max-w-[70%] mx-auto flex flex-col px-4 md:px-8 overflow-y-auto custom-scrollbar z-10 pt-4 md:justify-start">
+      {/* 2. BODY CONTENT ([FIX] CHO PHÉP CUỘN TRÊN MOBILE: overflow-y-auto) */}
+      <div className="flex-1 relative w-full 2xl:max-w-[70%] mx-auto flex flex-col px-4 md:px-8 overflow-y-auto custom-scrollbar z-10 py-6 md:justify-center">
           <main className="w-full">
-       
-          {/* --- NEW: NAVIGATION BAR (PHIÊN BẢN RỰC LỬA TOÀN THỜI GIAN) --- */}
-            <div className="w-full bg-black/80 backdrop-blur-xl border-2 border-red-600/50 rounded-2xl flex flex-col md:flex-row overflow-hidden mb-8 shadow-[0_0_50px_rgba(220,38,38,0.4)] animate-in fade-in slide-in-from-top-4 relative z-20">
-                
-                {/* Cột Trái: LABEL LUYỆN TẬP (GIỮ NGUYÊN) */}
-                <div className="bg-gradient-to-br from-red-700 to-orange-800 p-4 md:w-48 flex flex-col items-center justify-center text-center shrink-0 relative overflow-hidden group cursor-default z-20 shadow-2xl border-b md:border-b-0 md:border-r border-red-500/30">
-                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30 mix-blend-overlay"></div>
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -skew-x-12 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000"></div>
-                    <Target size={32} className="text-yellow-300 mb-1 animate-pulse drop-shadow-[0_0_10px_#facc15]"/>
-                    <h2 className="text-xl font-black uppercase text-white leading-none tracking-tighter drop-shadow-md">Luyện Tập</h2>
-                    <p className="text-[10px] text-yellow-200 font-bold uppercase tracking-[0.3em] mt-1">Training Area</p>
-                </div>
-
-                {/* Cột Phải: LIST LỚP HỌC (THIẾT KẾ MỚI: LUÔN RỰC LỬA) */}
-                <div className="flex-1 flex overflow-x-auto custom-scrollbar scroll-smooth z-10 relative">
-                    <div className="flex w-full min-w-max h-full">
-                        {[6, 7, 8, 9, 10, 11, 12].map((grade, index) => (
-                            <button 
-                                key={grade}
-                                onClick={() => handleGradeClick(grade)}
-                                className="group relative flex-1 min-w-[70px] md:min-w-0 flex flex-col items-center justify-center py-4 md:py-0 transition-all duration-300 border-l border-red-900/30 hover:flex-[1.3] hover:z-30 active:scale-95 overflow-hidden"
-                            >
-                                {/* 1. Nền Mặc định (Luôn Rực Lửa - Tông Trầm) */}
-                                <div className="absolute inset-0 bg-gradient-to-b from-red-900 via-red-800 to-orange-900 transition-all duration-500 group-hover:opacity-0"></div>
-                                
-                                {/* 2. Nền khi Hover (Cháy Bùng Lên - Tông Sáng & Chuyển động) */}
-                                <div className="absolute inset-0 bg-gradient-to-br from-red-600 via-orange-500 to-yellow-500 opacity-0 group-hover:opacity-100 transition-all duration-500 group-hover:animate-pulse group-hover:brightness-110"></div>
-                                
-                                {/* 3. Texture Carbon mờ */}
-                                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 mix-blend-overlay pointer-events-none"></div>
-
-                                {/* 4. Hiệu ứng lửa liếm từ dưới lên khi hover */}
-                                <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-yellow-300/40 via-red-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-y-full group-hover:translate-y-0 blur-md pointer-events-none"></div>
-
-                                {/* 5. Nội dung số */}
-                                <div className="relative z-10 transform group-hover:-translate-y-2 transition-transform duration-300 flex flex-col items-center">
-                                    {/* Số lớp: Mặc định vàng nhạt, Hover chuyển sang trắng vàng rực rỡ */}
-                                    <span className="text-3xl md:text-5xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:from-white group-hover:to-yellow-300 transition-all duration-300 group-hover:scale-110 group-hover:drop-shadow-[0_0_15px_rgba(250,204,21,0.8)]">
-                                        {grade}
-                                    </span>
-                                    {/* Chữ "Lớp" */}
-                                    <span className="text-[10px] font-bold uppercase tracking-widest text-red-300 opacity-70 group-hover:opacity-100 group-hover:text-yellow-100 absolute -bottom-4 transition-all duration-300 whitespace-nowrap">
-                                        Lớp
-                                    </span>
-                                </div>
-                                
-                                {/* 6. Hiệu ứng Flash khi Bấm */}
-                                <div className="absolute inset-0 bg-white/30 opacity-0 active:opacity-100 transition-opacity duration-100 pointer-events-none mix-blend-overlay"></div>
-                            </button>
-                        ))}
-                    </div>
-                </div>
+            
+            <div className="mb-6 2xl:mb-10 text-center mt-4 md:mt-0">
+                <h2 className="text-lg md:text-2xl font-black text-slate-400 uppercase tracking-[0.3em] mb-2 opacity-80 animate-pulse text-shadow-glow">Choose Your Battle</h2>
+                <div className="h-0.5 w-20 bg-gradient-to-r from-transparent via-cyan-500 to-transparent mx-auto"></div>
             </div>
 
-            {/* GRID 6 MỤC (GIỮ NGUYÊN HOẶC ĐIỀU CHỈNH) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 w-full pb-10">
+            {/* GRID 6 MỤC - Có thêm padding-bottom để không bị che bởi footer khi cuộn */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 w-full pb-10">
               <CyberCard title="Chiến Binh Arena" subtitle="Đấu trường sinh tử" icon={Sword} color="purple" delay={0} onClick={() => openGamePortal('CLASSIC')}/>
               <CyberCard title="Biệt Đội Arena" subtitle="Hợp sức tác chiến" icon={Shield} color="orange" delay={100} onClick={() => openGamePortal('RACE')}/>
               <CyberCard title="Nhanh Như Chớp" subtitle="Tốc độ sấm sét" icon={Zap} color="cyan" delay={200} onClick={() => openGamePortal('LIGHTNING')}/>
@@ -248,7 +222,7 @@ export default function HomePage() {
           </main>
       </div>
 
-      {/* 3. FOOTER */}
+      {/* 3. FOOTER [FIX: BỎ CLASS HIDDEN TRÊN MOBILE] */}
       <footer className="h-[40px] shrink-0 bg-[#0a0a0a]/90 backdrop-blur border-t border-white/5 relative z-20 flex items-center justify-between px-6">
         <div className="flex items-center gap-4 md:gap-6">
           <div className="h-3 w-px bg-white/10"></div>
@@ -260,12 +234,15 @@ export default function HomePage() {
             </div>
         </div>
         
+        {/* [FIX] Hiện Copyright trên cả Mobile (bỏ hidden md:block) */}
         <p className="absolute left-1/2 -translate-x-1/2 text-slate-600 text-[8px] md:text-[9px] font-bold uppercase tracking-[0.3em] hover:text-cyan-600 transition-colors cursor-default whitespace-nowrap">
-            © 2026 Edu Arena Connect - 0383477162
+            © 2026 Lương Văn Giỏi - 0383477162
         </p>
+        
+     
       </footer>
 
-      {/* MODAL PIN */}
+      {/* MODAL */}
       {showPinModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-[#0f172a] border border-cyan-500/30 p-8 rounded-[3rem] w-full max-w-md shadow-[0_0_100px_rgba(6,182,212,0.2)] relative animate-in zoom-in-95 duration-300 overflow-hidden">

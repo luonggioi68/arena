@@ -29,6 +29,8 @@ const SUBJECT_OPTIONS = [
 const GRADE_OPTIONS = ["12", "11", "10", "9", "8", "7", "6", "5", "4", "3", "2", "1"];
 
 // --- HÀM CHUYỂN ĐỔI LATEX -> MATHML ---
+// --- HÀM CHUYỂN ĐỔI LATEX -> MATHML (NÂNG CẤP) ---
+// --- HÀM CHUYỂN ĐỔI LATEX -> MATHML (NÂNG CẤP) ---
 const convertToMathML = (text) => {
     if (!text) return "";
     
@@ -67,9 +69,7 @@ const convertToMathML = (text) => {
 
 export default function CreateQuiz() {
   const router = useRouter();
-  // [NEW] Lấy thêm tham số grade, subject, from từ URL
-  const { id, grade: queryGrade, subject: querySubject, from } = router.query;
-  
+  const { id } = router.query;
   const fileInputRef = useRef(null);
   const qImgRef = useRef(null);
   const aImgRef = useRef(null);
@@ -101,8 +101,6 @@ export default function CreateQuiz() {
   const [assignedClass, setAssignedClass] = useState('');
   const [duration, setDuration] = useState(45);
   const [scoreConfig, setScoreConfig] = useState({ p1: 6, p3: 1 });
-  // [NEW] Thêm state origin để biết đề thuộc Kho nào (LIBRARY hay GAME_REPO)
-  const [origin, setOrigin] = useState('LIBRARY');
 
   const [questions, setQuestions] = useState([
     { id: Date.now(), type: 'MCQ', part: 1, q: '', img: '', a: ['', '', '', ''], aImages: ['', '', '', ''], correct: 0 }
@@ -131,11 +129,9 @@ export default function CreateQuiz() {
     return () => unsubscribe();
   }, []);
 
-  // [NEW] Cập nhật logic khởi tạo dữ liệu
   useEffect(() => {
     if (user) {
         if (id) {
-            // Chế độ Sửa (Edit)
             getDoc(doc(firestore, "quizzes", id)).then(snap => {
                 if(snap.exists()) {
                     const data = snap.data();
@@ -146,8 +142,6 @@ export default function CreateQuiz() {
                     setAssignedClass(data.assignedClass || '');
                     setDuration(data.duration || 45);
                     if (data.scoreConfig) setScoreConfig(data.scoreConfig);
-                    // Lấy origin từ DB nếu có
-                    setOrigin(data.origin || 'LIBRARY');
                     
                     if (data.rawQuestions) {
                         setQuestions(data.rawQuestions);
@@ -157,20 +151,10 @@ export default function CreateQuiz() {
                 }
             });
         } else {
-            // Chế độ Tạo Mới (Create New)
             setExamCode(generateExamCode());
-            
-            // [NEW] Nếu có tham số từ URL (khi bấm tạo từ Kho Game), điền sẵn vào form
-            if (queryGrade) setGrade(queryGrade);
-            if (querySubject) {
-                // Tìm môn học khớp với ID hoặc Name
-                const matchedSubject = SUBJECT_OPTIONS.find(s => s === querySubject || s === querySubject);
-                setSubject(matchedSubject || querySubject);
-            }
-            if (from) setOrigin(from); // Set origin là GAME_REPO nếu từ đó qua
         }
     }
-  }, [id, user, queryGrade, querySubject, from]);
+  }, [id, user]);
 
   const handleImageUpload = async (file) => {
     if (!file) return null;
@@ -396,7 +380,7 @@ export default function CreateQuiz() {
   const updateTFItem = (qIndex, itemIndex, field, value) => { const newQs = [...questions]; newQs[qIndex].items[itemIndex][field] = value; setQuestions(newQs); };
   const removeQuestion = (index) => { if (confirm("Xóa câu hỏi này?")) setQuestions(questions.filter((_, i) => i !== index)); };
 
-  // --- HÀM LƯU ĐỀ THI ---
+  // --- [FIX] HÀM LƯU ĐỀ THI ĐÃ SỬA LỖI UNDEFINED ---
   const handleSave = async () => {
     if (!title.trim()) return alert("Vui lòng nhập tên bài thi!");
     if (!subject) return alert("Vui lòng chọn Môn học!");
@@ -410,9 +394,10 @@ export default function CreateQuiz() {
             a: q.type === 'MCQ' ? (q.a || []).map(ans => convertToMathML(ans || "")) : null,
             items: q.type === 'TF' ? (q.items || []).map(i => ({...i, text: convertToMathML(i.text || "")})) : null,
             correct: q.type === 'SA' ? convertToMathML(q.correct || "") : (q.correct || 0),
-            img: q.img || null,
+            img: q.img || null, // Đảm bảo không undefined
             aImages: q.aImages || null
         };
+        // Xóa các trường thừa tùy theo loại câu hỏi để tránh undefined
         if(q.type === 'TF') delete baseQ.a;
         if(q.type === 'SA') delete baseQ.a;
         return baseQ;
@@ -430,13 +415,13 @@ export default function CreateQuiz() {
           authorId: user.uid, 
           questions: questionsForGame, // Dữ liệu cho Game
           rawQuestions: questions,     // Dữ liệu gốc để sửa
-          status: 'OPEN',
-          // [NEW] Lưu thêm trường origin để phân biệt nguồn (LIBRARY hay GAME_REPO)
-          origin: origin 
+          status: 'OPEN' 
       };
       
+      // [QUAN TRỌNG] Loại bỏ hoàn toàn undefined bằng cách parse/stringify
       const cleanData = JSON.parse(JSON.stringify(quizData));
       
+      // Thêm lại timestamp (vì JSON.stringify sẽ làm mất nó)
       cleanData.updatedAt = serverTimestamp();
       if (!id) cleanData.createdAt = serverTimestamp();
 
@@ -444,17 +429,7 @@ export default function CreateQuiz() {
       else await addDoc(collection(firestore, "quizzes"), cleanData);
       
       alert("Lưu thành công!");
-      
-      // [NEW] Điều hướng về đúng nơi đã xuất phát
-      if (origin === 'GAME_REPO') {
-          // Quay về Tab Kho Game ở Dashboard nếu tạo từ đó
-          // Lưu ý: Dashboard cần xử lý param ?tab=GAME_REPO để active tab tương ứng
-          router.push('/dashboard'); 
-          // Hoặc nếu thầy đã implement tab param: router.push('/dashboard?tab=GAME_REPO');
-      } else {
-          router.push('/dashboard');
-      }
-      
+      router.push('/dashboard');
     } catch (e) { 
         console.error("Lỗi lưu:", e);
         alert("Lỗi lưu: " + e.message); 
@@ -509,8 +484,6 @@ export default function CreateQuiz() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <div className="flex justify-between items-center mb-4">
               <h3 className="font-black text-slate-700 flex items-center gap-2 uppercase text-sm"><Info size={18} /> Thông tin chung</h3>
-              {/* [NEW] Hiển thị nguồn tạo đề để thầy dễ nhận biết */}
-              {origin === 'GAME_REPO' && <span className="bg-rose-100 text-rose-600 px-3 py-1 rounded-full text-xs font-bold">ĐANG TẠO CHO KHO GAME</span>}
               <div className="flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-lg border border-slate-200 shadow-sm">
                   <Hash size={14} className="text-indigo-500"/>
                   <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Mã đề:</span>

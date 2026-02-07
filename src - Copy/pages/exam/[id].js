@@ -276,13 +276,14 @@ export default function ExamRoom() {
       </div>
 
       {/* --- NỘI DUNG CHÍNH --- */}
-<main className="max-w-4xl mx-auto mt-20 px-3 md:px-4 space-y-6 md:space-y-8 select-none"> 
+      <main className="max-w-4xl mx-auto mt-20 px-3 md:px-4 space-y-6 md:space-y-8 select-none"> 
         
         {/* TIÊU ĐỀ ĐỀ THI */}
         <div className="text-center mb-6">
             <h1 className="text-xl md:text-3xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg mb-2">{quiz?.title}</h1>
             <div className="inline-flex gap-2 text-[10px] font-bold">
                 <span className="bg-indigo-600 text-white px-2 py-1 rounded uppercase">Mã đề: {quiz?.code}</span>
+                {/* [THAY ĐỔI] Hiển thị Lớp ở đây */}
                 <span className="bg-slate-700 text-slate-300 px-2 py-1 rounded uppercase">Lớp: {className}</span>
             </div>
         </div>
@@ -313,11 +314,7 @@ export default function ExamRoom() {
                 <div className="p-3 md:p-5">
                     <div className="mb-4">
                         {q.img && <img src={q.img} className="max-h-40 md:max-h-60 w-auto rounded-lg mb-3 border border-white/10 object-contain bg-black/30" />}
-                        {/* Câu hỏi giữ nguyên cỡ lớn */}
-                        <h3 
-                            className="text-base md:text-lg font-bold text-white leading-relaxed whitespace-pre-line"
-                            dangerouslySetInnerHTML={{ __html: q.q }}
-                        />
+                        <h3 className="text-base md:text-lg font-bold text-white leading-relaxed whitespace-pre-line">{q.q}</h3>
                     </div>
 
                     {q.type === 'MCQ' && (
@@ -340,19 +337,15 @@ export default function ExamRoom() {
                                         key={aIdx} 
                                         onClick={() => handleAnswer(q.id, aIdx)}
                                         disabled={submitted}
-                                        className={`p-4 md:p-5 rounded-xl text-left font-bold transition-all flex flex-col gap-2 ${btnClass} active:scale-95 touch-manipulation`}
+                                        className={`p-3 md:p-4 rounded-xl text-left font-bold transition-all flex flex-col gap-2 ${btnClass} active:scale-95 touch-manipulation`}
                                     >   
                                         <div className="flex items-start gap-3">
-                                            <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs shrink-0 font-black uppercase mt-0.5">
+                                            <div className="w-6 h-6 rounded-full border-2 flex items-center justify-center text-[10px] shrink-0 font-black uppercase mt-0.5">
                                                 {String.fromCharCode(65 + aIdx)}
                                             </div>
-                                            {/* [CẬP NHẬT] Tăng cỡ chữ đáp án MCQ lên (text-lg md:text-xl) */}
-                                            <span 
-                                                className="text-lg md:text-xl leading-snug"
-                                                dangerouslySetInnerHTML={{ __html: ans }}
-                                            />
+                                            <span className="text-sm md:text-base leading-tight">{ans}</span>
                                         </div>
-                                        {q.aImages?.[aIdx] && <img src={q.aImages[aIdx]} className="h-24 md:h-32 w-auto rounded object-cover mt-1 self-start" />}
+                                        {q.aImages?.[aIdx] && <img src={q.aImages[aIdx]} className="h-20 md:h-24 w-auto rounded object-cover mt-1 self-start" />}
                                     </button>
                                 );
                             })}
@@ -379,16 +372,15 @@ export default function ExamRoom() {
 
                                         return (
                                             <tr key={idx} className={rowClass}>
-                                                {/* [CẬP NHẬT] Tăng cỡ chữ nội dung TF lên (text-base md:text-lg) */}
-                                                <td className="px-3 py-4 font-medium text-slate-200 text-base md:text-lg">
+                                                <td className="px-3 py-3 font-medium text-slate-200 text-xs md:text-sm">
                                                     <span className="font-bold text-slate-500 mr-2">{String.fromCharCode(97+idx)})</span>
-                                                    <span dangerouslySetInnerHTML={{ __html: item.text }} />
+                                                    {item.text}
                                                 </td>
                                                 <td className="text-center px-1">
-                                                    <button onClick={() => handleAnswer(q.id, "true", idx)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "true" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && item.isTrue === true ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "true" && <CheckCircle size={18} className="text-white"/>}</button>
+                                                    <button onClick={() => handleAnswer(q.id, "true", idx)} disabled={submitted} className={`w-6 h-6 md:w-8 md:h-8 rounded border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "true" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && item.isTrue === true ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "true" && <CheckCircle size={14} className="text-white"/>}</button>
                                                 </td>
                                                 <td className="text-center px-1">
-                                                    <button onClick={() => handleAnswer(q.id, "false", idx)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "false" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && item.isTrue === false ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "false" && <CheckCircle size={18} className="text-white"/>}</button>
+                                                    <button onClick={() => handleAnswer(q.id, "false", idx)} disabled={submitted} className={`w-6 h-6 md:w-8 md:h-8 rounded border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "false" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && item.isTrue === false ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "false" && <CheckCircle size={14} className="text-white"/>}</button>
                                                 </td>
                                             </tr>
                                         );
@@ -400,22 +392,15 @@ export default function ExamRoom() {
 
                     {q.type === 'SA' && (
                         <div>
-                            {/* [CẬP NHẬT] Tăng cỡ chữ input SA lên (text-xl md:text-2xl) */}
-                            <input type="text" className={`w-full bg-[#0f172a] border-2 p-4 md:p-5 rounded-xl outline-none font-bold text-xl md:text-2xl placeholder-slate-600 uppercase ${submitted ? (isQCorrect ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400') : 'border-slate-700 focus:border-indigo-500 text-white'}`} placeholder="NHẬP ĐÁP ÁN..." value={answers[q.id] || ''} onChange={(e) => handleAnswer(q.id, e.target.value)} disabled={submitted} />
-                            {submitted && !isQCorrect && (
-                                <div className="mt-3 text-base font-bold text-green-400 flex items-center gap-2 animate-pulse">
-                                    <Target size={20}/> 
-                                    <span>Đáp án đúng:</span> 
-                                    <span className="text-lg" dangerouslySetInnerHTML={{ __html: q.correct }} />
-                                </div>
-                            )}
+                            <input type="text" className={`w-full bg-[#0f172a] border-2 p-3 md:p-4 rounded-xl outline-none font-bold text-base md:text-lg placeholder-slate-600 uppercase ${submitted ? (isQCorrect ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400') : 'border-slate-700 focus:border-indigo-500 text-white'}`} placeholder="NHẬP ĐÁP ÁN..." value={answers[q.id] || ''} onChange={(e) => handleAnswer(q.id, e.target.value)} disabled={submitted} />
+                            {submitted && !isQCorrect && (<div className="mt-2 text-sm font-bold text-green-400 flex items-center gap-2 animate-pulse"><Target size={16}/> Đáp án đúng: {q.correct}</div>)}
                         </div>
                     )}
                 </div>
             </div>
             );
         })}
-    </main>
+      </main>
 
       <div className="fixed bottom-0 left-0 right-0 p-3 md:p-4 bg-[#020617]/90 backdrop-blur border-t border-white/10 z-50">
         <div className="max-w-3xl mx-auto flex justify-between items-center gap-4">

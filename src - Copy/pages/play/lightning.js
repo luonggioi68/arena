@@ -366,7 +366,7 @@ export default function LightningArenaPlayer() {
             </div>
         </main>
 
-     {activeQ && (
+        {activeQ && (
             <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-2 animate-in fade-in zoom-in duration-200">
                 <div className="bg-slate-900 w-full max-w-xl rounded-2xl border-2 border-slate-600 shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col max-h-[95vh] overflow-hidden relative">
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 to-blue-600"></div>
@@ -383,11 +383,7 @@ export default function LightningArenaPlayer() {
                     )}
 
                     <div className="flex-1 overflow-y-auto p-6">
-                        {/* [CẬP NHẬT] Hiển thị câu hỏi MathML */}
-                        <h2 
-                            className="text-xl md:text-2xl font-bold text-white mb-6 leading-relaxed"
-                            dangerouslySetInnerHTML={{ __html: activeQ.q }}
-                        />
+                        <h2 className="text-xl md:text-2xl font-bold text-white mb-6 leading-relaxed">{activeQ.q}</h2>
                         {activeQ.img && <img src={activeQ.img} className="mx-auto mb-6 max-h-48 w-auto object-contain rounded-xl border-2 border-slate-700 bg-black shadow-lg"/>}
 
                         {activeQ.type === 'MCQ' && (
@@ -395,11 +391,7 @@ export default function LightningArenaPlayer() {
                                 {activeQ.a.map((ans, i) => (
                                     <button key={i} onClick={() => setMcqSelection(i)} className={`p-4 rounded-xl border-2 text-left font-bold text-lg transition-all active:scale-[0.98] flex gap-3 ${mcqSelection === i ? 'bg-indigo-600 border-indigo-400 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)]' : 'bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700 hover:border-slate-500'}`}>
                                         <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-black shrink-0 ${mcqSelection === i ? 'bg-white text-indigo-700' : 'bg-slate-900 text-slate-500'}`}>{String.fromCharCode(65+i)}</span>
-                                        {/* [CẬP NHẬT] Hiển thị đáp án MathML */}
-                                        <span 
-                                            className="mt-0.5"
-                                            dangerouslySetInnerHTML={{ __html: ans }}
-                                        />
+                                        <span className="mt-0.5">{ans}</span>
                                     </button>
                                 ))}
                             </div>
@@ -409,11 +401,7 @@ export default function LightningArenaPlayer() {
                             <div className="space-y-3">
                                 {activeQ.items.map((item, idx) => (
                                     <div key={idx} className="flex justify-between items-center bg-slate-800 p-3 rounded-xl border border-slate-700">
-                                        {/* [CẬP NHẬT] Hiển thị nội dung TF MathML */}
-                                        <span 
-                                            className="text-sm md:text-base font-bold text-slate-200 flex-1 mr-4 leading-tight"
-                                            dangerouslySetInnerHTML={{ __html: item.text }}
-                                        />
+                                        <span className="text-sm md:text-base font-bold text-slate-200 flex-1 mr-4 leading-tight">{item.text}</span>
                                         <div className="flex gap-2 shrink-0">
                                             <button onClick={() => setTfSelection(p => ({...p, [idx]: "true"}))} className={`w-10 h-10 rounded-lg border-2 font-black transition-all ${tfSelection[idx] === "true" ? 'bg-green-600 border-green-400 text-white shadow-lg' : 'bg-slate-900 border-slate-600 text-slate-600 hover:bg-slate-700'}`}>Đ</button>
                                             <button onClick={() => setTfSelection(p => ({...p, [idx]: "false"}))} className={`w-10 h-10 rounded-lg border-2 font-black transition-all ${tfSelection[idx] === "false" ? 'bg-red-600 border-red-400 text-white shadow-lg' : 'bg-slate-900 border-slate-600 text-slate-600 hover:bg-slate-700'}`}>S</button>

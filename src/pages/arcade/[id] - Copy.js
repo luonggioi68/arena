@@ -1,16 +1,15 @@
 import { useState, useEffect, useRef, useMemo } from 'react'; 
 import { useRouter } from 'next/router';
 import { firestore } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, increment } from 'firebase/firestore'; // [UPDATE] Thêm updateDoc, increment
-import useAuthStore from '@/store/useAuthStore'; // [UPDATE] Import Auth Store
+import { doc, getDoc } from 'firebase/firestore';
 import { 
     ArrowLeft, CircleDashed, LayoutGrid, Gift, Grid3X3, CheckCircle, 
     XCircle, Lock, RefreshCcw, Gamepad2, Package, X, Check, 
-    DollarSign, Phone, Users, Bot, Divide, HelpCircle, Trophy, Home 
+    DollarSign, Phone, Users, Bot, Divide, HelpCircle, Trophy 
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-// --- GIỮ NGUYÊN CSS HIỆU ỨNG CŨ CỦA BẠN ---
+// --- CSS HIỆU ỨNG ---
 const styles = `
   .perspective-1000 { perspective: 1000px; }
   .transform-style-3d { transform-style: preserve-3d; }
@@ -27,41 +26,30 @@ const styles = `
     to { opacity: 1; transform: translateY(0); }
   }
   .animate-card { animation: fadeInUp 0.5s ease-out forwards; }
-  .mil-answer-clip { clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%); }
-  .mil-gradient { background: radial-gradient(circle, #1e3a8a 0%, #020617 100%); }
-  .animate-flash { animation: flash 0.5s infinite; }
-  @keyframes flash { 0% { background-color: #fbbf24; } 50% { background-color: #d97706; } 100% { background-color: #fbbf24; } }
+
+  /* MILLIONAIRE SPECIFIC STYLES */
+  .mil-answer-clip {
+    clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%);
+  }
+  .mil-gradient {
+    background: radial-gradient(circle, #1e3a8a 0%, #020617 100%);
+  }
+  .animate-flash {
+      animation: flash 0.5s infinite;
+  }
+  @keyframes flash {
+      0% { background-color: #fbbf24; }
+      50% { background-color: #d97706; }
+      100% { background-color: #fbbf24; }
+  }
 `;
 
 export default function ArcadeMode() {
   const router = useRouter();
-  const { id, game } = router.query;
+  const { id } = router.query;
   const [quiz, setQuiz] = useState(null);
   const [mode, setMode] = useState('MENU'); 
   const [loading, setLoading] = useState(true);
-  
-  // [UPDATE] Lấy User để cộng điểm
-  const { user } = useAuthStore();
-
-  // [UPDATE] HÀM CỘNG ĐIỂM (XP)
-  const handleAddXP = async (amount = 50) => {
-      if (!user) return; // Không có user thì không cộng
-      try {
-          const studentRef = doc(firestore, "student_profiles", user.uid);
-          await updateDoc(studentRef, {
-              totalScore: increment(amount)
-          });
-          // Có thể thêm console.log hoặc Toast thông báo nhỏ ở đây nếu muốn
-      } catch (e) {
-          console.error("Lỗi cộng điểm:", e);
-      }
-  };
-
-  useEffect(() => {
-      if (router.isReady && game) {
-          setMode(game);
-      }
-  }, [router.isReady, game]);
 
   useEffect(() => {
     if (!id) return;
@@ -71,17 +59,7 @@ export default function ArcadeMode() {
     });
   }, [id]);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617] text-white font-bold text-xl"><div className="animate-spin mr-2">⏳</div> Đang tải dữ liệu...</div>;
-
-  const handleBack = () => {
-      if (mode !== 'MENU') {
-          setMode('MENU');
-          router.push({ pathname: router.pathname, query: { id } }, undefined, { shallow: true });
-      } else {
-          const backGrade = quiz.grade || 10;
-          router.push(`/training?grade=${backGrade}`);
-      }
-  };
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617] text-white font-bold text-xl">Đang tải dữ liệu...</div>;
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-white font-sans overflow-hidden">
@@ -90,8 +68,8 @@ export default function ArcadeMode() {
       {/* HEADER */}
       {mode !== 'MILLIONAIRE' && (
           <div className="p-4 flex justify-between items-center bg-slate-900 border-b border-slate-700 shadow-md z-50 relative">
-            <button onClick={handleBack} className="flex items-center gap-2 hover:text-yellow-400 font-bold transition uppercase text-sm">
-                <ArrowLeft size={20} /> {mode === 'MENU' ? 'Quay lại Lớp' : 'Chọn game khác'}
+            <button onClick={() => mode === 'MENU' ? router.push('/dashboard') : setMode('MENU')} className="flex items-center gap-2 hover:text-yellow-400 font-bold transition uppercase text-sm">
+                <ArrowLeft size={20} /> {mode === 'MENU' ? 'Về Dashboard' : 'Chọn game khác'}
             </button>
             <h1 className="text-lg md:text-xl font-black truncate max-w-md uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
                 {quiz?.title} <span className="text-slate-500 mx-2">|</span> ARCADE
@@ -120,13 +98,13 @@ export default function ArcadeMode() {
         </div>
       )}
 
-      {/* KHU VỰC RENDER GAME - [UPDATE] TRUYỀN onAddXP */}
+      {/* CÁC GAME */}
       <div className="h-full relative bg-slate-900">
-        {mode === 'WHEEL' && <LuckyWheelGame questions={quiz.questions} onAddXP={handleAddXP} />}
-        {mode === 'FLIP' && <FlipCardGame questions={quiz.questions} onAddXP={handleAddXP} />}
-        {mode === 'BOX' && <MysteryBoxGame questions={quiz.questions} onAddXP={handleAddXP} />}
-        {mode === 'MATCH' && <MemoryMatchGame questions={quiz.questions} onAddXP={handleAddXP} />}
-        {mode === 'MILLIONAIRE' && <MillionaireGame questions={quiz.questions} onExit={() => setMode('MENU')} onAddXP={handleAddXP} />}
+        {mode === 'WHEEL' && <LuckyWheelGame questions={quiz.questions} />}
+        {mode === 'FLIP' && <FlipCardGame questions={quiz.questions} />}
+        {mode === 'BOX' && <MysteryBoxGame questions={quiz.questions} />}
+        {mode === 'MATCH' && <MemoryMatchGame questions={quiz.questions} />}
+        {mode === 'MILLIONAIRE' && <MillionaireGame questions={quiz.questions} onExit={() => setMode('MENU')} />}
       </div>
     </div>
   );
@@ -147,28 +125,19 @@ const GameCard = ({ title, desc, icon, color, onClick, delay, special }) => (
 
 
 // ====================================================================================
-// GAME: AI LÀ TRIỆU PHÚ (MILLIONAIRE)
 // ====================================================================================
-function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận onAddXP
+// GAME: AI LÀ TRIỆU PHÚ (MILLIONAIRE) - UPDATE 100 TRIỆU + HIỂN THỊ TIỀN
+// ====================================================================================
+function MillionaireGame({ questions, onExit }) {
     const [level, setLevel] = useState(0); 
-    const [status, setStatus] = useState('PLAYING'); 
-    const [selectedAns, setSelectedAns] = useState(null); 
-    const [tfSelection, setTfSelection] = useState({});   
+    const [status, setStatus] = useState('PLAYING'); // PLAYING, WIN, LOSE, WALK_AWAY
+    const [selectedAns, setSelectedAns] = useState(null); // Dành cho MCQ
+    const [tfSelection, setTfSelection] = useState({});   // Dành cho TF (Đúng/Sai)
     
     const [locked, setLocked] = useState(false); 
     const [lifelines, setLifelines] = useState({ fifty: true, phone: true, audience: true, ai: true });
     const [hiddenOptions, setHiddenOptions] = useState([]); 
     const [modal, setModal] = useState(null);
-
-    // [UPDATE] LOGIC CỘNG ĐIỂM KHI THẮNG HOẶC DỪNG CUỘC CHƠI
-    useEffect(() => {
-        if (status === 'WIN') {
-            onAddXP(500); // Thắng trùm: +500 XP
-        } else if (status === 'WALK_AWAY') {
-            const xpEarned = level * 10; // Dừng chơi: Mỗi câu 10 XP
-            if (xpEarned > 0) onAddXP(xpEarned);
-        }
-    }, [status]);
 
     // --- CẤU HÌNH ÂM THANH ---
     const audioRefs = useRef({
@@ -186,6 +155,7 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
         return () => { bgAudio.pause(); bgAudio.currentTime = 0; };
     }, []);
 
+    // --- CẤU HÌNH THANG TIỀN ---
     const REWARDS = [
         "200.000", "400.000", "600.000", "1.000.000", "2.000.000", 
         "3.000.000", "6.000.000", "10.000.000", "14.000.000", "22.000.000", 
@@ -195,7 +165,11 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
     const moneyTree = useMemo(() => {
         const ladder = [];
         for (let i = 0; i < 15; i++) {
-            ladder.push({ level: i, money: REWARDS[i], safe: (i + 1) % 5 === 0 });
+            ladder.push({ 
+                level: i, 
+                money: REWARDS[i], 
+                safe: (i + 1) % 5 === 0 
+            });
         }
         return ladder.reverse(); 
     }, []);
@@ -219,17 +193,20 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
 
     const getAnswerLabel = (idx) => String.fromCharCode(65 + idx);
 
+    // --- LOGIC GAMEPLAY ---
     const handleSelectMCQ = (idx) => {
         if (locked || hiddenOptions.includes(idx)) return;
         setSelectedAns(idx);
     };
 
+    // Hàm chọn cho câu Đúng/Sai
     const handleSelectTF = (idx, value) => {
         if (locked) return;
         setTfSelection(prev => ({ ...prev, [idx]: value }));
     };
 
     const handleLock = () => {
+        // Validation: Chưa chọn thì không chốt
         if (currentQ.type === 'MCQ' && selectedAns === null) return;
         if (currentQ.type === 'TF' && currentQ.items && Object.keys(tfSelection).length < currentQ.items.length) return;
 
@@ -239,24 +216,29 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
 
         setTimeout(() => {
             let isCorrect = false;
+
+            // KIỂM TRA ĐÁP ÁN DỰA TRÊN LOẠI CÂU HỎI
             if (currentQ.type === 'MCQ') {
                 const correctIdx = parseInt(currentQ.correct); 
                 isCorrect = (selectedAns === correctIdx);
             } else if (currentQ.type === 'TF') {
+                // Với TF, phải đúng tất cả các ý
                 isCorrect = currentQ.items.every((item, idx) => {
                     return String(item.isTrue) === tfSelection[idx];
                 });
             }
             
             if (isCorrect) {
+                // ĐÚNG
                 audioRefs.current.correct.play();
                 confetti({ particleCount: 100, spread: 70, origin: { y: 0.8 } });
+                
                 setTimeout(() => {
                     if (level < questions.length - 1 && level < 14) {
                         setLevel(prev => prev + 1);
                         setLocked(false);
                         setSelectedAns(null);
-                        setTfSelection({});
+                        setTfSelection({}); // Reset TF selection
                         setHiddenOptions([]);
                         audioRefs.current.bg.volume = 0.3;
                     } else {
@@ -266,6 +248,7 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
                     }
                 }, 2000);
             } else {
+                // SAI
                 audioRefs.current.wrong.play();
                 audioRefs.current.bg.pause();
                 setStatus('LOSE');
@@ -280,8 +263,9 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
         }
     }
 
+    // --- TRỢ GIÚP ---
     const use5050 = () => {
-        if (!lifelines.fifty || locked || currentQ.type !== 'MCQ') return;
+        if (!lifelines.fifty || locked || currentQ.type !== 'MCQ') return; // Chỉ dùng cho MCQ
         setLifelines(prev => ({ ...prev, fifty: false }));
         const correctIdx = parseInt(currentQ.correct);
         const wrongs = [0, 1, 2, 3].filter(i => i !== correctIdx);
@@ -292,6 +276,8 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
     const useAudience = () => {
         if (!lifelines.audience || locked) return;
         setLifelines(prev => ({ ...prev, audience: false }));
+        
+        // Logic giả lập khán giả (chỉ hỗ trợ tốt cho MCQ, TF tạm thời random)
         let stats = [0, 0, 0, 0];
         if (currentQ.type === 'MCQ') {
             const correctIdx = parseInt(currentQ.correct);
@@ -307,11 +293,14 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
                     }
                 }
             });
+            // Fix remaining
             const lastWrong = stats.findIndex((v, i) => i !== correctIdx && !hiddenOptions.includes(i) && v === 0);
             if(lastWrong !== -1) stats[lastWrong] += remaining;
         } else {
+            // Với TF, khán giả trả lời ngẫu nhiên cho vui
             stats = [25, 25, 25, 25];
         }
+        
         setModal({ type: 'AUDIENCE', data: stats });
     };
 
@@ -330,6 +319,7 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
     const useAI = () => {
         if (!lifelines.ai || locked) return;
         setLifelines(prev => ({ ...prev, ai: false }));
+        
         let suggestion = 0;
         if (currentQ.type === 'MCQ') {
             const correctIdx = parseInt(currentQ.correct);
@@ -339,6 +329,7 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
         setModal({ type: 'AI', data: { suggestion, confidence: 85 + Math.floor(Math.random()*14) } });
     };
 
+    // --- MÀN HÌNH KẾT THÚC ---
     if (status === 'WIN' || status === 'LOSE' || status === 'WALK_AWAY') {
         let prize = "0";
         if (status === 'WIN') {
@@ -375,11 +366,15 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
 
     return (
         <div className="h-screen w-full mil-gradient text-white flex flex-col md:flex-row overflow-hidden font-sans relative">
+            
+            {/* CỘT TRÁI: GAMEPLAY */}
             <div className="flex-1 flex flex-col relative z-10 p-4 md:p-6">
+                {/* Header */}
                 <div className="flex justify-between items-center mb-2">
                     <div onClick={handleWalkAway} className="bg-black/40 rounded-full px-4 py-2 border border-white/20 flex items-center gap-2 cursor-pointer hover:bg-red-900/50 transition">
                         <X size={20}/> <span className="font-bold text-sm uppercase text-slate-300">Dừng cuộc chơi</span>
                     </div>
+                    {/* HIỂN THỊ TIỀN CÂU HIỆN TẠI */}
                     <div className="flex flex-col items-center justify-center relative z-20">
                         <div className="bg-gradient-to-b from-blue-600 to-blue-900 rounded-full px-8 py-3 border-4 border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.6)] min-w-[200px] text-center transform hover:scale-105 transition duration-300">
                             <span className="text-3xl font-black text-white drop-shadow-md">{currentMoneyDisplay}</span>
@@ -388,27 +383,41 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
                     <div className="w-32"></div>
                 </div>
 
+                {/* Câu hỏi */}
                 <div className="flex-1 flex flex-col justify-center items-center">
                     {currentQ.img && <img src={currentQ.img} className="max-h-40 rounded-lg border-2 border-white/20 mb-4 bg-black/50 object-contain shadow-lg" />}
                     <div className="w-full bg-blue-900/90 border-2 border-slate-300 rounded-2xl p-6 md:p-8 text-center shadow-[0_0_40px_rgba(30,58,138,0.6)] relative mb-4 mil-answer-clip">
                         <div className="absolute -left-0 top-1/2 -translate-y-1/2 w-full h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none"></div>
-                        <h2 className="text-xl md:text-2xl font-bold leading-relaxed relative z-10 drop-shadow-md" dangerouslySetInnerHTML={{ __html: currentQ.q }} />
+                        <h2 
+                            className="text-xl md:text-2xl font-bold leading-relaxed relative z-10 drop-shadow-md"
+                            dangerouslySetInnerHTML={{ __html: currentQ.q }} 
+                        />
                     </div>
                 </div>
 
+                {/* KHUNG TRẢ LỜI (Thay đổi theo loại câu hỏi) */}
                 <div className="w-full max-w-5xl mx-auto mb-4 min-h-[160px] flex items-center justify-center">
+                    
+                    {/* TRƯỜNG HỢP 1: TRẮC NGHIỆM (MCQ) */}
                     {currentQ.type === 'MCQ' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
                             {options.map((opt, idx) => {
                                 const isHidden = hiddenOptions.includes(idx);
                                 const isSelected = selectedAns === idx;
                                 const isCorrect = parseInt(currentQ.correct) === idx;
+                                
                                 let bgClass = "bg-slate-900 from-slate-800 to-slate-900 hover:from-blue-800 hover:to-blue-900"; 
                                 if (isSelected) bgClass = "bg-yellow-600 from-yellow-600 to-orange-600 text-black animate-pulse shadow-[0_0_20px_rgba(234,179,8,0.5)]"; 
                                 if (locked && isCorrect) bgClass = "bg-green-600 from-green-500 to-emerald-700 animate-flash text-white shadow-[0_0_30px_rgba(34,197,94,0.8)] border-green-300"; 
                                 if (locked && isSelected && !isCorrect) bgClass = "bg-red-600 from-red-600 to-rose-700 text-white animate-shake"; 
+
                                 return (
-                                    <button key={idx} onClick={() => handleSelectMCQ(idx)} disabled={locked || isHidden} className={`relative p-4 md:p-5 rounded-full border-2 ${isSelected ? 'border-yellow-400' : 'border-white/30'} flex items-center transition-all duration-200 group bg-gradient-to-b ${bgClass} ${isHidden ? 'opacity-0 pointer-events-none' : 'opacity-100 shadow-lg'}`}>
+                                    <button 
+                                        key={idx} 
+                                        onClick={() => handleSelectMCQ(idx)}
+                                        disabled={locked || isHidden}
+                                        className={`relative p-4 md:p-5 rounded-full border-2 ${isSelected ? 'border-yellow-400' : 'border-white/30'} flex items-center transition-all duration-200 group bg-gradient-to-b ${bgClass} ${isHidden ? 'opacity-0 pointer-events-none' : 'opacity-100 shadow-lg'}`}
+                                    >
                                         <span className={`font-black text-yellow-400 mr-4 text-xl ${isSelected || (locked && isCorrect) ? 'text-white' : ''}`}>{getAnswerLabel(idx)}:</span>
                                         <span className="font-bold text-lg text-left flex-1" dangerouslySetInnerHTML={{ __html: opt }} />
                                     </button>
@@ -416,6 +425,8 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
                             })}
                         </div>
                     )}
+
+                    {/* TRƯỜNG HỢP 2: ĐÚNG / SAI (TF) - MỚI BỔ SUNG */}
                     {currentQ.type === 'TF' && (
                         <div className="w-full bg-slate-900/80 p-4 rounded-2xl border-2 border-blue-500/30">
                             <div className="space-y-3">
@@ -423,8 +434,27 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
                                     <div key={idx} className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-white/10">
                                         <span className="flex-1 font-bold text-base mr-4" dangerouslySetInnerHTML={{ __html: item.text }} />
                                         <div className="flex gap-2">
-                                            <button onClick={() => handleSelectTF(idx, "true")} disabled={locked} className={`w-12 h-12 rounded-lg font-black border-2 transition-all ${tfSelection[idx] === "true" ? (locked && String(item.isTrue) === "true" ? 'bg-green-600 border-green-400' : locked && String(item.isTrue) !== "true" ? 'bg-red-600 border-red-400' : 'bg-blue-600 border-blue-400 scale-110') : 'bg-slate-900 border-slate-700 text-slate-500'}`}>Đ</button>
-                                            <button onClick={() => handleSelectTF(idx, "false")} disabled={locked} className={`w-12 h-12 rounded-lg font-black border-2 transition-all ${tfSelection[idx] === "false" ? (locked && String(item.isTrue) === "false" ? 'bg-green-600 border-green-400' : locked && String(item.isTrue) !== "false" ? 'bg-red-600 border-red-400' : 'bg-blue-600 border-blue-400 scale-110') : 'bg-slate-900 border-slate-700 text-slate-500'}`}>S</button>
+                                            {/* Nút ĐÚNG */}
+                                            <button 
+                                                onClick={() => handleSelectTF(idx, "true")}
+                                                disabled={locked}
+                                                className={`w-12 h-12 rounded-lg font-black border-2 transition-all ${
+                                                    tfSelection[idx] === "true" 
+                                                    ? (locked && String(item.isTrue) === "true" ? 'bg-green-600 border-green-400' : locked && String(item.isTrue) !== "true" ? 'bg-red-600 border-red-400' : 'bg-blue-600 border-blue-400 scale-110') 
+                                                    : 'bg-slate-900 border-slate-700 text-slate-500'
+                                                }`}
+                                            >Đ</button>
+                                            
+                                            {/* Nút SAI */}
+                                            <button 
+                                                onClick={() => handleSelectTF(idx, "false")}
+                                                disabled={locked}
+                                                className={`w-12 h-12 rounded-lg font-black border-2 transition-all ${
+                                                    tfSelection[idx] === "false" 
+                                                    ? (locked && String(item.isTrue) === "false" ? 'bg-green-600 border-green-400' : locked && String(item.isTrue) !== "false" ? 'bg-red-600 border-red-400' : 'bg-blue-600 border-blue-400 scale-110') 
+                                                    : 'bg-slate-900 border-slate-700 text-slate-500'
+                                                }`}
+                                            >S</button>
                                         </div>
                                     </div>
                                 ))}
@@ -433,10 +463,19 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
                     )}
                 </div>
 
+                {/* Nút Chốt */}
                 <div className="h-16 flex justify-center items-center">
-                    {!locked && (<button onClick={handleLock} className="bg-gradient-to-r from-yellow-500 to-orange-600 text-white font-black py-3 px-12 rounded-full text-xl shadow-[0_0_30px_rgba(234,179,8,0.8)] hover:scale-110 active:scale-95 transition-transform uppercase tracking-widest border-2 border-white animate-in zoom-in fade-in duration-300">CHỐT ĐÁP ÁN</button>)}
+                    {!locked && (
+                        <button 
+                            onClick={handleLock} 
+                            className="bg-gradient-to-r from-yellow-500 to-orange-600 text-white font-black py-3 px-12 rounded-full text-xl shadow-[0_0_30px_rgba(234,179,8,0.8)] hover:scale-110 active:scale-95 transition-transform uppercase tracking-widest border-2 border-white animate-in zoom-in fade-in duration-300"
+                        >
+                            CHỐT ĐÁP ÁN
+                        </button>
+                    )}
                 </div>
 
+                {/* Trợ giúp (Ẩn hoặc làm mờ nếu là câu TF vì trợ giúp 50:50 không khả dụng) */}
                 <div className={`flex justify-center gap-4 md:gap-8 mt-4 ${currentQ.type === 'TF' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
                     <LifelineButton icon={<div className="font-bold text-lg">50:50</div>} label="50:50" active={lifelines.fifty} onClick={use5050} />
                     <LifelineButton icon={<Users size={20}/>} label="Khán giả" active={lifelines.audience} onClick={useAudience} />
@@ -445,6 +484,7 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
                 </div>
             </div>
 
+            {/* CỘT PHẢI: THANG TIỀN */}
             <div className="hidden md:flex w-72 bg-[#020617]/80 backdrop-blur-md border-l border-white/10 flex-col">
                 <div className="p-4 text-center border-b border-white/10">
                     <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Mục tiêu</div>
@@ -460,6 +500,7 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
                 </div>
             </div>
 
+            {/* MODAL TRỢ GIÚP */}
             {modal && (
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setModal(null)}>
                     <div className="bg-slate-900 border-2 border-blue-500 rounded-2xl p-6 max-w-md w-full animate-in zoom-in" onClick={e => e.stopPropagation()}>
@@ -468,6 +509,7 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
                             {modal.type === 'PHONE' && "Gọi điện thoại"}
                             {modal.type === 'AI' && "AI Phân tích"}
                         </h3>
+                        
                         {modal.type === 'AUDIENCE' && (
                             <div className="flex justify-around items-end h-40 gap-2">
                                 {modal.data.map((percent, i) => (
@@ -482,7 +524,9 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
                         {modal.type === 'PHONE' && (
                             <div className="flex items-start gap-4">
                                 <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-black font-bold text-2xl">User</div>
-                                <div className="bg-white text-black p-3 rounded-r-xl rounded-bl-xl text-sm">"Alo! Theo tớ nghĩ thì đáp án là <span className="font-black text-blue-600 text-lg">{getAnswerLabel(modal.data)}</span> nhé. Chắc chắn 80% đó!"</div>
+                                <div className="bg-white text-black p-3 rounded-r-xl rounded-bl-xl text-sm">
+                                    "Alo! Theo tớ nghĩ thì đáp án là <span className="font-black text-blue-600 text-lg">{getAnswerLabel(modal.data)}</span> nhé. Chắc chắn 80% đó!"
+                                </div>
                             </div>
                         )}
                         {modal.type === 'AI' && (
@@ -510,6 +554,7 @@ const LifelineButton = ({ icon, label, active, onClick, special }) => (
     </div>
 );
 
+// --- COMPONENT POPUP TRẢ LỜI CÂU HỎI CHUNG CHO CÁC GAME KHÁC ---
 // --- COMPONENT POPUP TRẢ LỜI CÂU HỎI (HỖ TRỢ MCQ, TF, SA & MATHML) ---
 function InteractiveQuestion({ data, onClose, gameType }) {
     const [selectedIdx, setSelectedIdx] = useState(null); 
@@ -520,6 +565,7 @@ function InteractiveQuestion({ data, onClose, gameType }) {
     const [isCorrect, setIsCorrect] = useState(null); 
     const labels = ['A', 'B', 'C', 'D'];
 
+    // Xử lý chốt đáp án dựa trên loại câu hỏi
     const handleLock = () => {
         setIsLocked(true);
         let correct = false;
@@ -529,11 +575,13 @@ function InteractiveQuestion({ data, onClose, gameType }) {
             correct = parseInt(data.correct) === selectedIdx;
         } 
         else if (data.type === 'SA') {
+            // So sánh đáp án nhập vào (viết hoa, bỏ dấu cách thừa)
             const userAnswer = saInput.trim().toUpperCase();
             const trueAnswer = data.correct.trim().toUpperCase();
             correct = userAnswer === trueAnswer;
         }
         else if (data.type === 'TF') {
+            // Kiểm tra từng ý đúng sai
             const allCorrect = data.items.every((item, idx) => {
                 const userChoice = tfSelection[idx];
                 const trueKey = String(item.isTrue);
@@ -565,8 +613,13 @@ function InteractiveQuestion({ data, onClose, gameType }) {
                     
                     {data.img && <img src={data.img} className="h-40 mx-auto object-contain mb-4 rounded-xl border-2 border-white/10 shadow-lg bg-black/20" />}
                     
-                    <h1 className="text-xl md:text-2xl font-bold mb-6 leading-snug whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: data.q }} />
+                    {/* Hiển thị câu hỏi MathML */}
+                    <h1 
+                        className="text-xl md:text-2xl font-bold mb-6 leading-snug whitespace-pre-wrap"
+                        dangerouslySetInnerHTML={{ __html: data.q }}
+                    />
 
+                    {/* --- GIAO DIỆN MCQ --- */}
                     {data.type === 'MCQ' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                             {data.a.map((ans, idx) => {
@@ -590,11 +643,14 @@ function InteractiveQuestion({ data, onClose, gameType }) {
                         </div>
                     )}
 
+                    {/* --- GIAO DIỆN TF --- */}
                     {data.type === 'TF' && (
                         <div className="space-y-2 mb-4 text-left">
                             {data.items.map((item, idx) => (
                                 <div key={idx} className="flex justify-between items-center bg-slate-800 p-3 rounded-xl border border-slate-700">
-                                    <div className="flex-1 mr-4 font-bold text-sm md:text-base"><span dangerouslySetInnerHTML={{ __html: item.text }} /></div>
+                                    <div className="flex-1 mr-4 font-bold text-sm md:text-base">
+                                        <span dangerouslySetInnerHTML={{ __html: item.text }} />
+                                    </div>
                                     <div className="flex gap-2 shrink-0">
                                         <button onClick={() => !isLocked && setTfSelection(p => ({...p, [idx]: "true"}))} className={`w-10 h-10 rounded-lg border-2 font-black transition-all ${tfSelection[idx] === "true" ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-900 border-slate-600 text-slate-500'} ${isLocked && item.isTrue === true ? 'ring-2 ring-green-500' : ''}`}>Đ</button>
                                         <button onClick={() => !isLocked && setTfSelection(p => ({...p, [idx]: "false"}))} className={`w-10 h-10 rounded-lg border-2 font-black transition-all ${tfSelection[idx] === "false" ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-900 border-slate-600 text-slate-500'} ${isLocked && item.isTrue === false ? 'ring-2 ring-green-500' : ''}`}>S</button>
@@ -604,12 +660,24 @@ function InteractiveQuestion({ data, onClose, gameType }) {
                         </div>
                     )}
 
+                    {/* --- GIAO DIỆN SA --- */}
                     {data.type === 'SA' && (
                         <div className="mb-4">
-                            <input value={saInput} onChange={(e) => setSaInput(e.target.value)} disabled={isLocked} className={`w-full bg-slate-900 border-4 p-4 rounded-2xl text-center font-black text-2xl uppercase outline-none placeholder-slate-600 ${isLocked ? (isCorrect ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400') : 'border-indigo-500 focus:shadow-[0_0_20px_#6366f1]'}`} placeholder="NHẬP ĐÁP ÁN..."/>
-                            {isLocked && !isCorrect && (<div className="mt-3 text-green-400 font-bold animate-pulse">Đáp án đúng: <span dangerouslySetInnerHTML={{ __html: data.correct }} /></div>)}
+                            <input 
+                                value={saInput} 
+                                onChange={(e) => setSaInput(e.target.value)} 
+                                disabled={isLocked}
+                                className={`w-full bg-slate-900 border-4 p-4 rounded-2xl text-center font-black text-2xl uppercase outline-none placeholder-slate-600 ${isLocked ? (isCorrect ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400') : 'border-indigo-500 focus:shadow-[0_0_20px_#6366f1]'}`}
+                                placeholder="NHẬP ĐÁP ÁN..."
+                            />
+                            {isLocked && !isCorrect && (
+                                <div className="mt-3 text-green-400 font-bold animate-pulse">
+                                    Đáp án đúng: <span dangerouslySetInnerHTML={{ __html: data.correct }} />
+                                </div>
+                            )}
                         </div>
                     )}
+
                 </div>
 
                 <div className="pt-4 border-t border-white/10 mt-2">
@@ -628,7 +696,7 @@ function InteractiveQuestion({ data, onClose, gameType }) {
 }
 
 // ---------------- GAME 1: VÒNG QUAY MAY MẮN ----------------
-function LuckyWheelGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
+function LuckyWheelGame({ questions }) {
     const [activeQuestions, setActiveQuestions] = useState(questions); 
     const [spinning, setSpinning] = useState(false);
     const [result, setResult] = useState(null);
@@ -651,10 +719,7 @@ function LuckyWheelGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
     };
 
     const handleCloseModal = (isCorrect) => {
-        if (isCorrect === true) {
-            onAddXP(50); // [UPDATE] Trả lời đúng +50 XP
-            setActiveQuestions(prev => prev.filter(q => q !== result));
-        }
+        if (isCorrect === true) setActiveQuestions(prev => prev.filter(q => q !== result));
         setResult(null);
     };
 
@@ -692,14 +757,11 @@ function LuckyWheelGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
 }
 
 // ---------------- GAME 2: LẬT HÌNH ----------------
-function FlipCardGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
+function FlipCardGame({ questions }) {
     const [cards, setCards] = useState(questions.map((q, i) => ({ ...q, id: i, status: null })));
     const [currentCard, setCurrentCard] = useState(null);
     const handleResult = (isCorrect) => {
-        if (isCorrect !== null) {
-            setCards(cards.map(c => c.id === currentCard.id ? { ...c, status: isCorrect ? 'CORRECT' : 'WRONG' } : c));
-            if(isCorrect) onAddXP(50); // [UPDATE] Đúng +50 XP
-        }
+        if (isCorrect !== null) setCards(cards.map(c => c.id === currentCard.id ? { ...c, status: isCorrect ? 'CORRECT' : 'WRONG' } : c));
         setCurrentCard(null);
     };
     return (
@@ -719,14 +781,11 @@ function FlipCardGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
 }
 
 // ---------------- GAME 3: HỘP QUÀ BÍ MẬT ----------------
-function MysteryBoxGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
+function MysteryBoxGame({ questions }) {
     const [boxes, setBoxes] = useState(questions.map((q, i) => ({ ...q, id: i, opened: false })));
     const [currentGift, setCurrentGift] = useState(null);
     const handleResult = (isCorrect) => {
-        if (isCorrect === true) {
-            setBoxes(boxes.map(b => b.id === currentGift.id ? { ...b, opened: true } : b));
-            onAddXP(50); // [UPDATE] Đúng +50 XP
-        }
+        if (isCorrect === true) setBoxes(boxes.map(b => b.id === currentGift.id ? { ...b, opened: true } : b));
         setCurrentGift(null);
     };
     return (
@@ -752,7 +811,7 @@ function MysteryBoxGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
 }
 
 // ---------------- GAME 4: TÌM CẶP ----------------
-function MemoryMatchGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
+function MemoryMatchGame({ questions }) {
     const [cards, setCards] = useState([]);
     const [flipped, setFlipped] = useState([]);
     const [solved, setSolved] = useState([]);
@@ -776,12 +835,7 @@ function MemoryMatchGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
         if (newFlipped.length === 2) {
             const [c1, c2] = newFlipped;
             if (c1.pairId === c2.pairId) {
-                setTimeout(() => { 
-                    setSolved(prev => [...prev, c1.id, c2.id]); 
-                    setFlipped([]); 
-                    confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } });
-                    onAddXP(30); // [UPDATE] Tìm được cặp +30 XP
-                }, 500);
+                setTimeout(() => { setSolved(prev => [...prev, c1.id, c2.id]); setFlipped([]); confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } }); }, 500);
             } else setTimeout(() => setFlipped([]), 1000);
         }
     };

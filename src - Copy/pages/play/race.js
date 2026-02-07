@@ -328,9 +328,9 @@ export default function BietDoiArenaPlayer() {
       </header>
 
       {/* MAIN */}
-<main className="flex-1 flex flex-col p-2 md:p-6 relative overflow-hidden bg-[radial-gradient(circle_at_bottom,_var(--tw-gradient-stops))] from-purple-900/10 via-[#050505] to-black">
+      <main className="flex-1 flex flex-col p-2 md:p-6 relative overflow-hidden bg-[radial-gradient(circle_at_bottom,_var(--tw-gradient-stops))] from-purple-900/10 via-[#050505] to-black">
         
-        {/* === A. BẢN ĐỒ (Giữ nguyên) === */}
+        {/* === A. BẢN ĐỒ === */}
         {currentIdx === null ? (
           <div className="flex-1 flex flex-col items-center justify-center animate-in fade-in zoom-in">
             <h2 className="text-cyan-500 font-black text-xl md:text-3xl uppercase tracking-[0.2em] mb-4 md:mb-8 drop-shadow-[0_0_10px_#22d3ee] italic flex items-center gap-3">
@@ -367,26 +367,18 @@ export default function BietDoiArenaPlayer() {
 
             <div className="bg-[#0f172a]/90 backdrop-blur-xl rounded-xl border border-cyan-500/30 flex-1 flex flex-col shadow-[0_0_30px_rgba(34,211,238,0.1)] overflow-hidden relative">
               <div className="flex-1 overflow-y-auto no-scrollbar p-3">
-                  <div className="text-center mb-4">
-                      {q?.img && (<img src={q.img} className="max-h-24 mx-auto mb-2 object-contain rounded border border-slate-800 bg-black" />)}
-                      {/* [CẬP NHẬT] Câu hỏi to hơn và hiển thị MathML */}
-                      <h2 
-                        className={`text-xl md:text-3xl font-bold text-white leading-snug ${q?.q.length > 100 ? 'text-lg md:text-2xl' : ''}`}
-                        dangerouslySetInnerHTML={{ __html: q?.q }}
-                      />
-                  </div>
+                 <div className="text-center mb-4">
+                     {q?.img && (<img src={q.img} className="max-h-24 mx-auto mb-2 object-contain rounded border border-slate-800 bg-black" />)}
+                     <h2 className={`text-base font-bold text-white leading-snug ${q?.q.length > 100 ? 'text-sm' : ''}`}>{q?.q}</h2>
+                 </div>
 
-                  <div className="w-full">
+                 <div className="w-full">
                     {q.type === 'MCQ' && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {q?.a.map((ans, i) => (
-                              <button key={i} onClick={() => handleSubmitAnswer(i)} className="bg-slate-800/50 hover:bg-purple-900/40 text-slate-300 hover:text-white p-4 rounded-lg font-bold text-lg md:text-xl border border-slate-700 hover:border-purple-500 active:scale-[0.98] transition-all flex items-center gap-3 shadow-sm group touch-manipulation text-left">
-                                <span className="w-8 h-8 rounded bg-black/50 flex items-center justify-center text-sm font-black text-slate-500 group-hover:text-purple-400 border border-slate-700 shrink-0">{String.fromCharCode(65+i)}</span>
-                                {/* [CẬP NHẬT] Đáp án to hơn và hiển thị MathML */}
-                                <span 
-                                    className="leading-tight line-clamp-3"
-                                    dangerouslySetInnerHTML={{ __html: ans }}
-                                />
+                              <button key={i} onClick={() => handleSubmitAnswer(i)} className="bg-slate-800/50 hover:bg-purple-900/40 text-slate-300 hover:text-white p-3 rounded-lg font-bold text-sm border border-slate-700 hover:border-purple-500 active:scale-[0.98] transition-all flex items-center gap-3 shadow-sm group touch-manipulation text-left">
+                                <span className="w-6 h-6 rounded bg-black/50 flex items-center justify-center text-[10px] font-black text-slate-500 group-hover:text-purple-400 border border-slate-700 shrink-0">{String.fromCharCode(65+i)}</span>
+                                <span className="leading-tight line-clamp-2">{ans}</span>
                               </button>
                             ))}
                         </div>
@@ -396,26 +388,21 @@ export default function BietDoiArenaPlayer() {
                         <div className="bg-slate-900/50 rounded-lg border border-white/5 overflow-hidden">
                             <div className="divide-y divide-white/5">
                                 {q.items.map((item, idx) => (
-                                    <div key={idx} className="grid grid-cols-12 gap-1 p-3 items-center">
-                                        {/* [CẬP NHẬT] Ý TF to hơn và hiển thị MathML */}
-                                        <div 
-                                            className="col-span-8 text-slate-300 font-bold text-base md:text-xl leading-tight pr-1"
-                                            dangerouslySetInnerHTML={{ __html: item.text }}
-                                        />
-                                        <div className="col-span-2 flex justify-center"><button onClick={() => setTfSelection(prev => ({...prev, [idx]: "true"}))} className={`w-10 h-10 rounded border transition-all flex items-center justify-center ${tfSelection[idx] === "true" ? 'bg-green-600 border-green-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-600'}`}><Check size={20}/></button></div>
-                                        <div className="col-span-2 flex justify-center"><button onClick={() => setTfSelection(prev => ({...prev, [idx]: "false"}))} className={`w-10 h-10 rounded border transition-all flex items-center justify-center ${tfSelection[idx] === "false" ? 'bg-red-600 border-red-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-600'}`}><X size={20}/></button></div>
+                                    <div key={idx} className="grid grid-cols-12 gap-1 p-2 items-center">
+                                        <div className="col-span-8 text-slate-300 font-bold text-xs leading-tight pr-1">{item.text}</div>
+                                        <div className="col-span-2 flex justify-center"><button onClick={() => setTfSelection(prev => ({...prev, [idx]: "true"}))} className={`w-8 h-8 rounded border transition-all flex items-center justify-center ${tfSelection[idx] === "true" ? 'bg-green-600 border-green-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-600'}`}><Check size={16}/></button></div>
+                                        <div className="col-span-2 flex justify-center"><button onClick={() => setTfSelection(prev => ({...prev, [idx]: "false"}))} className={`w-8 h-8 rounded border transition-all flex items-center justify-center ${tfSelection[idx] === "false" ? 'bg-red-600 border-red-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-600'}`}><X size={16}/></button></div>
                                     </div>
                                 ))}
                             </div>
-                            <div className="p-3 border-t border-white/5"><button onClick={() => handleSubmitAnswer()} className="w-full bg-gradient-to-r from-purple-600 to-cyan-600 text-white py-3 rounded-lg font-black text-xl shadow-lg uppercase italic flex items-center justify-center gap-2 hover:opacity-90"><Send size={20}/> Gửi bài</button></div>
+                            <div className="p-2 border-t border-white/5"><button onClick={() => handleSubmitAnswer()} className="w-full bg-gradient-to-r from-purple-600 to-cyan-600 text-white py-3 rounded-lg font-black text-base shadow-lg uppercase italic flex items-center justify-center gap-2 hover:opacity-90"><Send size={16}/> Gửi bài</button></div>
                         </div>
                     )}
 
                     {q.type === 'SA' && (
-                        <div className="mt-4">
-                            {/* [CẬP NHẬT] Input to hơn */}
-                            <input value={saInput} onChange={(e) => setSaInput(e.target.value)} className="w-full bg-[#050505] border-2 border-slate-700 focus:border-cyan-500 p-4 rounded-lg text-white font-black text-2xl outline-none text-center mb-4 uppercase placeholder:text-slate-700 transition-colors" placeholder="NHẬP ĐÁP ÁN..."/>
-                            <button onClick={() => handleSubmitAnswer()} className="w-full bg-gradient-to-r from-purple-600 to-cyan-600 text-white py-3 rounded-lg font-black text-xl shadow-lg uppercase italic flex items-center justify-center gap-2 hover:opacity-90"><Send size={20}/> Gửi bài</button>
+                        <div className="mt-2">
+                            <input value={saInput} onChange={(e) => setSaInput(e.target.value)} className="w-full bg-[#050505] border-2 border-slate-700 focus:border-cyan-500 p-3 rounded-lg text-white font-black text-lg outline-none text-center mb-2 uppercase placeholder:text-slate-700 transition-colors" placeholder="NHẬP ĐÁP ÁN..."/>
+                            <button onClick={() => handleSubmitAnswer()} className="w-full bg-gradient-to-r from-purple-600 to-cyan-600 text-white py-3 rounded-lg font-black text-base shadow-lg uppercase italic flex items-center justify-center gap-2 hover:opacity-90"><Send size={16}/> Gửi bài</button>
                         </div>
                     )}
                  </div>
