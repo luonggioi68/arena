@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react'; 
 import { useRouter } from 'next/router';
 import { firestore } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, increment } from 'firebase/firestore'; // [UPDATE] Thêm updateDoc, increment
-import useAuthStore from '@/store/useAuthStore'; // [UPDATE] Import Auth Store
+import { doc, getDoc, updateDoc, increment } from 'firebase/firestore'; 
+import useAuthStore from '@/store/useAuthStore'; 
 import { 
     ArrowLeft, CircleDashed, LayoutGrid, Gift, Grid3X3, CheckCircle, 
     XCircle, Lock, RefreshCcw, Gamepad2, Package, X, Check, 
@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-// --- GIỮ NGUYÊN CSS HIỆU ỨNG CŨ CỦA BẠN ---
 const styles = `
   .perspective-1000 { perspective: 1000px; }
   .transform-style-3d { transform-style: preserve-3d; }
@@ -27,7 +26,11 @@ const styles = `
     to { opacity: 1; transform: translateY(0); }
   }
   .animate-card { animation: fadeInUp 0.5s ease-out forwards; }
-  .mil-answer-clip { clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%); }
+  /* [MOBILE FIX] Giảm clip-path trên mobile để đỡ bị mất chữ nếu muốn, hoặc giữ nguyên và cho scroll text */
+  .mil-answer-clip { clip-path: polygon(5% 0, 95% 0, 100% 50%, 95% 100%, 5% 100%, 0 50%); }
+  @media (min-width: 768px) {
+    .mil-answer-clip { clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%); }
+  }
   .mil-gradient { background: radial-gradient(circle, #1e3a8a 0%, #020617 100%); }
   .animate-flash { animation: flash 0.5s infinite; }
   @keyframes flash { 0% { background-color: #fbbf24; } 50% { background-color: #d97706; } 100% { background-color: #fbbf24; } }
@@ -40,18 +43,15 @@ export default function ArcadeMode() {
   const [mode, setMode] = useState('MENU'); 
   const [loading, setLoading] = useState(true);
   
-  // [UPDATE] Lấy User để cộng điểm
   const { user } = useAuthStore();
 
-  // [UPDATE] HÀM CỘNG ĐIỂM (XP)
   const handleAddXP = async (amount = 50) => {
-      if (!user) return; // Không có user thì không cộng
+      if (!user) return; 
       try {
           const studentRef = doc(firestore, "student_profiles", user.uid);
           await updateDoc(studentRef, {
               totalScore: increment(amount)
           });
-          // Có thể thêm console.log hoặc Toast thông báo nhỏ ở đây nếu muốn
       } catch (e) {
           console.error("Lỗi cộng điểm:", e);
       }
@@ -84,12 +84,12 @@ export default function ArcadeMode() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-white font-sans overflow-hidden">
+    <div className="min-h-screen bg-[#0f172a] text-white font-sans overflow-hidden flex flex-col">
       <style>{styles}</style>
       
       {/* HEADER */}
       {mode !== 'MILLIONAIRE' && (
-          <div className="p-4 flex justify-between items-center bg-slate-900 border-b border-slate-700 shadow-md z-50 relative">
+          <div className="p-4 flex justify-between items-center bg-slate-900 border-b border-slate-700 shadow-md z-50 relative shrink-0">
             <button onClick={handleBack} className="flex items-center gap-2 hover:text-yellow-400 font-bold transition uppercase text-sm">
                 <ArrowLeft size={20} /> {mode === 'MENU' ? 'Quay lại Lớp' : 'Chọn game khác'}
             </button>
@@ -101,15 +101,15 @@ export default function ArcadeMode() {
 
       {/* MENU CHỌN GAME */}
       {mode === 'MENU' && (
-        <div className="h-[90vh] overflow-y-auto p-4 md:p-8 flex items-center justify-center">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 flex items-center justify-center custom-scrollbar">
             <div className="max-w-6xl w-full">
                 <div className="text-center mb-10">
                     <Gamepad2 size={60} className="mx-auto mb-4 text-purple-500"/>
-                    <h1 className="text-4xl md:text-5xl font-black mb-2 text-white uppercase italic tracking-tighter">CHỌN THỬ THÁCH</h1>
-                    <p className="text-slate-400">Vừa học vừa chơi - Sảng khoái tinh thần</p>
+                    <h1 className="text-3xl md:text-5xl font-black mb-2 text-white uppercase italic tracking-tighter">CHỌN THỬ THÁCH</h1>
+                    <p className="text-slate-400 text-sm md:text-base">Vừa học vừa chơi - Sảng khoái tinh thần</p>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 px-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 px-4 pb-10">
                     <GameCard title="Triệu Phú" desc="Trí tuệ & Kịch tính" icon={<DollarSign size={48}/>} color="from-blue-600 to-indigo-900" onClick={() => setMode('MILLIONAIRE')} delay={0} special={true} />
                     <GameCard title="Vòng Quay" desc="Ngẫu nhiên & May mắn" icon={<CircleDashed size={48}/>} color="from-pink-500 to-rose-600" onClick={() => setMode('WHEEL')} delay={100} />
                     <GameCard title="Lật Ô Chữ" desc="Chiến thuật & Đồng đội" icon={<LayoutGrid size={48}/>} color="from-emerald-500 to-teal-600" onClick={() => setMode('FLIP')} delay={200} />
@@ -120,8 +120,8 @@ export default function ArcadeMode() {
         </div>
       )}
 
-      {/* KHU VỰC RENDER GAME - [UPDATE] TRUYỀN onAddXP */}
-      <div className="h-full relative bg-slate-900">
+      {/* KHU VỰC RENDER GAME */}
+      <div className="flex-1 relative bg-slate-900 overflow-hidden">
         {mode === 'WHEEL' && <LuckyWheelGame questions={quiz.questions} onAddXP={handleAddXP} />}
         {mode === 'FLIP' && <FlipCardGame questions={quiz.questions} onAddXP={handleAddXP} />}
         {mode === 'BOX' && <MysteryBoxGame questions={quiz.questions} onAddXP={handleAddXP} />}
@@ -147,9 +147,9 @@ const GameCard = ({ title, desc, icon, color, onClick, delay, special }) => (
 
 
 // ====================================================================================
-// GAME: AI LÀ TRIỆU PHÚ (MILLIONAIRE)
+// GAME: AI LÀ TRIỆU PHÚ (MILLIONAIRE) - [FIX MOBILE SCROLL]
 // ====================================================================================
-function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận onAddXP
+function MillionaireGame({ questions, onExit, onAddXP }) { 
     const [level, setLevel] = useState(0); 
     const [status, setStatus] = useState('PLAYING'); 
     const [selectedAns, setSelectedAns] = useState(null); 
@@ -160,17 +160,15 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
     const [hiddenOptions, setHiddenOptions] = useState([]); 
     const [modal, setModal] = useState(null);
 
-    // [UPDATE] LOGIC CỘNG ĐIỂM KHI THẮNG HOẶC DỪNG CUỘC CHƠI
     useEffect(() => {
         if (status === 'WIN') {
-            onAddXP(500); // Thắng trùm: +500 XP
+            onAddXP(500); 
         } else if (status === 'WALK_AWAY') {
-            const xpEarned = level * 10; // Dừng chơi: Mỗi câu 10 XP
+            const xpEarned = level * 10; 
             if (xpEarned > 0) onAddXP(xpEarned);
         }
     }, [status]);
 
-    // --- CẤU HÌNH ÂM THANH ---
     const audioRefs = useRef({
         bg: new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-15.mp3'),
         correct: new Audio('https://actions.google.com/sounds/v1/cartoon/magic_chime.ogg'),
@@ -374,31 +372,33 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
     if (!currentQ) return null; 
 
     return (
-        <div className="h-screen w-full mil-gradient text-white flex flex-col md:flex-row overflow-hidden font-sans relative">
-            <div className="flex-1 flex flex-col relative z-10 p-4 md:p-6">
-                <div className="flex justify-between items-center mb-2">
+        <div className="h-full w-full mil-gradient text-white flex flex-col md:flex-row overflow-hidden font-sans relative">
+            {/* [FIX MOBILE] Thêm overflow-y-auto cho cột trái để cuộn được khi câu hỏi dài */}
+            <div className="flex-1 flex flex-col relative z-10 p-2 md:p-6 overflow-y-auto custom-scrollbar h-full">
+                <div className="flex justify-between items-center mb-2 shrink-0">
                     <div onClick={handleWalkAway} className="bg-black/40 rounded-full px-4 py-2 border border-white/20 flex items-center gap-2 cursor-pointer hover:bg-red-900/50 transition">
-                        <X size={20}/> <span className="font-bold text-sm uppercase text-slate-300">Dừng cuộc chơi</span>
+                        <X size={20}/> <span className="font-bold text-sm uppercase text-slate-300 hidden md:inline">Dừng</span>
                     </div>
                     <div className="flex flex-col items-center justify-center relative z-20">
-                        <div className="bg-gradient-to-b from-blue-600 to-blue-900 rounded-full px-8 py-3 border-4 border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.6)] min-w-[200px] text-center transform hover:scale-105 transition duration-300">
-                            <span className="text-3xl font-black text-white drop-shadow-md">{currentMoneyDisplay}</span>
+                        <div className="bg-gradient-to-b from-blue-600 to-blue-900 rounded-full px-6 md:px-8 py-2 md:py-3 border-4 border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.6)] min-w-[150px] md:min-w-[200px] text-center transform hover:scale-105 transition duration-300">
+                            <span className="text-xl md:text-3xl font-black text-white drop-shadow-md">{currentMoneyDisplay}</span>
                         </div>
                     </div>
-                    <div className="w-32"></div>
+                    <div className="w-16 md:w-32"></div>
                 </div>
 
-                <div className="flex-1 flex flex-col justify-center items-center">
-                    {currentQ.img && <img src={currentQ.img} className="max-h-40 rounded-lg border-2 border-white/20 mb-4 bg-black/50 object-contain shadow-lg" />}
-                    <div className="w-full bg-blue-900/90 border-2 border-slate-300 rounded-2xl p-6 md:p-8 text-center shadow-[0_0_40px_rgba(30,58,138,0.6)] relative mb-4 mil-answer-clip">
+                <div className="flex-1 flex flex-col justify-center items-center py-4">
+                    {currentQ.img && <img src={currentQ.img} className="max-h-32 md:max-h-40 rounded-lg border-2 border-white/20 mb-4 bg-black/50 object-contain shadow-lg" />}
+                    <div className="w-full bg-blue-900/90 border-2 border-slate-300 rounded-2xl p-4 md:p-8 text-center shadow-[0_0_40px_rgba(30,58,138,0.6)] relative mb-4 mil-answer-clip min-h-[120px] flex items-center justify-center">
                         <div className="absolute -left-0 top-1/2 -translate-y-1/2 w-full h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none"></div>
-                        <h2 className="text-xl md:text-2xl font-bold leading-relaxed relative z-10 drop-shadow-md" dangerouslySetInnerHTML={{ __html: currentQ.q }} />
+                        {/* [FIX MOBILE] Font chữ responsive */}
+                        <h2 className="text-lg md:text-2xl font-bold leading-relaxed relative z-10 drop-shadow-md px-6 md:px-0" dangerouslySetInnerHTML={{ __html: currentQ.q }} />
                     </div>
                 </div>
 
-                <div className="w-full max-w-5xl mx-auto mb-4 min-h-[160px] flex items-center justify-center">
+                <div className="w-full max-w-5xl mx-auto mb-4 min-h-fit md:min-h-[160px] flex items-center justify-center">
                     {currentQ.type === 'MCQ' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4 w-full">
                             {options.map((opt, idx) => {
                                 const isHidden = hiddenOptions.includes(idx);
                                 const isSelected = selectedAns === idx;
@@ -408,9 +408,9 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
                                 if (locked && isCorrect) bgClass = "bg-green-600 from-green-500 to-emerald-700 animate-flash text-white shadow-[0_0_30px_rgba(34,197,94,0.8)] border-green-300"; 
                                 if (locked && isSelected && !isCorrect) bgClass = "bg-red-600 from-red-600 to-rose-700 text-white animate-shake"; 
                                 return (
-                                    <button key={idx} onClick={() => handleSelectMCQ(idx)} disabled={locked || isHidden} className={`relative p-4 md:p-5 rounded-full border-2 ${isSelected ? 'border-yellow-400' : 'border-white/30'} flex items-center transition-all duration-200 group bg-gradient-to-b ${bgClass} ${isHidden ? 'opacity-0 pointer-events-none' : 'opacity-100 shadow-lg'}`}>
-                                        <span className={`font-black text-yellow-400 mr-4 text-xl ${isSelected || (locked && isCorrect) ? 'text-white' : ''}`}>{getAnswerLabel(idx)}:</span>
-                                        <span className="font-bold text-lg text-left flex-1" dangerouslySetInnerHTML={{ __html: opt }} />
+                                    <button key={idx} onClick={() => handleSelectMCQ(idx)} disabled={locked || isHidden} className={`relative p-3 md:p-5 rounded-full border-2 ${isSelected ? 'border-yellow-400' : 'border-white/30'} flex items-center transition-all duration-200 group bg-gradient-to-b ${bgClass} ${isHidden ? 'opacity-0 pointer-events-none' : 'opacity-100 shadow-lg'}`}>
+                                        <span className={`font-black text-yellow-400 mr-2 md:mr-4 text-base md:text-xl ${isSelected || (locked && isCorrect) ? 'text-white' : ''}`}>{getAnswerLabel(idx)}:</span>
+                                        <span className="font-bold text-sm md:text-lg text-left flex-1" dangerouslySetInnerHTML={{ __html: opt }} />
                                     </button>
                                 )
                             })}
@@ -433,11 +433,11 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
                     )}
                 </div>
 
-                <div className="h-16 flex justify-center items-center">
+                <div className="h-16 flex justify-center items-center shrink-0">
                     {!locked && (<button onClick={handleLock} className="bg-gradient-to-r from-yellow-500 to-orange-600 text-white font-black py-3 px-12 rounded-full text-xl shadow-[0_0_30px_rgba(234,179,8,0.8)] hover:scale-110 active:scale-95 transition-transform uppercase tracking-widest border-2 border-white animate-in zoom-in fade-in duration-300">CHỐT ĐÁP ÁN</button>)}
                 </div>
 
-                <div className={`flex justify-center gap-4 md:gap-8 mt-4 ${currentQ.type === 'TF' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                <div className={`flex justify-center gap-4 md:gap-8 mt-4 pb-4 ${currentQ.type === 'TF' ? 'opacity-50 pointer-events-none grayscale' : ''} shrink-0`}>
                     <LifelineButton icon={<div className="font-bold text-lg">50:50</div>} label="50:50" active={lifelines.fifty} onClick={use5050} />
                     <LifelineButton icon={<Users size={20}/>} label="Khán giả" active={lifelines.audience} onClick={useAudience} />
                     <LifelineButton icon={<Phone size={20}/>} label="Gọi điện" active={lifelines.phone} onClick={usePhone} />
@@ -468,6 +468,7 @@ function MillionaireGame({ questions, onExit, onAddXP }) { // [UPDATE] Nhận on
                             {modal.type === 'PHONE' && "Gọi điện thoại"}
                             {modal.type === 'AI' && "AI Phân tích"}
                         </h3>
+                        {/* ... Modal content ... */}
                         {modal.type === 'AUDIENCE' && (
                             <div className="flex justify-around items-end h-40 gap-2">
                                 {modal.data.map((percent, i) => (
@@ -563,9 +564,9 @@ function InteractiveQuestion({ data, onClose, gameType }) {
                         {data.type === 'MCQ' ? 'TRẮC NGHIỆM' : data.type === 'TF' ? 'ĐÚNG / SAI' : 'TRẢ LỜI NGẮN'}
                     </span>
                     
-                    {data.img && <img src={data.img} className="h-40 mx-auto object-contain mb-4 rounded-xl border-2 border-white/10 shadow-lg bg-black/20" />}
+                    {data.img && <img src={data.img} className="h-32 md:h-40 mx-auto object-contain mb-4 rounded-xl border-2 border-white/10 shadow-lg bg-black/20" />}
                     
-                    <h1 className="text-xl md:text-2xl font-bold mb-6 leading-snug whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: data.q }} />
+                    <h1 className="text-lg md:text-2xl font-bold mb-6 leading-snug whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: data.q }} />
 
                     {data.type === 'MCQ' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
@@ -703,7 +704,7 @@ function FlipCardGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
         setCurrentCard(null);
     };
     return (
-        <div className="p-8 h-full flex flex-col items-center">
+        <div className="p-4 md:p-8 h-full flex flex-col items-center">
             <div className="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 w-full max-w-6xl overflow-y-auto pb-20 custom-scrollbar">
                 {cards.map((card, idx) => {
                     let style = "bg-gradient-to-br from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 border-white/10";
@@ -730,8 +731,8 @@ function MysteryBoxGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
         setCurrentGift(null);
     };
     return (
-        <div className="p-8 h-full flex justify-center overflow-y-auto">
-            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8 w-full max-w-6xl">
+        <div className="p-4 md:p-8 h-full flex justify-center overflow-y-auto">
+            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-8 w-full max-w-6xl">
                 {boxes.map((box, idx) => (
                     <div key={idx} onClick={() => !box.opened && setCurrentGift(box)} className={`cursor-pointer transition-all duration-500 transform ${box.opened ? 'opacity-50 grayscale scale-95 cursor-default' : 'hover:scale-110 hover:-translate-y-4'}`}>
                         <div className="relative aspect-square">
@@ -787,8 +788,8 @@ function MemoryMatchGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
     };
 
     return (
-        <div className="p-8 h-full flex justify-center overflow-y-auto">
-            <div className="grid grid-cols-4 md:grid-cols-6 gap-4 w-full max-w-7xl pb-20">
+        <div className="p-4 md:p-8 h-full flex justify-center overflow-y-auto">
+            <div className="grid grid-cols-4 md:grid-cols-6 gap-2 md:gap-4 w-full max-w-7xl pb-20">
                 {cards.map((card) => {
                     const isFlipped = flipped.includes(card) || solved.includes(card.id);
                     const isSolved = solved.includes(card.id);
