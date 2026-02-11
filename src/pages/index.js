@@ -6,7 +6,7 @@ import { doc, getDoc, updateDoc, increment, onSnapshot, setDoc } from 'firebase/
 import useAuthStore from '@/store/useAuthStore';
 import { 
     LogIn, LogOut, Sword, Shield, BookOpen, Users, X, ArrowRight, 
-    Gamepad2, Settings, UploadCloud, Zap, Eye, Target, Disc, BarChart2 // [MỚI] Thêm icon BarChart2 cho Vote
+    Gamepad2, Settings, UploadCloud, Zap, Eye, Target, Disc, BarChart2 
 } from 'lucide-react';
 
 export default function HomePage() {
@@ -186,43 +186,39 @@ export default function HomePage() {
           
           {/* MAIN WRAPPER */}
           
-    {/* --- NAV 1: LUYỆN TẬP (Đã tối ưu Mobile) --- */}
-<div className="shrink-0 w-full bg-black/80 backdrop-blur-xl border-2 border-red-600/50 rounded-2xl flex flex-col md:flex-row overflow-hidden shadow-[0_0_50px_rgba(220,38,38,0.4)] animate-in fade-in slide-in-from-top-4 relative z-20 min-h-[110px] md:h-[90px]">
-    {/* Phần nhãn tiêu đề: md:w-40 để cố định trên máy tính, w-full trên mobile */}
-    <div className="bg-gradient-to-br from-red-700 to-orange-800 p-2 w-full md:w-40 flex flex-row md:flex-col items-center justify-center text-center shrink-0 relative overflow-hidden group cursor-default z-20 shadow-2xl border-b border-red-500/30 md:border-b-0 md:border-r">
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30 mix-blend-overlay"></div>
-        <Target size={20} className="text-yellow-300 mr-2 md:mr-0 md:mb-1 animate-pulse drop-shadow-[0_0_10px_#facc15]"/>
-        <h2 className="text-sm md:text-lg font-black uppercase text-white leading-none tracking-tighter drop-shadow-md">Luyện Tập</h2>
-    </div>
+            {/* --- NAV 1: LUYỆN TẬP (Đã tối ưu Mobile) --- */}
+            <div className="shrink-0 w-full bg-black/80 backdrop-blur-xl border-2 border-red-600/50 rounded-2xl flex flex-col md:flex-row overflow-hidden shadow-[0_0_50px_rgba(220,38,38,0.4)] animate-in fade-in slide-in-from-top-4 relative z-20 min-h-[110px] md:h-[90px]">
+                <div className="bg-gradient-to-br from-red-700 to-orange-800 p-2 w-full md:w-40 flex flex-row md:flex-col items-center justify-center text-center shrink-0 relative overflow-hidden group cursor-default z-20 shadow-2xl border-b border-red-500/30 md:border-b-0 md:border-r">
+                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30 mix-blend-overlay"></div>
+                    <Target size={20} className="text-yellow-300 mr-2 md:mr-0 md:mb-1 animate-pulse drop-shadow-[0_0_10px_#facc15]"/>
+                    <h2 className="text-sm md:text-lg font-black uppercase text-white leading-none tracking-tighter drop-shadow-md">Luyện Tập</h2>
+                </div>
 
-    {/* Phần danh sách lớp: Tự động dàn đều hoặc xuống dòng trên Mobile */}
-    <div className="flex-1 flex items-center justify-center p-1 md:p-0">
-        <div className="flex flex-wrap md:flex-nowrap w-full justify-center md:h-full">
-            {[6, 7, 8, 9, 10, 11, 12].map((grade) => (
-                <button 
-                    key={grade}
-                    onClick={() => handleGradeClick(grade)}
-                    className="group relative flex-1 min-w-[45px] md:min-w-[60px] h-12 md:h-full flex flex-col items-center justify-center transition-all duration-300 border border-red-900/30 md:border-0 md:border-l active:scale-95 overflow-hidden"
-                >
-                    {/* Background mặc định */}
-                    <div className="absolute inset-0 bg-gradient-to-b from-red-900 via-red-800 to-orange-900 transition-all duration-500 group-hover:opacity-0"></div>
-                    {/* Background khi Hover/Active */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-red-600 via-orange-500 to-yellow-500 opacity-0 group-hover:opacity-100 transition-all duration-500 group-hover:animate-pulse group-hover:brightness-110"></div>
-                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 mix-blend-overlay pointer-events-none"></div>
-                    
-                    <div className="relative z-10 transform group-hover:-translate-y-1 transition-transform duration-300 flex flex-col items-center">
-                        <span className="text-xl md:text-4xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:from-white group-hover:to-yellow-300 transition-all duration-300 group-hover:scale-110 drop-shadow-lg">
-                            {grade}
-                        </span>
-                        <span className="text-[8px] md:text-[9px] font-bold uppercase tracking-widest text-red-300 opacity-70 group-hover:opacity-100 group-hover:text-yellow-100 transition-all duration-300 whitespace-nowrap">
-                            Lớp
-                        </span>
+                <div className="flex-1 flex items-center justify-center p-1 md:p-0">
+                    <div className="flex flex-wrap md:flex-nowrap w-full justify-center md:h-full">
+                        {[6, 7, 8, 9, 10, 11, 12].map((grade) => (
+                            <button 
+                                key={grade}
+                                onClick={() => handleGradeClick(grade)}
+                                className="group relative flex-1 min-w-[45px] md:min-w-[60px] h-12 md:h-full flex flex-col items-center justify-center transition-all duration-300 border border-red-900/30 md:border-0 md:border-l active:scale-95 overflow-hidden"
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-b from-red-900 via-red-800 to-orange-900 transition-all duration-500 group-hover:opacity-0"></div>
+                                <div className="absolute inset-0 bg-gradient-to-br from-red-600 via-orange-500 to-yellow-500 opacity-0 group-hover:opacity-100 transition-all duration-500 group-hover:animate-pulse group-hover:brightness-110"></div>
+                                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 mix-blend-overlay pointer-events-none"></div>
+                                
+                                <div className="relative z-10 transform group-hover:-translate-y-1 transition-transform duration-300 flex flex-col items-center">
+                                    <span className="text-xl md:text-4xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:from-white group-hover:to-yellow-300 transition-all duration-300 group-hover:scale-110 drop-shadow-lg">
+                                        {grade}
+                                    </span>
+                                    <span className="text-[8px] md:text-[9px] font-bold uppercase tracking-widest text-red-300 opacity-70 group-hover:opacity-100 group-hover:text-yellow-100 transition-all duration-300 whitespace-nowrap">
+                                        Lớp
+                                    </span>
+                                </div>
+                            </button>
+                        ))}
                     </div>
-                </button>
-            ))}
-        </div>
-    </div>
-</div>
+                </div>
+            </div>
 
             {/* B. GRID 6 MỤC CHÍNH */}
             <div className="flex-1 py-3 md:py-4 min-h-0"> 
@@ -240,48 +236,80 @@ export default function HomePage() {
             <div className="shrink-0 w-full bg-black/80 backdrop-blur-xl border-t-2 border-cyan-600/50 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(6,182,212,0.1)] animate-in fade-in slide-in-from-bottom-4 relative z-20 h-[70px] md:h-[80px]">
                 <div className="grid grid-cols-8 w-full h-full bg-slate-900/50">
                     {[...Array(8)].map((_, index) => {
-                        const isFirst = index === 0;
-                        const isSecond = index === 1; // [MỚI] Xác định nút thứ 2 là Vote
-                        
-                        // Xử lý sự kiện click riêng cho từng nút
+                        // Định nghĩa vai trò của từng ô
+                        const isSpin = index === 0;
+                        const isVote = index === 1;
+                        const isGrade = index >= 2 && index <= 6; // Các ô 3,4,5,6,7 là Lớp 1-5
+                        const gradeNum = isGrade ? index - 1 : null; // Tính số lớp
+
+                        // Xử lý sự kiện click
                         const handleClick = () => {
-                            if (isFirst) router.push('/bottom/SpinWheel');
-                            if (isSecond) router.push('/bottom/VoteArena');
+                            if (isSpin) router.push('/bottom/SpinWheel');
+                            else if (isVote) router.push('/bottom/VoteArena');
+                            else if (isGrade) router.push(`/training?grade=${gradeNum}`);
                         };
 
-                        const isActive = isFirst || isSecond;
+                        const isActive = isSpin || isVote || isGrade;
 
                         return (
                             <button 
                                 key={index}
                                 onClick={handleClick}
                                 className={`group relative w-full h-full flex flex-col items-center justify-center transition-all duration-300 border-r border-cyan-900/30 last:border-r-0 overflow-hidden
-                                    ${isActive ? 'cursor-pointer bg-cyan-900/20 hover:bg-cyan-800/40' : 'cursor-default bg-transparent opacity-50'}
+                                    ${isActive ? 'cursor-pointer' : 'cursor-default bg-transparent opacity-50'}
+                                    ${isGrade ? 'hover:flex-[1.1]' : ''} 
                                 `}
                             >
-                                <div className={`absolute inset-0 bg-gradient-to-b from-cyan-600/20 to-transparent opacity-0 ${isActive ? 'group-hover:opacity-100' : ''} transition-all duration-500`}></div>
+                                {/* Nền (Background) */}
+                                {isSpin || isVote ? (
+                                    // Nền Cyan cho Spin/Vote
+                                    <div className="absolute inset-0 bg-gradient-to-b from-cyan-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500"></div>
+                                ) : isGrade ? (
+                                    // [MỚI] Nền Đỏ/Cam cho Lớp 1-5
+                                    <>
+                                        <div className="absolute inset-0 bg-gradient-to-b from-red-900/40 to-orange-900/40 group-hover:opacity-0 transition-opacity"></div>
+                                        <div className="absolute inset-0 bg-gradient-to-b from-red-600/80 via-orange-500/80 to-yellow-500/80 opacity-0 group-hover:opacity-100 transition-all duration-500"></div>
+                                    </>
+                                ) : null}
                                 
-                                <div className="relative z-10 flex flex-col items-center gap-1">
-                                    {isFirst ? (
+                                {/* Nội dung */}
+                                <div className="relative z-10 flex flex-col items-center gap-0.5 justify-center h-full w-full">
+                                    {isSpin ? (
                                         <>
-                                            <Disc size={24} className="text-cyan-300 group-hover:rotate-180 transition-transform duration-700 mb-0.5"/>
-                                            <span className="text-[9px] md:text-[10px] font-black uppercase text-cyan-100 tracking-wider leading-tight text-center">
-                                                Vòng Xoay<br/>Gọi Tên
+                                            <Disc size={20} className="text-cyan-300 group-hover:rotate-180 transition-transform duration-700"/>
+                                            <span className="text-[9px] font-black uppercase text-cyan-100 tracking-wider leading-none text-center mt-1">
+                                                Vòng Xoay
                                             </span>
                                         </>
-                                    ) : isSecond ? (
-                                        // [MỚI] Giao diện nút Vote
+                                    ) : isVote ? (
                                         <>
-                                            <BarChart2 size={24} className="text-cyan-300 group-hover:scale-110 transition-transform duration-300 mb-0.5"/>
-                                            <span className="text-[9px] md:text-[10px] font-black uppercase text-cyan-100 tracking-wider leading-tight text-center">
-                                                Vote<br/>Lấy ý kiến
+                                            <BarChart2 size={20} className="text-cyan-300 group-hover:scale-110 transition-transform duration-300"/>
+                                            <span className="text-[9px] font-black uppercase text-cyan-100 tracking-wider leading-none text-center mt-1">
+                                                Vote
+                                            </span>
+                                        </>
+                                    ) : isGrade ? (
+                                        // [MỚI] Hiển thị Luyện tập Lớp 1-5
+                                        <>
+                                            <span className="text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none mb-0.5">
+                                                Luyện Tập
+                                            </span>
+                                            <span className="text-2xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:text-white drop-shadow-md leading-none">
+                                                {gradeNum}
+                                            </span>
+                                             <span className="text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none mb-0.5">
+                                                Lớp
                                             </span>
                                         </>
                                     ) : (
+                                        // Các ô còn lại
                                         <>
-                                            <div className="w-1.5 h-1.5 rounded-full bg-slate-600 group-hover:bg-slate-400 transition-colors mb-1"></div>
-                                            <span className="text-[8px] font-bold uppercase text-slate-500 tracking-wider group-hover:text-slate-400 text-center leading-none">
-                                                Sắp ra mắt
+                                           <span className="text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none mb-0.5">
+                                                LIÊN HỆ
+                                                Phone/zalo
+                                            </span>
+                                            <span className="text-[18px] font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:text-white drop-shadow-md leading-none">
+                                               0383477162
                                             </span>
                                         </>
                                     )}

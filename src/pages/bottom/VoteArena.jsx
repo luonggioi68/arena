@@ -2,503 +2,487 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { 
     Flame, Zap, Trophy, MessageSquare, Clock, 
-    Play, Square, Lock, Settings, Users, RotateCcw, 
-    Home, Plus, Trash2, Calendar, CheckCircle, Edit, Medal, Crown
+    Play, Square, Lock, Settings, Users, RotateCcw, Loader2,
+    Home, Plus, Trash2, Calendar, CheckCircle2,
+    Sword, Shield, Skull, Crosshair, Target, Ghost, Gem, Crown, Rocket, Star, Hash, Type
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { onAuthStateChanged } from 'firebase/auth'; 
+
+// --- FIREBASE IMPORTS ---
 import { firestore, auth } from '@/lib/firebase'; 
 import { doc, onSnapshot, setDoc, updateDoc, getDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+
+// --- DANH SÁCH ICON GAME ---
+const GAME_ICONS = [Sword, Shield, Skull, Zap, Crosshair, Target, Ghost, Gem, Crown, Rocket, Star, Flame, Trophy];
 
 export default function VoteArena() {
   const router = useRouter();
-
-  // --- 1. PHÂN QUYỀN ---
-  const [isTeacher, setIsTeacher] = useState(false); 
+  
+  // --- 1. INIT ---
+  const [isTeacher, setIsTeacher] = useState(false);
   const [loading, setLoading] = useState(true);
-  const VOTE_DOC_ID = 'arena_vote_session'; 
+  const SESSION_ID = "live"; 
 
-  // --- 2. DATA REALTIME ---
-  const [topic, setTopic] = useState("ĐANG TẢI...");
+  // --- 2. STATE DỮ LIỆU ---
   const [status, setStatus] = useState('SETUP'); 
-  const [options, setOptions] = useState([]);
+  const [topic, setTopic] = useState("CHỦ ĐỀ BÌNH CHỌN");
+  const [iconMode, setIconMode] = useState('ABC'); // ABC | 123 | GAME | AVATAR
+  
+  const [useSchedule, setUseSchedule] = useState(false);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
-  const [allowComment, setAllowComment] = useState(true);
+  const [timeLeft, setTimeLeft] = useState(0);
 
-  // --- 3. STATE LOCAL ---
+  const [options, setOptions] = useState([
+    { id: 1, label: "Lựa chọn A", seed: "A", votes: 0, percent: 0 },
+    { id: 2, label: "Lựa chọn B", seed: "B", votes: 0, percent: 0 },
+  ]);
+
+  // --- 3. STATE UI ---
   const [selectedId, setSelectedId] = useState(null);
-  const [comment, setComment] = useState("");
   const [hasVoted, setHasVoted] = useState(false);
-  const [timerText, setTimerText] = useState(""); 
-  
   const timerRef = useRef(null);
 
-  // --- AUTH ---
+  // [MỚI] TÍNH TỔNG SỐ PHIẾU
+  const totalVotes = options.reduce((acc, curr) => acc + curr.votes, 0);
+
+  // [MỚI] XỬ LÝ SẮP XẾP KHI KẾT THÚC (SORT DESCENDING)
+  // Nếu đã kết thúc thì sort theo votes giảm dần, ngược lại giữ nguyên thứ tự nhập
+  const displayOptions = status === 'ENDED' 
+      ? [...options].sort((a, b) => b.votes - a.votes) 
+      : options;
+
+  // --- AUTH CHECK ---
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-        setIsTeacher(!!user);
+    const unsub = onAuthStateChanged(auth, (user) => {
+        setIsTeacher(!!user); 
         setLoading(false);
     });
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
-  // --- SYNC FIREBASE ---
+  // --- REALTIME LISTENER ---
   useEffect(() => {
-    const docRef = doc(firestore, "system_vote", VOTE_DOC_ID);
-    const unsub = onSnapshot(docRef, (docSnap) => {
+    const sessionRef = doc(firestore, "vote_sessions", SESSION_ID);
+    const unsub = onSnapshot(sessionRef, (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data();
-            setTopic(data.topic || "CHỦ ĐỀ BÌNH CHỌN");
-            setStatus(data.status || 'SETUP');
+            setStatus(data.status);
+            setTopic(data.topic);
             setOptions(data.options || []);
-            setStartTime(data.startTime || "");
-            setEndTime(data.endTime || "");
-            setAllowComment(data.allowComment ?? true);
-        } else if (isTeacher) {
-            // Tạo data mẫu nếu chưa có
-            setDoc(docRef, {
-                topic: "BÌNH CHỌN MỚI",
-                status: 'SETUP',
-                options: [
-                    { id: 1, label: "Phương án A", type: 'avatar', val: 'Felix', votes: 0, percent: 0 },
-                    { id: 2, label: "Phương án B", type: 'avatar', val: 'Aneka', votes: 0, percent: 0 }
-                ],
-                startTime: "", endTime: ""
-            });
+            setIconMode(data.iconMode || 'ABC'); 
+            
+            if(data.endTime) setEndTime(data.endTime);
+            if(data.startTime) setStartTime(data.startTime);
+            
+            if(data.status === 'ACTIVE' && data.endTime) {
+                const now = new Date().getTime();
+                const end = new Date(data.endTime).getTime();
+                setTimeLeft(Math.max(0, Math.floor((end - now) / 1000)));
+            } else {
+               if(data.timeLeft) setTimeLeft(data.timeLeft);
+            }
+        } else {
+            if (isTeacher) initSession();
         }
     });
     return () => unsub();
   }, [isTeacher]);
 
-  // --- TIMER LOGIC (ĐÃ SỬA: TỰ ĐỘNG KẾT THÚC) ---
+  // --- LOGIC TIME ---
   useEffect(() => {
-    const handleTimeCheck = () => {
-        // Nếu không có mốc thời gian -> Bỏ qua
-        if (!startTime && !endTime) {
-            setTimerText(null);
-            return;
-        }
+      if(isTeacher && (startTime || endTime)) {
+          const checkInterval = setInterval(() => {
+              const now = new Date().getTime();
+              const start = startTime ? new Date(startTime).getTime() : 0;
+              const end = endTime ? new Date(endTime).getTime() : 0;
+              if(status === 'SETUP' && start > 0 && now >= start && (!end || now < end)) updateSession({ status: 'ACTIVE' });
+              if(status === 'ACTIVE' && end > 0 && now >= end) {
+                  updateSession({ status: 'ENDED' });
+                  clearInterval(checkInterval);
+              }
+          }, 1000);
+          return () => clearInterval(checkInterval);
+      }
+  }, [isTeacher, startTime, endTime, status]);
 
-        const now = new Date().getTime();
-        const start = startTime ? new Date(startTime).getTime() : 0;
-        const end = endTime ? new Date(endTime).getTime() : 0;
-
-        // Chỉ xử lý hiển thị và auto-end khi đang ACTIVE
-        if (status === 'ACTIVE') {
-            // Nếu có đặt giờ Kết thúc
-            if (endTime) {
-                if (now >= end) {
-                    setTimerText("ĐÃ KẾT THÚC");
-                    
-                    // [QUAN TRỌNG] Nếu là GV -> Gọi lệnh kết thúc lên Firebase
-                    if (isTeacher) {
-                        updateFirebase({ status: 'ENDED' });
-                        triggerGrandConfetti();
-                    }
-                } else {
-                    // Tính đếm ngược
-                    const diff = end - now;
-                    const h = Math.floor(diff / (1000 * 60 * 60));
-                    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                    const s = Math.floor((diff % (1000 * 60)) / 1000);
-                    setTimerText(`CÒN: ${h}h ${m}m ${s}s`);
-                }
-            } else {
-                setTimerText("ĐANG DIỄN RA"); // Không đặt giờ kết thúc
-            }
-        } 
-        else if (status === 'ENDED') {
-            setTimerText("ĐÃ KẾT THÚC");
-        }
-        else if (status === 'SETUP' || status === 'PENDING') {
-             if(startTime) setTimerText(`MỞ LÚC: ${new Date(startTime).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}`);
-        }
-    };
-
-    handleTimeCheck();
-    timerRef.current = setInterval(handleTimeCheck, 1000);
+  useEffect(() => {
+    if (status === 'ACTIVE' && timeLeft > 0) {
+      timerRef.current = setInterval(() => setTimeLeft(prev => prev > 0 ? prev - 1 : 0), 1000);
+    }
     return () => clearInterval(timerRef.current);
-  }, [startTime, endTime, status, isTeacher]); // Thêm isTeacher vào dependency
+  }, [status, timeLeft]);
 
-  // --- UPDATE FIREBASE ---
-  const updateFirebase = async (data) => {
-      try { await updateDoc(doc(firestore, "system_vote", VOTE_DOC_ID), data); } 
-      catch (e) { console.error(e); }
+  useEffect(() => { if (status === 'ENDED') triggerGrandConfetti(); }, [status]);
+
+  // --- DATABASE HELPERS ---
+  const initSession = async () => {
+      await setDoc(doc(firestore, "vote_sessions", SESSION_ID), {
+          topic: "BÌNH CHỌN MỚI",
+          status: "SETUP",
+          iconMode: 'ABC',
+          options: [
+            { id: 1, label: "Phương án 1", seed: Math.random(), votes: 0, percent: 0 },
+            { id: 2, label: "Phương án 2", seed: Math.random(), votes: 0, percent: 0 },
+          ]
+      });
   };
 
-  // --- GV ACTIONS ---
-  const handleManualStart = () => {
-      if (!topic.trim()) return alert("Nhập chủ đề trước!");
-      const resetOptions = options.map(o => ({...o, votes: 0, percent: 0}));
-      // Lưu ý: startTime và endTime vẫn giữ nguyên giá trị từ input để logic đếm ngược hoạt động
-      updateFirebase({ status: 'ACTIVE', options: resetOptions, startTime, endTime });
+  const updateSession = async (data) => {
+      await updateDoc(doc(firestore, "vote_sessions", SESSION_ID), data);
   };
 
-  const handleManualEnd = () => {
-      updateFirebase({ status: 'ENDED' });
-      triggerGrandConfetti();
+  // --- ACTIONS ---
+  const handleStartVote = async () => {
+    if (!topic.trim()) return alert("Vui lòng nhập chủ đề!");
+    const resetOptions = options.map(o => ({...o, votes: 0, percent: 0}));
+    const updateData = { options: resetOptions, status: 'ACTIVE' };
+    if(useSchedule && startTime && endTime) {
+        updateData.startTime = startTime; updateData.endTime = endTime;
+        updateData.status = (new Date(startTime) > new Date()) ? 'SCHEDULED' : 'ACTIVE';
+    } else {
+        updateData.startTime = null; updateData.endTime = null; updateData.timeLeft = 300; 
+    }
+    await updateSession(updateData);
   };
 
-  const handleReset = () => {
-      updateFirebase({ status: 'SETUP' });
-      setHasVoted(false);
-      setSelectedId(null);
+  const handleEndVote = async () => { await updateSession({ status: 'ENDED' }); };
+  const handleReset = async () => {
+    await updateSession({ status: 'SETUP', startTime: null, endTime: null, timeLeft: 0 });
+    setHasVoted(false); setSelectedId(null);
   };
 
-  const syncOptions = (newOptions) => updateFirebase({ options: newOptions });
   const addOption = () => {
-      const newId = Date.now();
-      syncOptions([...options, { id: newId, label: "", type: 'letter', val: String.fromCharCode(65 + options.length), votes: 0, percent: 0 }]);
-  };
-  const removeOption = (id) => syncOptions(options.filter(o => o.id !== id));
-  const updateOptionLabel = (id, text) => syncOptions(options.map(o => o.id === id ? { ...o, label: text } : o));
-  const cycleIconType = (id) => {
-      syncOptions(options.map(o => {
-          if (o.id !== id) return o;
-          if (o.type === 'avatar') return { ...o, type: 'letter', val: String.fromCharCode(65 + options.indexOf(o)) };
-          if (o.type === 'letter') return { ...o, type: 'number', val: options.indexOf(o) + 1 };
-          return { ...o, type: 'avatar', val: Math.random().toString(36).substring(7) };
-      }));
+      const newOpt = { id: Date.now(), label: "", seed: Math.random(), votes: 0, percent: 0 };
+      const newOpts = [...options, newOpt];
+      setOptions(newOpts); updateSession({ options: newOpts });
   };
 
-  // --- HS ACTIONS ---
-  const handleSelect = (id) => {
-      if (isTeacher) return; 
-      if (status !== 'ACTIVE' || hasVoted) return; 
-      setSelectedId(id);
+  const removeOption = (id) => {
+      const newOpts = options.filter(o => o.id !== id);
+      setOptions(newOpts); updateSession({ options: newOpts });
   };
+
+  const randomizeIcon = (idx) => {
+      const newOpts = [...options];
+      newOpts[idx].seed = Math.random();
+      setOptions(newOpts); updateSession({ options: newOpts });
+  };
+
+  const changeIconMode = (mode) => {
+      setIconMode(mode);
+      updateSession({ iconMode: mode });
+  };
+
+  const handleSelect = (id) => { if (status !== 'ACTIVE' || hasVoted || isTeacher) return; setSelectedId(id); };
 
   const handleSubmitVote = async () => {
     if (!selectedId) return;
-    if (status !== 'ACTIVE') {
-        alert("Bình chọn đã kết thúc!");
-        return;
-    }
-
-    setHasVoted(true); 
-    const docRef = doc(firestore, "system_vote", VOTE_DOC_ID);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-        const currentData = snap.data();
-        if (currentData.status !== 'ACTIVE') return;
-
-        const currentOptions = currentData.options;
-        const newOpts = currentOptions.map(opt => opt.id === selectedId ? { ...opt, votes: opt.votes + 1 } : opt);
-        const total = newOpts.reduce((acc, cur) => acc + cur.votes, 0);
-        const finalOptions = newOpts.map(opt => ({
-            ...opt,
-            percent: total === 0 ? 0 : Math.round((opt.votes / total) * 100)
-        }));
+    setHasVoted(true);
+    const docRef = doc(firestore, "vote_sessions", SESSION_ID);
+    const docSnap = await getDoc(docRef);
+    if(docSnap.exists()) {
+        const currentData = docSnap.data();
+        const newOptions = currentData.options.map(opt => opt.id === selectedId ? { ...opt, votes: opt.votes + 1 } : opt);
+        const total = newOptions.reduce((acc, cur) => acc + cur.votes, 0);
+        const finalOptions = newOptions.map(opt => ({ ...opt, percent: total === 0 ? 0 : Math.round((opt.votes / total) * 100) }));
         await updateDoc(docRef, { options: finalOptions });
     }
   };
 
-  // --- EFFECTS ---
+  // --- RENDER HELPERS ---
+  const renderIcon = (index, seed) => {
+      if (iconMode === 'ABC') return <span className="font-black text-2xl text-orange-500 drop-shadow-md">{String.fromCharCode(65 + index)}</span>;
+      if (iconMode === '123') return <span className="font-black text-2xl text-orange-500 drop-shadow-md">{index + 1}</span>;
+      if (iconMode === 'GAME') {
+          const iconIndex = Math.floor((typeof seed === 'number' ? seed : index) * 100) % GAME_ICONS.length;
+          const GameIcon = GAME_ICONS[iconIndex];
+          return <GameIcon className="text-orange-400 drop-shadow-md" size={28} />;
+      }
+      if (iconMode === 'AVATAR') return <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`} alt="icon" className="w-full h-full object-cover" />;
+      return null;
+  };
+
+  const formatTime = (seconds) => {
+    if(seconds <= 0 || isNaN(seconds)) return "00:00";
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
+  };
+
   const triggerGrandConfetti = () => {
-    const end = Date.now() + 3000;
+    const duration = 3000;
+    const end = Date.now() + duration;
+    const colors = ['#ff0000', '#ffa500', '#ffff00', '#ff4500'];
     (function frame() {
-      confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ff0000', '#ffa500'] });
-      confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ff0000', '#ffa500'] });
+      confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: colors });
+      confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: colors });
       if (Date.now() < end) requestAnimationFrame(frame);
     }());
   };
 
-  const renderIcon = (opt) => {
-      if (opt.type === 'avatar') return <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${opt.val}`} className="w-full h-full object-cover" />;
-      if (opt.type === 'letter') return <span className="text-xl md:text-2xl font-black text-white">{opt.val}</span>;
-      if (opt.type === 'number') return <span className="text-xl md:text-2xl font-black text-white">{opt.val}</span>;
-  };
-
-  // --- SORTING & RANKING (Xử lý hiển thị) ---
-  // Nếu đã kết thúc: Sắp xếp theo phiếu giảm dần
-  const displayOptions = status === 'ENDED' 
-      ? [...options].sort((a, b) => b.votes - a.votes) 
-      : options;
-
-  if (loading) return <div className="h-screen bg-black flex items-center justify-center text-white">Đang tải dữ liệu...</div>;
+  if (loading) return <div className="h-screen bg-[#020202] text-white flex items-center justify-center"><Loader2 className="animate-spin text-orange-500" size={40}/></div>;
 
   return (
-    <div className="h-screen bg-[#050505] text-white font-sans flex flex-col relative overflow-hidden selection:bg-orange-500 selection:text-white">
-      {/* BACKGROUND */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-orange-900/20 via-[#050505] to-black z-0 pointer-events-none"></div>
+    <div className="h-screen bg-[#020202] text-white font-sans flex flex-col relative overflow-hidden selection:bg-orange-500 selection:text-black">
+      
+      {/* BACKGROUND GRAPHICS */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-orange-700/40 via-[#050202] to-black z-0 pointer-events-none"></div>
+      <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-orange-900/30 to-transparent z-0 pointer-events-none"></div>
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-600 via-yellow-500 to-red-600 animate-pulse z-50 shadow-[0_0_20px_rgba(255,100,0,0.7)]"></div>
 
-      {/* --- HEADER --- */}
-      <header className="relative z-10 pt-4 pb-2 shrink-0 flex items-center justify-between px-4">
-        <button onClick={() => router.push('/')} className="p-2 bg-slate-800/50 hover:bg-slate-700 rounded-xl border border-slate-700 transition group" title="Về trang chủ">
-            <Home size={20} className="text-slate-400 group-hover:text-white"/>
-        </button>
-
-        <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center top-6 w-full pointer-events-none">
-            <h3 className="text-5xl md:text-7xl font-black italic uppercase tracking-tighter fire-text drop-shadow-2xl animate-fire-breathe select-none text-center leading-none">
-            VOTE
-            </h3>
-            {timerText && status === 'ACTIVE' && (
-                <div className="bg-orange-950/90 border border-orange-500/50 px-4 py-1 rounded-full text-xs md:text-sm font-mono text-orange-400 animate-pulse mt-2 shadow-lg z-20">
-                    {timerText}
-                </div>
+      {/* --- HEADER (COMPACT 2/3) --- */}
+      <header className="relative z-20 flex flex-col shrink-0 bg-black/60 backdrop-blur-md border-b border-orange-600/50 shadow-[0_4px_15px_rgba(234,88,12,0.4)]">
+        {/* Row 1 */}
+        <div className="flex items-center justify-between px-3 pt-2 pb-0 w-full">
+            <button onClick={() => router.push('/')} className="p-1.5 bg-slate-900/80 hover:bg-orange-700 rounded-lg text-orange-300 hover:text-white transition-all border border-orange-900 hover:border-orange-400 shadow-[0_0_8px_rgba(249,115,22,0.3)] group">
+                <Home size={16} className="group-hover:scale-110 transition-transform" strokeWidth={2.5} />
+            </button>
+            {isTeacher ? (
+                <div className="px-2 py-0.5 rounded-full bg-orange-600/80 border border-orange-400 text-[9px] font-black uppercase text-white shadow-sm">Teacher</div>
+            ) : (
+                <div className="px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-600 text-[9px] font-black uppercase text-slate-400">Student</div>
             )}
         </div>
 
-        {isTeacher ? (
-            <div className="w-10 h-10 rounded-full bg-orange-600 flex items-center justify-center font-bold text-xs border-2 border-white shadow-lg z-20" title="Giáo viên">GV</div>
-        ) : (
-            <div className="w-10 h-10 z-20"></div> 
-        )}
+        {/* Row 2 */}
+        <div className="flex flex-col items-center justify-center pb-2 -mt-3">
+            <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter fire-text drop-shadow-[0_0_15px_rgba(255,100,0,0.8)] leading-none select-none">
+            VOTE
+            </h1>
+            <div className="mt-0.5 flex flex-col items-center">
+                {status === 'SCHEDULED' && <span className="text-yellow-500 font-bold uppercase text-[10px] animate-pulse flex items-center justify-center gap-1"><Clock size={10}/> Sắp diễn ra</span>}
+                {status === 'ACTIVE' && (
+                    <div className="inline-flex items-center gap-1.5 bg-orange-950/60 px-3 py-0.5 rounded-full border border-orange-500 text-orange-300 shadow-[0_0_10px_rgba(249,115,22,0.4)] animate-pulse">
+                        <Clock size={12} className="animate-spin-slow text-yellow-400"/>
+                        <span className="font-mono font-black text-sm tracking-wider text-yellow-300">{formatTime(timeLeft)}</span>
+                    </div>
+                )}
+                {status === 'ENDED' && <span className="text-red-500 font-black uppercase text-xs tracking-widest drop-shadow-[0_0_8px_rgba(220,38,38,0.8)] flex items-center justify-center gap-1"><Lock size={12}/> KẾT THÚC</span>}
+                
+                {/* [MỚI] HIỂN THỊ TỔNG SỐ PHIẾU */}
+                {(status === 'ACTIVE' || status === 'ENDED') && (
+                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1 flex items-center gap-1 animate-in slide-in-from-top-1">
+                        <Users size={10} className="text-orange-500"/> Tổng phiếu: <span className="text-white">{totalVotes}</span>
+                    </div>
+                )}
+            </div>
+        </div>
       </header>
 
       {/* --- MAIN CONTENT --- */}
-      <main className="flex-1 px-4 pt-28 md:pt-36 z-10 flex flex-col max-w-lg mx-auto w-full overflow-hidden pb-4">
+      <main className="flex-1 px-4 pt-4 pb-24 z-10 flex flex-col w-full max-w-lg mx-auto overflow-hidden">
         
         {/* TOPIC */}
-        <div className="text-center shrink-0 mb-4">
+        <div className="mb-4 text-center shrink-0 relative">
             {isTeacher && status === 'SETUP' ? (
-                <div className="space-y-4 animate-in slide-in-from-top-5">
-                    <input 
-                        value={topic} 
-                        onChange={(e) => { setTopic(e.target.value); updateFirebase({ topic: e.target.value }); }}
-                        className="w-full bg-transparent text-center text-xl font-bold text-white uppercase border-b border-slate-600 focus:border-orange-500 outline-none pb-2 placeholder:text-slate-600 transition-colors"
-                        placeholder="NHẬP CHỦ ĐỀ..."
-                    />
-                    <div className="grid grid-cols-2 gap-3 bg-slate-900/80 p-4 rounded-xl border border-slate-700 shadow-lg">
-                        <div className="flex flex-col">
-                            <label className="text-[10px] text-slate-400 uppercase font-bold mb-1 flex items-center gap-1"><Calendar size={10}/> Bắt đầu (Tùy chọn)</label>
-                            <input type="datetime-local" value={startTime} onChange={(e) => { setStartTime(e.target.value); updateFirebase({ startTime: e.target.value }); }}
-                                className="bg-black text-xs text-white p-2 rounded border border-slate-600 focus:border-orange-500 outline-none w-full font-mono cursor-pointer hover:border-slate-500 transition"/>
-                        </div>
-                        <div className="flex flex-col">
-                            <label className="text-[10px] text-slate-400 uppercase font-bold mb-1 flex items-center gap-1"><Lock size={10}/> Kết thúc (Tùy chọn)</label>
-                            <input type="datetime-local" value={endTime} onChange={(e) => { setEndTime(e.target.value); updateFirebase({ endTime: e.target.value }); }}
-                                className="bg-black text-xs text-white p-2 rounded border border-slate-600 focus:border-orange-500 outline-none w-full font-mono cursor-pointer hover:border-slate-500 transition"/>
-                        </div>
-                    </div>
-                </div>
+                <input 
+                    value={topic}
+                    onChange={(e) => { setTopic(e.target.value); updateSession({ topic: e.target.value }); }}
+                    className="w-full bg-slate-900/80 text-center text-lg font-black text-white uppercase border-2 border-orange-500/50 focus:border-orange-400 outline-none py-3 px-4 rounded-xl placeholder:text-slate-500 transition-all shadow-lg"
+                    placeholder="NHẬP CHỦ ĐỀ TRẬN ĐẤU..."
+                />
             ) : (
-                <h2 className="text-xl md:text-2xl font-black text-white uppercase leading-tight drop-shadow-md pb-2 border-b-2 border-orange-500/30 inline-block px-6">
-                    {topic}
-                </h2>
+                <div className="bg-gradient-to-r from-transparent via-orange-900/40 to-transparent border-y border-orange-500/30 py-2">
+                    <h2 className="text-lg md:text-xl font-black text-white uppercase leading-tight drop-shadow-lg break-words">{topic}</h2>
+                </div>
             )}
         </div>
 
-        {/* LIST OPTIONS */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-4">
-          {!isTeacher && status === 'SETUP' ? (
-              <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-4">
-                  <div className="w-16 h-16 rounded-full bg-slate-900 flex items-center justify-center animate-pulse border border-slate-700">
-                      <Settings size={32} className="animate-spin-slow"/>
-                  </div>
-                  <p className="text-sm font-bold uppercase tracking-widest">Giáo viên đang chuẩn bị...</p>
-              </div>
-          ) : (
-              <div className="space-y-3">
-                {displayOptions.map((opt, index) => {
-                    const isSelected = selectedId === opt.id;
-                    // Logic hiện kết quả: Khi ENDED hoặc GV (khi Active)
-                    const showResult = status === 'ENDED' || (isTeacher && status !== 'SETUP');
-                    
-                    // Logic Vinh Danh (Chỉ khi ENDED và có phiếu)
-                    const maxVotes = Math.max(...options.map(o => o.votes));
-                    const isWinner = status === 'ENDED' && opt.votes === maxVotes && opt.votes > 0;
-                    const rank = status === 'ENDED' ? index + 1 : 0; // Rank theo thứ tự sort
+        {/* OPTIONS LIST - SỬ DỤNG 'displayOptions' ĐỂ SORT */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1 p-1">
+          {displayOptions.map((opt, index) => {
+            const isSelected = selectedId === opt.id;
+            const showResult = status === 'ENDED' || (isTeacher && status === 'ACTIVE');
+            const isWinner = showResult && opt.percent > 0 && opt.percent >= Math.max(...options.map(o => o.percent));
 
-                    return (
-                    <div 
-                        key={opt.id}
-                        onClick={() => handleSelect(opt.id)}
-                        className={`
-                        relative group overflow-hidden rounded-xl border-2 transition-all duration-500 shrink-0 select-none
-                        ${/* Cursor */ !isTeacher && status === 'ACTIVE' && !hasVoted ? 'cursor-pointer hover:border-slate-500 hover:bg-slate-900' : 'cursor-default'}
-                        ${/* Select */ isSelected && status === 'ACTIVE' ? 'border-orange-500 bg-orange-900/30 scale-[1.01] shadow-[0_0_15px_rgba(249,115,22,0.3)]' : 'border-slate-800 bg-slate-900/60'}
-                        ${/* Winner */ isWinner ? 'border-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.6)] bg-gradient-to-r from-yellow-900/40 to-black z-10 scale-[1.02]' : ''}
-                        `}
-                    >
-                        {/* Background Progress */}
-                        {showResult && (
-                            <div className={`absolute top-0 left-0 h-full transition-all duration-1000 ease-out opacity-30 ${isWinner ? 'bg-yellow-500' : 'bg-slate-500'}`} style={{ width: `${opt.percent}%` }}></div>
-                        )}
-
-                        <div className="relative p-3 flex items-center gap-3 z-10">
-                            {/* RANKING BADGE (Khi ENDED) */}
-                            {status === 'ENDED' && (
-                                <div className={`absolute top-0 left-0 w-8 h-8 flex items-center justify-center font-black text-xs z-20 rounded-br-xl shadow-lg
-                                    ${rank === 1 ? 'bg-yellow-500 text-black' : rank === 2 ? 'bg-slate-300 text-black' : rank === 3 ? 'bg-orange-700 text-white' : 'bg-slate-800 text-slate-500'}
-                                `}>
-                                    {rank === 1 ? <Crown size={14} fill="currentColor"/> : `#${rank}`}
-                                </div>
-                            )}
-
-                            {/* Icon */}
-                            <div 
-                                onClick={(e) => { e.stopPropagation(); if(isTeacher && status==='SETUP') cycleIconType(opt.id); }}
-                                className={`w-12 h-12 rounded-lg shrink-0 border flex items-center justify-center overflow-hidden relative transition-colors
-                                    ${isTeacher && status === 'SETUP' ? 'cursor-pointer hover:border-orange-500' : ''}
-                                    ${isWinner ? 'border-yellow-400 bg-yellow-500/20' : 'border-slate-600 bg-slate-800'}
-                                    ${status === 'ENDED' ? 'ml-4' : ''} 
-                                `}
-                            >
-                                {renderIcon(opt)}
-                                {isTeacher && status === 'SETUP' && <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-bold text-[10px]"><Edit size={14}/></div>}
-                            </div>
-
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                                {isTeacher && status === 'SETUP' ? (
-                                    <input 
-                                        value={opt.label} onChange={(e) => updateOptionLabel(opt.id, e.target.value)}
-                                        className="w-full bg-transparent font-bold uppercase text-white outline-none placeholder:text-slate-600 text-sm border-b border-transparent focus:border-slate-500"
-                                        placeholder={`Lựa chọn ${index + 1}`}
-                                    />
-                                ) : (
-                                    <div className="flex flex-col">
-                                        <h3 className={`font-bold uppercase truncate text-sm ${isSelected ? 'text-orange-400' : isWinner ? 'text-yellow-400' : 'text-slate-200'}`}>
-                                            {opt.label}
-                                        </h3>
-                                        {/* Result Bar */}
-                                        {showResult && (
-                                            <div className="flex items-center gap-2 mt-1 animate-in fade-in">
-                                                <div className="h-1.5 flex-1 bg-slate-800 rounded-full overflow-hidden">
-                                                    <div className={`h-full ${isWinner ? 'bg-yellow-400' : 'bg-orange-600'}`} style={{width: `${opt.percent}%`}}></div>
-                                                </div>
-                                                <span className={`text-[10px] font-mono ${isWinner ? 'text-yellow-400 font-bold' : 'text-slate-400'}`}>{opt.votes} ({opt.percent}%)</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Actions Right */}
-                            <div className="text-right shrink-0 flex items-center gap-2">
-                                {isTeacher && status === 'SETUP' ? (
-                                    <button onClick={(e) => { e.stopPropagation(); removeOption(opt.id); }} className="text-slate-600 hover:text-red-500 p-2"><Trash2 size={18}/></button>
-                                ) : (
-                                    status === 'ACTIVE' && !isTeacher && (
-                                        <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${isSelected ? 'border-orange-500 bg-orange-500' : 'border-slate-600'}`}>
-                                            {isSelected && <CheckCircle size={14} className="text-white" fill="currentColor"/>}
-                                        </div>
-                                    )
-                                )}
-                                
-                                {status === 'ENDED' && isWinner && (
-                                    <Trophy size={24} className="text-yellow-400 animate-bounce drop-shadow-[0_0_10px_gold]" fill="currentColor"/>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                    );
-                })}
-
-                {isTeacher && status === 'SETUP' && (
-                    <button onClick={addOption} className="w-full py-3 border-2 border-dashed border-slate-700 rounded-xl text-slate-500 hover:text-orange-500 hover:border-orange-500/50 flex items-center justify-center gap-2 text-xs font-bold uppercase transition hover:bg-slate-900/50">
-                        <Plus size={16}/> Thêm lựa chọn
-                    </button>
+            return (
+              <div 
+                key={opt.id}
+                onClick={() => handleSelect(opt.id)}
+                className={`
+                  relative group overflow-hidden rounded-xl border-2 transition-all duration-300 shrink-0
+                  ${!isTeacher && status === 'ACTIVE' && !hasVoted ? 'cursor-pointer hover:border-orange-400 hover:bg-slate-900/80' : 'cursor-default'}
+                  ${isSelected && status === 'ACTIVE' ? 'border-orange-500 bg-gradient-to-r from-orange-900/60 to-red-900/60 shadow-lg scale-[1.02]' : 'border-slate-800/80 bg-slate-900/40'}
+                  ${status === 'SETUP' ? 'border-dashed border-slate-600/60' : ''}
+                  ${status === 'ENDED' ? 'transition-transform duration-700 ease-out' : ''}
+                `}
+                style={{ order: status === 'ENDED' ? -opt.votes : 0 }} 
+              >
+                {/* Result Bar */}
+                {showResult && (
+                  <div className={`absolute top-0 left-0 h-full transition-all duration-1000 ease-out ${isWinner ? 'bg-gradient-to-r from-red-700 via-orange-600 to-yellow-500' : 'bg-slate-700/50'}`} style={{ width: `${opt.percent}%` }}></div>
                 )}
-              </div>
-          )}
 
-          {/* INPUT Ý KIẾN */}
-          {!isTeacher && status === 'ACTIVE' && !hasVoted && allowComment && (
-            <div className="mt-4 animate-in slide-in-from-bottom-2">
-                <label className="text-[10px] font-bold text-orange-500 uppercase tracking-widest mb-1 flex items-center gap-1">
-                    <MessageSquare size={12}/> Ý kiến khác
-                </label>
-                <textarea 
-                    value={comment} onChange={(e) => setComment(e.target.value)}
-                    placeholder="Nhập ý kiến..." rows="2"
-                    className="w-full bg-slate-900/50 border-2 border-slate-700 rounded-xl p-3 text-sm text-white focus:border-orange-500 outline-none resize-none placeholder:text-slate-600"
-                />
-            </div>
-          )}
+                <div className="relative p-3 flex items-center gap-3 z-10">
+                  {/* ICON */}
+                  <div 
+                    onClick={() => isTeacher && status === 'SETUP' && (iconMode === 'GAME' || iconMode === 'AVATAR') && randomizeIcon(index)}
+                    className={`
+                        w-12 h-12 rounded-xl shrink-0 border-2 overflow-hidden relative transition-all flex items-center justify-center bg-black/40
+                        ${isWinner ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.7)] scale-110' : isSelected ? 'border-orange-400' : 'border-slate-700'} 
+                        ${isTeacher && status === 'SETUP' && (iconMode === 'GAME' || iconMode === 'AVATAR') ? 'cursor-pointer hover:border-orange-500 hover:shadow-[0_0_10px_orange]' : ''}
+                    `}
+                  >
+                    {renderIcon(index, opt.seed)}
+                    {isTeacher && status === 'SETUP' && (iconMode === 'GAME' || iconMode === 'AVATAR') && <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 hover:opacity-100"><RotateCcw size={16} className="text-orange-300"/></div>}
+                    {isWinner && <div className="absolute inset-0 flex items-center justify-center bg-black/50"><Trophy size={20} className="text-yellow-300 drop-shadow-md animate-bounce"/></div>}
+                  </div>
+
+                  {/* Label */}
+                  <div className="flex-1 min-w-0">
+                    {isTeacher && status === 'SETUP' ? (
+                        <input 
+                            value={opt.label}
+                            onChange={(e) => {
+                                const newOpts = options.map(o => o.id === opt.id ? {...o, label: e.target.value} : o);
+                                setOptions(newOpts);
+                            }}
+                            onBlur={() => updateSession({ options })} 
+                            className="w-full bg-transparent font-bold text-white outline-none text-base placeholder:text-slate-600 border-b border-orange-500/30 focus:border-orange-500 pb-1"
+                            placeholder="Nhập nội dung..."
+                        />
+                    ) : (
+                        <h3 className={`font-bold text-base uppercase truncate ${isSelected ? 'text-orange-300 drop-shadow-[0_0_5px_orange]' : 'text-slate-200'}`}>{opt.label}</h3>
+                    )}
+                    {showResult && <div className="text-[10px] text-slate-300 font-bold mt-0.5 flex items-center gap-1"><Users size={10}/> {opt.votes} phiếu</div>}
+                  </div>
+
+                  {/* Right Action */}
+                  <div className="text-right shrink-0 flex items-center gap-2">
+                    {showResult ? (
+                      <span className={`text-lg font-black italic ${isWinner ? 'text-yellow-300 drop-shadow-[0_0_10px_rgba(250,204,21,0.8)]' : 'text-slate-400'}`}>{opt.percent}%</span>
+                    ) : (
+                        !isTeacher && status === 'ACTIVE' && (
+                            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${isSelected ? 'border-orange-500 bg-orange-500 shadow-[0_0_10px_orange]' : 'border-slate-600 bg-slate-800'}`}>
+                                {isSelected && <CheckCircle2 size={16} className="text-white" strokeWidth={3}/>}
+                            </div>
+                        )
+                    )}
+                    {isTeacher && status === 'SETUP' && (
+                        <button onClick={(e) => { e.stopPropagation(); removeOption(opt.id); }} className="text-slate-500 hover:text-red-500 p-1.5 hover:bg-red-900/30 rounded-md transition-colors"><Trash2 size={18}/></button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
           
           {isTeacher && status === 'SETUP' && (
-              <div className="mt-4 flex items-center gap-2 justify-center pb-4">
-                  <div onClick={() => { setAllowComment(!allowComment); updateFirebase({allowComment: !allowComment}); }} className={`w-8 h-4 rounded-full p-0.5 cursor-pointer transition-colors ${allowComment ? 'bg-green-600' : 'bg-slate-700'}`}>
-                      <div className={`w-3 h-3 bg-white rounded-full shadow transition-transform ${allowComment ? 'translate-x-4' : ''}`}></div>
-                  </div>
-                  <span className="text-[10px] text-slate-400 uppercase font-bold">Cho phép nhập ý kiến</span>
-              </div>
+              <button onClick={addOption} className="w-full py-4 border-2 border-dashed border-slate-700 hover:border-orange-500 bg-slate-900/50 hover:bg-orange-900/20 rounded-xl text-slate-400 hover:text-orange-400 transition-all flex items-center justify-center gap-2 text-sm font-bold uppercase group shadow-[0_0_10px_transparent] hover:shadow-[0_0_15px_rgba(249,115,22,0.3)]">
+                  <Plus size={18} className="group-hover:scale-125 transition-transform"/> Thêm lựa chọn
+              </button>
           )}
         </div>
+
+        {/* --- SETTINGS AREA --- */}
+        {isTeacher && status === 'SETUP' && (
+            <div className="mt-3 space-y-3 animate-in slide-in-from-bottom-2">
+                {/* ICON MODE */}
+                <div className="bg-slate-900/90 border-2 border-slate-700 p-3 rounded-xl shadow-xl flex gap-2 overflow-x-auto">
+                    {[
+                        { id: 'ABC', icon: <Type size={16}/>, label: 'ABC' },
+                        { id: '123', icon: <Hash size={16}/>, label: '123' },
+                        { id: 'GAME', icon: <Sword size={16}/>, label: 'GAME' },
+                        { id: 'AVATAR', icon: <Users size={16}/>, label: 'AVATAR' },
+                    ].map(m => (
+                        <button 
+                            key={m.id} 
+                            onClick={() => changeIconMode(m.id)}
+                            className={`flex-1 py-2 px-3 rounded-lg text-[10px] font-bold uppercase flex items-center justify-center gap-1 transition-all ${iconMode === m.id ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                        >
+                            {m.icon} {m.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* SCHEDULE */}
+                <div className="bg-slate-900/90 border-2 border-slate-700 p-3 rounded-xl shadow-xl">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-orange-400 uppercase flex items-center gap-2"><Calendar size={14}/> Hẹn giờ tự động</span>
+                        <label className="relative inline-flex items-center cursor-pointer group">
+                            <input type="checkbox" checked={useSchedule} onChange={(e) => setUseSchedule(e.target.checked)} className="sr-only peer"/>
+                            <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-600 group-hover:shadow-[0_0_10px_orange]"></div>
+                        </label>
+                    </div>
+                    {useSchedule && (
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="text-[9px] text-slate-400 uppercase block mb-1 font-bold">Bắt đầu</label>
+                                <input type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full bg-black border border-slate-600 focus:border-orange-500 rounded p-1.5 text-[10px] text-white outline-none font-bold"/>
+                            </div>
+                            <div>
+                                <label className="text-[9px] text-slate-400 uppercase block mb-1 font-bold">Kết thúc</label>
+                                <input type="datetime-local" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-black border border-slate-600 focus:border-orange-500 rounded p-1.5 text-[10px] text-white outline-none font-bold"/>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+
       </main>
 
-      {/* --- FOOTER --- */}
-      <div className="shrink-0 p-4 bg-gradient-to-t from-black via-black/95 to-transparent z-20">
+      {/* --- FOOTER CONTROLS --- */}
+      <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black via-[#0a0500] to-transparent z-20">
         {isTeacher && (
             <div className="flex gap-2">
                 {status === 'SETUP' && (
-                    <button onClick={handleManualStart} className="flex-1 py-3 bg-gradient-to-r from-orange-600 to-red-600 rounded-xl font-black uppercase tracking-widest shadow-lg hover:scale-[1.02] active:scale-95 transition text-white text-sm flex items-center justify-center gap-2">
-                        <Play size={18} fill="currentColor"/> BẮT ĐẦU NGAY
+                    <button onClick={handleStartVote} className="flex-1 py-3.5 bg-gradient-to-r from-orange-600 via-red-600 to-orange-700 rounded-xl font-black uppercase tracking-widest shadow-[0_0_25px_rgba(234,88,12,0.6)] hover:scale-[1.02] active:scale-95 transition-all text-white text-sm md:text-base flex items-center justify-center gap-2 border-2 border-orange-400">
+                        <Play size={20} fill="currentColor" className="animate-pulse"/> {useSchedule && startTime ? 'Lên lịch & Kích hoạt' : 'BẮT ĐẦU NGAY'}
                     </button>
                 )}
-                {(status === 'ACTIVE' || status === 'PENDING') && (
-                    <button onClick={handleManualEnd} className="flex-1 py-3 bg-slate-800 hover:bg-red-600 border border-slate-600 hover:border-red-500 rounded-xl font-black uppercase tracking-widest transition text-white text-sm flex items-center justify-center gap-2">
-                        <Square size={16} fill="currentColor"/> KẾT THÚC
+                {(status === 'ACTIVE' || status === 'SCHEDULED') && (
+                    <button onClick={handleEndVote} className="flex-1 py-3.5 bg-slate-800 hover:bg-red-700 border-2 border-slate-600 hover:border-red-500 rounded-xl font-black uppercase tracking-widest transition-all text-white shadow-[0_0_15px_rgba(0,0,0,0.5)] hover:shadow-[0_0_25px_rgba(220,38,38,0.6)] text-sm md:text-base flex items-center justify-center gap-2 group active:scale-95">
+                        <Square size={18} fill="currentColor" className="group-hover:animate-ping"/> KẾT THÚC
                     </button>
                 )}
                 {status === 'ENDED' && (
-                    <button onClick={handleReset} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl font-bold uppercase text-slate-300 text-sm flex items-center justify-center gap-2">
-                        <RotateCcw size={16}/> SETUP LẠI
+                    <button onClick={handleReset} className="flex-1 py-3.5 bg-slate-900 hover:bg-slate-800 border-2 border-slate-700 hover:border-orange-500 rounded-xl font-bold uppercase text-slate-300 hover:text-orange-300 transition-all text-sm md:text-base flex items-center justify-center gap-2 shadow-lg active:scale-95">
+                        <RotateCcw size={18}/> TẠO BÌNH CHỌN MỚI
                     </button>
                 )}
             </div>
         )}
 
-        {!isTeacher && status === 'ACTIVE' && (
-            !hasVoted ? (
-                <button 
-                    onClick={handleSubmitVote} disabled={!selectedId}
-                    className={`w-full py-3 rounded-xl font-black text-sm uppercase italic tracking-widest shadow-lg transition-all flex items-center justify-center gap-2
-                    ${!selectedId ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' : 'bg-gradient-to-r from-orange-600 to-red-600 text-white hover:scale-[1.02] active:scale-95 border border-orange-400 shadow-orange-500/40 animate-pulse'}`}
-                >
-                    GỬI BÌNH CHỌN <Zap size={18} fill="currentColor" />
-                </button>
-            ) : (
-                <div className="w-full py-3 bg-green-900/30 border border-green-500/30 rounded-xl flex items-center justify-center gap-2 text-green-400 font-bold uppercase text-sm animate-in zoom-in">
-                    <Users size={16}/> Đã gửi phiếu
-                </div>
-            )
-        )}
-        
-        {!isTeacher && status === 'PENDING' && (
-            <div className="w-full py-3 bg-slate-800 border border-slate-700 rounded-xl flex items-center justify-center gap-2 text-slate-400 font-bold uppercase text-sm">
-                <Clock size={16}/> Chờ bắt đầu...
-            </div>
+        {!isTeacher && status === 'ACTIVE' && !hasVoted && (
+            <button onClick={handleSubmitVote} disabled={!selectedId} className={`w-full py-3.5 rounded-xl font-black text-lg uppercase italic tracking-widest shadow-lg transition-all flex items-center justify-center gap-2 border-2 ${!selectedId ? 'bg-slate-800/80 text-slate-500 cursor-not-allowed border-slate-700' : 'bg-gradient-to-r from-orange-600 via-red-600 to-yellow-600 text-white hover:scale-[1.02] active:scale-95 border-orange-400 shadow-[0_0_30px_rgba(234,88,12,0.6)] animate-pulse'}`}>
+                GỬI BÌNH CHỌN <Zap size={22} fill="currentColor" className={selectedId ? 'animate-bounce' : ''} />
+            </button>
         )}
 
-        {/* THÔNG BÁO CHO HỌC SINH KHI KẾT THÚC */}
-        {!isTeacher && status === 'ENDED' && (
-            <div className="w-full py-3 bg-slate-900 border border-yellow-500/30 rounded-xl flex items-center justify-center gap-2 text-yellow-500 font-bold uppercase text-sm shadow-[0_0_15px_rgba(234,179,8,0.2)] animate-in slide-in-from-bottom-2">
-                <Trophy size={16} /> Kết quả bình chọn
+        {!isTeacher && hasVoted && status === 'ACTIVE' && (
+            <div className="text-center text-sm text-green-400 font-bold uppercase flex items-center justify-center gap-2 bg-slate-900/90 py-3 rounded-xl border-2 border-green-600/50 shadow-[0_0_20px_rgba(34,197,94,0.3)] animate-in zoom-in">
+                <CheckCircle2 size={18} className="text-green-500 animate-pulse"/> Đã gửi phiếu! Chờ kết quả chiến đấu...
+            </div>
+        )}
+        
+        {!isTeacher && (status === 'SETUP' || status === 'SCHEDULED') && (
+            <div className="text-center text-xs text-orange-400 animate-pulse font-bold uppercase bg-black/40 py-2 rounded-lg flex items-center justify-center gap-2">
+                <Loader2 size={14} className="animate-spin"/> {status === 'SCHEDULED' ? `Trận đấu bắt đầu lúc: ${new Date(startTime).toLocaleTimeString()}` : 'Đang chờ hiệu lệnh từ Giáo viên...'}
             </div>
         )}
       </div>
 
       <style jsx global>{`
         .fire-text {
-            background: linear-gradient(0deg, #ff9a00 0%, #ff5200 50%, #ff0000 100%);
+            background: linear-gradient(0deg, #ff8a00 0%, #ff2e00 50%, #fff 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 10px rgba(255, 69, 0, 0.8));
-            animation: burn 0.5s infinite alternate;
+            filter: drop-shadow(0 0 15px rgba(255, 80, 0, 0.8));
+            animation: textBurn 1.5s infinite alternate cubic-bezier(0.45, 0.05, 0.55, 0.95);
         }
-        @keyframes burn {
-            from { filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.6)) drop-shadow(0 0 10px #ff9a00); }
-            to { filter: drop-shadow(0 0 15px rgba(255, 0, 0, 0.8)) drop-shadow(0 0 20px #ff5200); }
-        }
-        @keyframes breathe {
-            0%, 100% { transform: scale(1) translateX(-50%); }
-            50% { transform: scale(1.02) translateX(-50%); }
-        }
-        .animate-fire-breathe {
-            animation: breathe 3s ease-in-out infinite;
+        @keyframes textBurn {
+            0% { filter: drop-shadow(0 0 10px rgba(255, 69, 0, 0.6)) brightness(1); transform: scale(1); }
+            100% { filter: drop-shadow(0 0 25px rgba(255, 140, 0, 1)) brightness(1.2); transform: scale(1.02); }
         }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
-        
-        input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-            filter: invert(1);
-            cursor: pointer;
-        }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: linear-gradient(to bottom, #ff4500, #ff8c00); border-radius: 10px; }
+        input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(1) sepia(1) saturate(5) hue-rotate(350deg); cursor: pointer; opacity: 0.8; }
+        input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
       `}</style>
     </div>
   );

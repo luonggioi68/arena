@@ -6,11 +6,12 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, orderBy, addDoc, serverTimestamp, setDoc, getDoc } from 'firebase/firestore';
 import { Flag, Plus, Trash2, LogOut, Edit, Loader2, Shield, Gamepad2, FileText, BarChart3, Download, Search, Swords, Lock, Unlock, RefreshCw, MessageSquare, ExternalLink, Settings, UserPlus, CheckCircle, Save, Key, Users, GraduationCap, Clock, Image, LayoutTemplate, Upload, X, Hash, Link as LinkIcon, FolderOpen, QrCode, CheckSquare, Zap, UserCog, Calendar, AlertTriangle, Layers, Database, Eye, EyeOff, Archive, ArrowRightCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import ExpiryAlert from '@/components/ExpiryAlert';
 
 const MASTER_EMAILS = ["luonggioi68@gmail.com"]; 
 
-// Danh sách khối và môn học (Đã đồng bộ với create-quiz.js)
-const GRADES = ['6', '7', '8', '9', '10', '11', '12', 'Khác'];
+// Danh sách khối và môn học
+const GRADES = ['1', '2', '3', '4', '5','6', '7', '8', '9', '10', '11', '12', 'Khác'];
 const SUBJECTS = [
     { id: 'Toán học', name: 'Toán Học', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
     { id: 'Ngữ văn', name: 'Ngữ Văn', color: 'text-pink-400', bg: 'bg-pink-500/10', border: 'border-pink-500/30' },
@@ -27,6 +28,7 @@ const SUBJECTS = [
     { id: 'Lịch sử và Địa lí', name: 'Sử - Địa', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' },
     { id: 'Công nghệ', name: 'Công Nghệ', color: 'text-gray-400', bg: 'bg-gray-500/10', border: 'border-gray-500/30' },
     { id: 'Hoạt động trải nghiệm', name: 'HĐTN', color: 'text-lime-400', bg: 'bg-lime-500/10', border: 'border-lime-500/30' },
+    { id: 'Tiếng Việt', name: 'Tiếng Việt', color: 'text-lime-400', bg: 'bg-lime-500/10', border: 'border-lime-500/30' },
     { id: 'Giáo dục quốc phòng và an ninh', name: 'GDQP', color: 'text-green-600', bg: 'bg-green-600/10', border: 'border-green-600/30' },
 ];
 
@@ -63,15 +65,14 @@ export default function Dashboard() {
   const [selectedAssigns, setSelectedAssigns] = useState([]);
   
   // State cho Arena Kho Game
-  const [repoGrade, setRepoGrade] = useState('10'); // Mặc định khối 10
-  const [repoSubject, setRepoSubject] = useState('ALL'); // Mặc định xem tất cả môn
+  const [repoGrade, setRepoGrade] = useState('10'); 
+  const [repoSubject, setRepoSubject] = useState('ALL'); 
   const [selectedRepoItems, setSelectedRepoItems] = useState([]);
   
   const [allowedEmails, setAllowedEmails] = useState([]);
   const [newEmail, setNewEmail] = useState('');
   const [uploading, setUploading] = useState(false);
   
-  // Refs cho upload ảnh
   const topBannerInput = useRef(null);
   const leftBannerInput = useRef(null);
   const rightBannerInput = useRef(null);
@@ -98,15 +99,48 @@ export default function Dashboard() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) { router.push('/'); return; }
       
-      let whitelist = [...MASTER_EMAILS];
+      // --- LOGIC KIỂM TRA QUYỀN VÀ HẠN DÙNG ---
+      let isMaster = MASTER_EMAILS.includes(currentUser.email);
+      let myPermission = null;
+      let allPermissions = [];
+
       try {
+          // Lấy toàn bộ danh sách cho phép (để dùng cho Admin tab)
           const snap = await getDocs(collection(firestore, "allowed_emails"));
-          setAllowedEmails(snap.docs.map(d => ({ id: d.id, ...d.data() }))); 
-          whitelist = [...whitelist, ...snap.docs.map(d => d.data().email)];
-      } catch (e) {}
+          allPermissions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setAllowedEmails(allPermissions);
+          
+          // Tìm quyền của user hiện tại
+          myPermission = allPermissions.find(p => p.email === currentUser.email);
+      } catch (e) {
+          console.error("Lỗi lấy danh sách quyền:", e);
+      }
       
-      if (!whitelist.includes(currentUser.email)) { alert(`Tài khoản chưa cấp quyền!`); await signOut(auth); router.push('/'); return; }
+      // Nếu không phải Master Admin thì phải kiểm tra chặt chẽ
+      if (!isMaster) {
+          // 1. Kiểm tra có trong danh sách không
+          if (!myPermission) { 
+              alert(`Tài khoản chưa được cấp quyền truy cập hệ thống!`); 
+              await signOut(auth); 
+              router.push('/'); 
+              return; 
+          }
+
+          // 2. Kiểm tra hạn sử dụng (BLOCK NẾU HẾT HẠN)
+          if (myPermission.expiredAt) {
+              const expireDate = new Date(myPermission.expiredAt.seconds * 1000);
+              const now = new Date();
+              
+              if (now > expireDate) {
+                  alert(`⛔ TÀI KHOẢN HẾT HẠN!\n\nTài khoản của thầy/cô đã hết hạn vào ngày ${expireDate.toLocaleDateString('vi-VN')}.\nVui lòng liên hệ Admin phone/zalo: 0383477162 để gia hạn.`);
+                  await signOut(auth);
+                  router.push('/');
+                  return;
+              }
+          }
+      }
       
+      // Nếu qua được cửa kiểm tra thì mới Set User và tải dữ liệu
       setUser(currentUser);
       
       try {
@@ -153,7 +187,7 @@ export default function Dashboard() {
   const saveUserConfig = async (e) => { e.preventDefault(); try { await setDoc(doc(firestore, "user_configs", user.uid), { ...userConfig, email: user.email }); alert("✅ Đã cập nhật Mã Nộp Bài và Cấu hình!"); } catch (e) { alert(e.message); } };
   const saveHomeConfig = async (e) => { e.preventDefault(); try { await setDoc(doc(firestore, "system_config", "homepage"), homeConfig); alert("✅ Đã lưu!"); } catch (e) { alert(e.message); } };
 
-  // --- LOGIC QUẢN LÝ USER ---
+  // --- LOGIC QUẢN LÝ USER (Cũ - Vẫn giữ để tương thích tab cũ nếu cần) ---
   const handleAddEmail = async (e) => {
       e.preventDefault();
       if (!newEmail.includes('@')) return alert("Email sai!");
@@ -180,26 +214,13 @@ export default function Dashboard() {
   const handleDeleteBulk = async () => { if (selectedAssigns.length === 0) return; if (!confirm(`Bạn có chắc chắn muốn xóa ${selectedAssigns.length} bài nộp này không?`)) return; setLoading(true); try { await Promise.all(selectedAssigns.map(id => deleteDoc(doc(firestore, "assignments", id)))); setAssignments(prev => prev.filter(a => !selectedAssigns.includes(a.id))); setSelectedAssigns([]); } catch (e) { console.error(e); alert("Lỗi khi xóa bài: " + e.message); } finally { setLoading(false); } };
 
   // --- LOGIC KHO GAME (REPO) ---
-// --- LOGIC KHO GAME (REPO) ---
   const handleMoveToRepo = async (id) => {
-      // Thêm thông báo rõ ràng hơn
       if(!confirm("Chuyển đề này sang Kho Game?\n- Đề sẽ biến mất khỏi Kho Vũ Khí.\n- Đề sẽ được CÔNG KHAI (Public) cho mọi người thấy.")) return;
-      
       try {
-          // Update database: Thêm origin và isPublic
-          await updateDoc(doc(firestore, "quizzes", id), { 
-              origin: 'GAME_REPO',
-              isPublic: true 
-          });
-
-          // Update state local để UI cập nhật ngay lập tức
+          await updateDoc(doc(firestore, "quizzes", id), { origin: 'GAME_REPO', isPublic: true });
           setQuizzes(prev => prev.map(q => q.id === id ? { ...q, origin: 'GAME_REPO', isPublic: true } : q));
-          
           alert("✅ Đã chuyển sang Kho Game và Công khai thành công!");
-      } catch (e) {
-          console.error(e);
-          alert("Lỗi: " + e.message);
-      }
+      } catch (e) { console.error(e); alert("Lỗi: " + e.message); }
   };
 
   const handleSelectRepoAll = (e, filteredList) => { if(e.target.checked) { setSelectedRepoItems(filteredList.map(q => q.id)); } else { setSelectedRepoItems([]); } };
@@ -216,16 +237,11 @@ export default function Dashboard() {
   };
   
   const handleCreateQuizForSubject = () => {
-    // Thêm tham số from=GAME_REPO để create-quiz.js biết nguồn gốc
     router.push(`/create-quiz?grade=${repoGrade}&subject=${repoSubject !== 'ALL' ? repoSubject : ''}&from=GAME_REPO`);
   };
 
   // --- MEMO DATA ---
-  // Lọc riêng Quiz cho Library (Chỉ hiện nếu không phải là GAME_REPO)
-  const libraryQuizzes = useMemo(() => {
-    return quizzes.filter(q => q.origin !== 'GAME_REPO');
-  }, [quizzes]);
-
+  const libraryQuizzes = useMemo(() => { return quizzes.filter(q => q.origin !== 'GAME_REPO'); }, [quizzes]);
   const myResults = useMemo(() => results.filter(r => quizzes.some(q => q.id === r.examId)), [results, quizzes]);
   const filteredResults = useMemo(() => myResults.filter(r => (filterExamId === 'ALL' || r.examId === filterExamId) && (filterClass === 'ALL' || r.studentClass === filterClass)), [myResults, filterExamId, filterClass]);
   const uniqueClasses = useMemo(() => [...new Set(myResults.map(r => r.studentClass).filter(Boolean))].sort(), [myResults]);
@@ -234,19 +250,13 @@ export default function Dashboard() {
   const uniqueAssignmentClasses = useMemo(() => { const classes = assignments.map(a => a.className).filter(c => c && c.trim() !== ''); return [...new Set(classes)].sort(); }, [assignments]);
   const filteredAssignments = useMemo(() => { return assignments.filter(a => filterClass === 'ALL' || a.className === filterClass); }, [assignments, filterClass]);
 
-  // Memo for Repo (Chỉ lấy đề có origin là GAME_REPO)
   const filteredRepoQuizzes = useMemo(() => {
     return quizzes.filter(q => {
-        // Chỉ lấy các đề thuộc Kho Game
         if (q.origin !== 'GAME_REPO') return false;
-
         const qGrade = q.grade || '10';
         const qSubject = q.subject || 'Khác';
-        
         const matchGrade = repoGrade === 'ALL' || qGrade.toString() === repoGrade.toString();
-        // So sánh theo ID môn học hoặc tên (vì data cũ có thể lưu mã)
         const matchSubject = repoSubject === 'ALL' || qSubject === repoSubject;
-        
         return matchGrade && matchSubject;
     });
   }, [quizzes, repoGrade, repoSubject]);
@@ -266,6 +276,7 @@ export default function Dashboard() {
             <button onClick={() => setActiveTab('ASSIGNMENTS')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'ASSIGNMENTS' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}><FolderOpen size={20}/>ARENA CHẤM BÀI</button>
             <button onClick={() => setActiveTab('SETTINGS')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'SETTINGS' ? 'bg-slate-700 text-white border border-white/20' : 'text-slate-400 hover:bg-white/5'}`}><Settings size={20}/>ARENA CẤU HÌNH</button>
             
+            {/* TAB DÀNH RIÊNG CHO MASTER ADMIN */}
             {MASTER_EMAILS.includes(user?.email) && (
                 <button onClick={() => setActiveTab('USERS')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'USERS' ? 'bg-pink-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}>
                     <UserCog size={20}/> QUẢN LÝ NGƯỜI DÙNG
@@ -277,7 +288,7 @@ export default function Dashboard() {
 
       <main className="flex-1 ml-64 p-8 overflow-y-auto min-h-screen bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
         
-        {/* TAB LIBRARY (Cũ) */}
+        {/* TAB LIBRARY */}
         {activeTab === 'LIBRARY' && (<div className="animate-in fade-in slide-in-from-bottom-4 duration-500"><header className="flex justify-between items-center mb-10"><div><h1 className="text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg">Kho Vũ Khí</h1><p className="text-slate-400 mt-1 font-medium">Quản lý các bộ đề cá nhân</p></div><button onClick={() => router.push('/create-quiz')} className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-6 py-3 rounded-xl font-black shadow-lg hover:scale-105 transition"><Plus size={20}/> Chế tạo đề mới</button></header><div className="grid grid-cols-3 gap-6">{libraryQuizzes.map(q=><div key={q.id} className={`bg-[#1e293b]/80 backdrop-blur-md rounded-[2rem] border transition-all duration-300 group overflow-hidden shadow-xl hover:shadow-2xl ${q.isExamActive ? 'border-red-500/50 shadow-red-500/10' : 'border-white/10 hover:border-indigo-500/50'}`}><div className="h-32 bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center relative overflow-hidden"><FileText size={48} className="text-indigo-400 group-hover:scale-110 transition-transform duration-500"/><div className="absolute top-4 left-4"><span className="bg-yellow-400 text-black px-2 py-1 rounded font-black text-xs shadow-lg flex items-center gap-1"><Hash size={12}/> {q.code || '---'}</span></div><div className="absolute top-4 right-4 flex flex-col items-end gap-1"><span className={`text-[10px] font-black px-2 py-1 rounded uppercase shadow-lg ${q.status === 'OPEN' ? 'bg-green-500 text-black' : 'bg-slate-700 text-slate-400'}`}>{q.status === 'OPEN' ? 'Game: Mở' : 'Game: Đóng'}</span>{q.isExamActive && (<span className="text-[10px] font-black px-2 py-1 rounded uppercase shadow-lg bg-red-600 text-white animate-pulse">ĐANG THI</span>)}</div></div><div className="p-6"><h3 className="text-xl font-black mb-1 truncate text-white uppercase italic tracking-tight">{q.title}</h3><div className="flex justify-between items-center mb-6"><p className="text-slate-400 text-xs font-bold uppercase tracking-widest">{q.questions?.length || 0} Mật lệnh</p><span className="text-slate-500 text-xs">{new Date(q.createdAt?.seconds * 1000).toLocaleDateString()}</span></div><div className="grid grid-cols-5 gap-2"><button onClick={() => handleToggleExamMode(q.id, q.isExamActive)} className={`col-span-2 py-2.5 rounded-xl font-black uppercase italic text-xs shadow transition-all flex items-center justify-center gap-1 ${q.isExamActive ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-slate-700 text-slate-300 hover:bg-red-600 hover:text-white'}`}><GraduationCap size={16}/> {q.isExamActive ? 'Dừng Thi' : 'Mở Thi'}</button><button onClick={() => handleToggleStatus(q.id, q.status)} className={`col-span-1 flex items-center justify-center rounded-xl transition-all border ${q.status === 'OPEN' ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-slate-700/50 text-slate-400'}`}>{q.status === 'OPEN' ? <Unlock size={18} /> : <Lock size={18} />}</button><button onClick={() => router.push(`/create-quiz?id=${q.id}`)} className="col-span-1 bg-slate-700 hover:bg-indigo-600 text-white rounded-xl transition flex items-center justify-center"><Edit size={16} /></button><button onClick={() => handleDeleteQuiz(q.id)} className="col-span-1 bg-slate-700 hover:bg-red-600 text-white rounded-xl transition flex items-center justify-center"><Trash2 size={16} /></button>
         <button onClick={() => router.push(`/race/${q.id}`)} className="col-span-3 bg-gradient-to-r from-orange-600 to-red-600 text-white py-3 rounded-xl font-black shadow-lg hover:shadow-orange-500/30 transition-all flex items-center justify-center gap-2 uppercase italic text-xs group-hover:animate-pulse"><Flag size={16} fill="currentColor"/> Biệt Đội</button>
         <button onClick={() => router.push(`/host/${q.id}`)} className="col-span-2 bg-white text-slate-900 py-3 rounded-xl font-black uppercase italic text-xs shadow hover:bg-indigo-50 transition-all flex items-center justify-center gap-1"><Swords size={16}/> Chiến Binh</button>
@@ -289,7 +300,7 @@ export default function Dashboard() {
         <button onClick={() => handleMoveToRepo(q.id)} className="col-span-5 bg-slate-800 hover:bg-rose-900/50 text-rose-400 hover:text-white py-2 rounded-xl font-bold uppercase text-[10px] flex items-center justify-center gap-2 mt-2 border border-slate-700 hover:border-rose-500/50 transition-all"><Archive size={14}/> Chuyển sang Kho Game</button>
         </div></div></div>)}</div></div>)}
         
-        {/* --- NEW TAB: ARENA KHO GAME --- */}
+        {/* TAB GAME REPO */}
         {activeTab === 'GAME_REPO' && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-500">
                 <header className="mb-8">
@@ -297,74 +308,41 @@ export default function Dashboard() {
                     <p className="text-slate-400 font-medium">Thư viện đề thi quy mô lớn - Phân loại theo Khối & Môn</p>
                 </header>
 
-                {/* FILTER SECTION */}
                 <div className="bg-[#1e293b] rounded-[2rem] p-6 border border-white/10 shadow-xl mb-8">
-                    {/* Chọn Khối */}
                     <div className="mb-6">
                         <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">1. Chọn Chiến Trường (Khối Lớp)</label>
                         <div className="flex gap-2 flex-wrap">
                             {GRADES.map(g => (
-                                <button 
-                                    key={g} 
-                                    onClick={() => setRepoGrade(g)}
-                                    className={`px-6 py-2 rounded-xl font-black transition-all border-2 ${repoGrade === g ? 'bg-rose-600 text-white border-rose-600 shadow-lg scale-105' : 'bg-slate-900 border-slate-700 text-slate-500 hover:border-rose-600 hover:text-white'}`}
-                                >
-                                    KHỐI {g}
-                                </button>
+                                <button key={g} onClick={() => setRepoGrade(g)} className={`px-6 py-2 rounded-xl font-black transition-all border-2 ${repoGrade === g ? 'bg-rose-600 text-white border-rose-600 shadow-lg scale-105' : 'bg-slate-900 border-slate-700 text-slate-500 hover:border-rose-600 hover:text-white'}`}>{g === 'Khác' ? 'KHÁC' : `KHỐI ${g}`}</button>
                             ))}
                         </div>
                     </div>
 
-                    {/* Chọn Môn */}
                     <div className="mb-6">
                         <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">2. Chọn Loại Vũ Khí (Môn Học)</label>
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                            <button 
-                                onClick={() => setRepoSubject('ALL')}
-                                className={`p-3 rounded-xl font-bold transition-all border text-sm text-center ${repoSubject === 'ALL' ? 'bg-white text-black border-white shadow-lg' : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800'}`}
-                            >
-                                TẤT CẢ
-                            </button>
+                            <button onClick={() => setRepoSubject('ALL')} className={`p-3 rounded-xl font-bold transition-all border text-sm text-center ${repoSubject === 'ALL' ? 'bg-white text-black border-white shadow-lg' : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800'}`}>TẤT CẢ</button>
                             {SUBJECTS.map(s => (
-                                <button 
-                                    key={s.id} 
-                                    onClick={() => setRepoSubject(s.id)}
-                                    className={`p-3 rounded-xl font-bold transition-all border text-sm text-center flex flex-col items-center justify-center gap-1 ${repoSubject === s.id ? `${s.bg} ${s.color} ${s.border} shadow-lg scale-105` : 'bg-slate-900 border-slate-700 text-slate-500 hover:border-slate-500'}`}
-                                >
-                                    {s.name}
-                                </button>
+                                <button key={s.id} onClick={() => setRepoSubject(s.id)} className={`p-3 rounded-xl font-bold transition-all border text-sm text-center flex flex-col items-center justify-center gap-1 ${repoSubject === s.id ? `${s.bg} ${s.color} ${s.border} shadow-lg scale-105` : 'bg-slate-900 border-slate-700 text-slate-500 hover:border-slate-500'}`}>{s.name}</button>
                             ))}
                         </div>
                     </div>
                     
-                    {/* Action Bar */}
                     <div className="flex items-center justify-between border-t border-white/5 pt-6">
                         <div className="flex items-center gap-4">
                             <div className="text-sm font-bold text-slate-400">Hiển thị: <span className="text-white">{filteredRepoQuizzes.length}</span> đề</div>
-                            {selectedRepoItems.length > 0 && (
-                                <button onClick={handleDeleteRepoBulk} className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-lg animate-in fade-in">
-                                    <Trash2 size={14}/> Xóa ({selectedRepoItems.length})
-                                </button>
-                            )}
+                            {selectedRepoItems.length > 0 && (<button onClick={handleDeleteRepoBulk} className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-lg animate-in fade-in"><Trash2 size={14}/> Xóa ({selectedRepoItems.length})</button>)}
                         </div>
-                        <button 
-                            onClick={handleCreateQuizForSubject}
-                            className="bg-gradient-to-r from-rose-600 to-orange-600 text-white px-6 py-3 rounded-xl font-black shadow-lg hover:shadow-orange-500/30 transition-all flex items-center justify-center gap-2 uppercase italic text-xs"
-                        >
-                            <Plus size={16} strokeWidth={3}/> Tạo Đề {repoSubject !== 'ALL' ? SUBJECTS.find(s=>s.id===repoSubject)?.name : ''} K{repoGrade}
-                        </button>
+                        <button onClick={handleCreateQuizForSubject} className="bg-gradient-to-r from-rose-600 to-orange-600 text-white px-6 py-3 rounded-xl font-black shadow-lg hover:shadow-orange-500/30 transition-all flex items-center justify-center gap-2 uppercase italic text-xs"><Plus size={16} strokeWidth={3}/> Tạo Đề {repoSubject !== 'ALL' ? SUBJECTS.find(s=>s.id===repoSubject)?.name : ''} K{repoGrade}</button>
                     </div>
                 </div>
 
-                {/* TABLE */}
                 <div className="bg-[#1e293b] rounded-[2rem] border border-white/10 shadow-xl overflow-hidden min-h-[400px]">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead className="bg-slate-900 text-slate-400 text-xs font-bold uppercase sticky top-0 z-10">
                                 <tr>
-                                    <th className="p-4 w-10 text-center bg-slate-900">
-                                        <input type="checkbox" onChange={(e) => handleSelectRepoAll(e, filteredRepoQuizzes)} checked={filteredRepoQuizzes.length > 0 && selectedRepoItems.length === filteredRepoQuizzes.length} className="w-4 h-4 rounded border-slate-600 bg-slate-800 cursor-pointer"/>
-                                    </th>
+                                    <th className="p-4 w-10 text-center bg-slate-900"><input type="checkbox" onChange={(e) => handleSelectRepoAll(e, filteredRepoQuizzes)} checked={filteredRepoQuizzes.length > 0 && selectedRepoItems.length === filteredRepoQuizzes.length} className="w-4 h-4 rounded border-slate-600 bg-slate-800 cursor-pointer"/></th>
                                     <th className="p-4 bg-slate-900">TT</th>
                                     <th className="p-4 bg-slate-900">Lớp/Khối</th>
                                     <th className="p-4 bg-slate-900">Môn</th>
@@ -377,53 +355,27 @@ export default function Dashboard() {
                             <tbody className="divide-y divide-white/5">
                                 {filteredRepoQuizzes.map((q, i) => (
                                     <tr key={q.id} className={`transition group ${selectedRepoItems.includes(q.id) ? 'bg-rose-900/10' : 'hover:bg-white/5'}`}>
-                                        <td className="p-4 text-center">
-                                            <input type="checkbox" onChange={() => handleSelectRepoOne(q.id)} checked={selectedRepoItems.includes(q.id)} className="w-4 h-4 rounded border-slate-600 bg-slate-800 cursor-pointer"/>
-                                        </td>
+                                        <td className="p-4 text-center"><input type="checkbox" onChange={() => handleSelectRepoOne(q.id)} checked={selectedRepoItems.includes(q.id)} className="w-4 h-4 rounded border-slate-600 bg-slate-800 cursor-pointer"/></td>
                                         <td className="p-4 text-slate-500 font-mono text-xs">{i + 1}</td>
-                                        <td className="p-4">
-                                            <span className="bg-slate-700 text-slate-300 px-2 py-1 rounded text-[10px] font-bold">K{q.grade || '10'}</span>
-                                        </td>
+                                        <td className="p-4"><span className="bg-slate-700 text-slate-300 px-2 py-1 rounded text-[10px] font-bold">K{q.grade || '10'}</span></td>
                                         <td className="p-4">
                                             {(() => {
                                                 const s = SUBJECTS.find(sub => sub.id === q.subject);
-                                                return s ? (
-                                                    <span className={`${s.bg} ${s.color} border border-transparent px-2 py-1 rounded text-[10px] font-bold uppercase whitespace-nowrap`}>{s.name}</span>
-                                                ) : <span className="text-slate-500 text-xs">{q.subject || 'Khác'}</span>;
+                                                return s ? <span className={`${s.bg} ${s.color} border border-transparent px-2 py-1 rounded text-[10px] font-bold uppercase whitespace-nowrap`}>{s.name}</span> : <span className="text-slate-500 text-xs">{q.subject || 'Khác'}</span>;
                                             })()}
                                         </td>
                                         <td className="p-4">
                                             <div className="font-bold text-white truncate max-w-[300px]" title={q.title}>{q.title}</div>
-                                            <div className="text-[10px] text-slate-500 flex gap-2">
-                                                <span>Mã: {q.code}</span>
-                                                <span>• {q.questions?.length || 0} câu</span>
-                                                <span>• {new Date(q.createdAt?.seconds*1000).toLocaleDateString('vi-VN')}</span>
-                                            </div>
+                                            <div className="text-[10px] text-slate-500 flex gap-2"><span>Mã: {q.code}</span><span>• {q.questions?.length || 0} câu</span><span>• {new Date(q.createdAt?.seconds*1000).toLocaleDateString('vi-VN')}</span></div>
                                         </td>
                                         <td className="p-4 text-center">
-                                            <button 
-                                                onClick={() => handleToggleStatus(q.id, q.status)}
-                                                className={`p-2 rounded-lg transition-all ${q.status === 'OPEN' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'}`}
-                                                title={q.status === 'OPEN' ? 'Đang mở Public' : 'Đang đóng'}
-                                            >
-                                                {q.status === 'OPEN' ? <Eye size={18}/> : <EyeOff size={18}/>}
-                                            </button>
+                                            <button onClick={() => handleToggleStatus(q.id, q.status)} className={`p-2 rounded-lg transition-all ${q.status === 'OPEN' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'}`} title={q.status === 'OPEN' ? 'Đang mở Public' : 'Đang đóng'}>{q.status === 'OPEN' ? <Eye size={18}/> : <EyeOff size={18}/>}</button>
                                         </td>
-                                        <td className="p-4 text-center">
-                                            <button onClick={() => router.push(`/create-quiz?id=${q.id}`)} className="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white p-2 rounded-lg transition border border-indigo-600/30">
-                                                <Edit size={16}/>
-                                            </button>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            <button onClick={() => handleDeleteQuiz(q.id)} className="text-slate-600 hover:text-red-500 hover:bg-red-500/10 p-2 rounded-full transition">
-                                                <Trash2 size={16}/>
-                                            </button>
-                                        </td>
+                                        <td className="p-4 text-center"><button onClick={() => router.push(`/create-quiz?id=${q.id}`)} className="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white p-2 rounded-lg transition border border-indigo-600/30"><Edit size={16}/></button></td>
+                                        <td className="p-4 text-right"><button onClick={() => handleDeleteQuiz(q.id)} className="text-slate-600 hover:text-red-500 hover:bg-red-500/10 p-2 rounded-full transition"><Trash2 size={16}/></button></td>
                                     </tr>
                                 ))}
-                                {filteredRepoQuizzes.length === 0 && (
-                                    <tr><td colSpan="8" className="p-10 text-center text-slate-500 italic">Không tìm thấy dữ liệu cho bộ lọc này.</td></tr>
-                                )}
+                                {filteredRepoQuizzes.length === 0 && <tr><td colSpan="8" className="p-10 text-center text-slate-500 italic">Không tìm thấy dữ liệu cho bộ lọc này.</td></tr>}
                             </tbody>
                         </table>
                     </div>
@@ -519,6 +471,7 @@ export default function Dashboard() {
                             <div className="flex items-center gap-3 mb-6">
                                 <div className="bg-pink-600 p-2 rounded-lg"><UserPlus size={24} className="text-white"/></div>
                                 <h2 className="text-xl font-bold uppercase text-white">Cấp Quyền Mới</h2>
+
                             </div>
                             
                             <form onSubmit={handleAddEmail} className="space-y-4">
@@ -536,6 +489,7 @@ export default function Dashboard() {
                                     <Plus size={20}/> Xác Nhận Cấp Quyền
                                 </button>
                             </form>
+                            <a href="/admin/users" target="_blank" rel="noreferrer" className="mt-6 block text-center text-xs text-slate-500 hover:text-white underline">Quản lí TK GV & HS</a>
                         </div>
                     </div>
 
@@ -694,6 +648,8 @@ export default function Dashboard() {
             </div>
         )}
       </main>
+      {/* 3. Vẫn giữ component cảnh báo để nhắc nhở khi sắp hết hạn */}
+      <ExpiryAlert />
     </div>
   );
 }
