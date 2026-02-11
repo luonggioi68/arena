@@ -89,158 +89,156 @@ export default function HomePage() {
       return (
         <div 
             onClick={onClick} 
-            className={`group relative w-full h-full min-h-[110px] md:min-h-[140px] cursor-pointer rounded-2xl border border-white/5 bg-slate-900/60 backdrop-blur-sm overflow-hidden transition-all duration-300 active:scale-95 flex flex-col items-center justify-center p-3`}
+            className={`group relative w-full h-full min-h-[110px] md:min-h-[130px] cursor-pointer rounded-2xl border border-white/5 bg-slate-900/60 backdrop-blur-sm overflow-hidden transition-all duration-300 hover:-translate-y-1 active:scale-95 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4`}
             style={{ animationDelay: `${delay}ms` }}
         >
-            <div className={`absolute inset-0 border-2 ${theme.border} opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl ${theme.shadow} shadow-lg`}></div>
-            <div className={`absolute inset-0 bg-gradient-to-br ${theme.bg} opacity-40 group-hover:opacity-60 transition-opacity`}></div>
-
-            <div className="relative z-10 flex flex-col items-center justify-center text-center">
+            <div className={`absolute inset-0 border-2 ${theme.border} opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl ${theme.shadow} shadow-lg`}></div>
+            <div className={`absolute inset-0 bg-gradient-to-br ${theme.bg} opacity-40`}></div>
+            <div className="relative z-10 flex flex-col items-center justify-center p-3 text-center">
                 <div className={`p-2 rounded-xl bg-black/40 border border-white/10 mb-2 shadow-md`}>
-                    <Icon size={24} className={`${theme.icon} drop-shadow-md`} strokeWidth={1.5} />
+                    <Icon size={24} className={`${theme.icon} drop-shadow-md`} />
                 </div>
-                <h3 className="text-xs md:text-base font-black italic uppercase text-white tracking-tighter leading-tight mb-1 drop-shadow-lg line-clamp-1">
+                <h3 className="text-xs md:text-sm font-black italic uppercase text-white leading-tight mb-1">
                     {title}
                 </h3>
-                <p className={`text-[8px] md:text-[9px] font-bold uppercase tracking-widest ${theme.text} opacity-80`}>{subtitle}</p>
+                <p className={`text-[8px] md:text-[9px] font-bold uppercase tracking-wider ${theme.text} opacity-80`}>{subtitle}</p>
             </div>
         </div>
       );
   };
 
   return (
-    <div className="min-h-[100dvh] w-full bg-[#020617] text-white font-sans selection:bg-cyan-500 selection:text-black relative flex flex-col overflow-x-hidden">
+    <div className="min-h-screen w-full bg-[#020617] text-white font-sans selection:bg-cyan-500 selection:text-black relative overflow-x-hidden flex flex-col">
+      {/* GLOBAL BACKGROUND */}
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#050505] to-black -z-20"></div>
-      
+
+      {/* BANNER 2 BÊN (Chỉ hiện desktop) */}
+      {homeConfig.leftBanner && (<div className="fixed top-0 left-0 w-[15%] h-full hidden 2xl:block z-0 pointer-events-none"><img src={homeConfig.leftBanner} className="w-full h-full object-cover opacity-80"/></div>)}
+      {homeConfig.rightBanner && (<div className="fixed top-0 right-0 w-[15%] h-full hidden 2xl:block z-0 pointer-events-none"><img src={homeConfig.rightBanner} className="w-full h-full object-cover opacity-80"/></div>)}
+
       {/* 1. HEADER */}
-      <header className="h-[60px] md:h-[70px] shrink-0 z-[100] bg-black/40 backdrop-blur-md border-b border-white/5 shadow-xl relative">
-          <div className="container mx-auto h-full px-4 flex justify-between items-center">
-              <div className="flex items-center gap-2">
+      <header className="h-16 md:h-[70px] shrink-0 z-[100] bg-black/20 backdrop-blur-md border-b border-white/5 relative">
+          <div className="relative z-20 container mx-auto h-full px-4 flex justify-between items-center">
+              <div className="flex items-center gap-3">
                   {homeConfig.logoTitleImage ? (
-                      <img src={homeConfig.logoTitleImage} alt="Logo" className="h-8 md:h-12 object-contain"/>
+                      <img src={homeConfig.logoTitleImage} alt="Logo" className="h-8 md:h-12 object-contain drop-shadow-lg"/>
                   ) : (
-                      <div className="flex items-center gap-2">
-                        <div className="bg-cyan-600 p-1.5 rounded-lg"><Gamepad2 size={18} /></div>
-                        <h1 className="text-sm md:text-xl font-black italic text-white uppercase">ARENA <span className="text-cyan-400">EDU</span></h1>
+                      <div className="flex items-center gap-2" onClick={() => router.push('/')}>
+                        <div className="bg-gradient-to-br from-cyan-600 to-blue-700 p-1.5 rounded-lg shadow-lg"><Gamepad2 className="text-white" size={18} /></div>
+                        <h1 className="text-base md:text-xl font-black italic tracking-tighter uppercase">EDU <span className="text-cyan-400">ARENA</span></h1>
                       </div>
                   )}
               </div>
 
               <div className="flex items-center gap-2">
                 {user ? (
-                  <div className="flex items-center gap-2 bg-black/40 p-1 rounded-full border border-white/10">
-                      <img src={user.photoURL} className="w-7 h-7 rounded-full border border-cyan-500" />
-                      <button onClick={() => router.push('/dashboard')} className="p-1.5 bg-indigo-600 rounded-lg"><Settings size={14}/></button>
-                      <button onClick={() => signOut(auth)} className="p-1.5 bg-red-600/80 rounded-lg"><LogOut size={14}/></button>
+                  <div className="flex items-center gap-2 bg-black/40 pl-1 pr-3 py-1 rounded-full border border-white/10 backdrop-blur-md">
+                      <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} className="w-7 h-7 rounded-full border border-cyan-500" />
+                      <button onClick={() => router.push('/dashboard')} className="p-1.5 bg-indigo-600 rounded-lg text-white"><Settings size={14}/></button>
+                      <button onClick={() => signOut(auth)} className="p-1.5 bg-red-600/80 rounded-lg text-white"><LogOut size={14}/></button>
                   </div>
                 ) : (
-                  <button onClick={handleLogin} className="p-2 bg-cyan-600 rounded-xl"><LogIn size={18}/></button>
+                  <button onClick={handleLogin} className="flex items-center gap-2 bg-cyan-600 px-3 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wider">
+                      <LogIn size={16}/> GV Đăng nhập
+                  </button>
                 )}
               </div>
           </div>
       </header>
 
       {/* 2. BODY CONTENT */}
-      <div className="flex-1 w-full max-w-7xl mx-auto flex flex-col px-3 md:px-6 pt-3 pb-2 gap-3 overflow-y-auto custom-scrollbar">
+      <main className="flex-1 w-full max-w-7xl mx-auto flex flex-col p-3 md:p-6 gap-4 overflow-y-auto">
           
-          {/* A. NAV 1: LUYỆN TẬP */}
-          <div className="shrink-0 w-full bg-black/80 border-2 border-red-600/50 rounded-2xl flex flex-col md:flex-row overflow-hidden shadow-2xl h-[75px] md:h-[90px]">
-                <div className="bg-gradient-to-br from-red-700 to-orange-800 px-3 flex flex-row md:flex-col items-center justify-center gap-2 md:w-40 shrink-0 border-b md:border-b-0 md:border-r border-red-500/30">
-                    <Target size={20} className="text-yellow-300"/>
-                    <h2 className="text-xs md:text-lg font-black uppercase text-white">Luyện Tập</h2>
+          {/* LUYỆN TẬP */}
+          <div className="shrink-0 w-full bg-black/60 backdrop-blur-xl border-2 border-red-600/30 rounded-2xl flex flex-col md:flex-row overflow-hidden shadow-xl">
+                <div className="bg-gradient-to-br from-red-700 to-orange-800 p-3 md:w-48 flex items-center justify-center gap-2 shrink-0 md:flex-col md:border-r border-red-500/30">
+                    <Target size={24} className="text-yellow-300 animate-pulse"/>
+                    <h2 className="text-sm md:text-lg font-black uppercase text-white tracking-tighter">Luyện Tập</h2>
                 </div>
 
-                <div className="flex-1 flex overflow-x-auto [&::-webkit-scrollbar]:hidden">
-                    <div className="flex w-full min-w-max h-full">
+                <div className="flex-1 overflow-x-auto custom-scrollbar flex">
+                    {/* Hàng số lớp - Tối ưu click trên Mobile */}
+                    <div className="flex w-full min-w-max">
                         {[6, 7, 8, 9, 10, 11, 12].map((grade) => (
                             <button 
                                 key={grade}
                                 onClick={() => handleGradeClick(grade)}
-                                className="group relative flex-1 min-w-[55px] md:min-w-0 flex flex-col items-center justify-center transition-all border-l border-red-900/30 overflow-hidden"
+                                className="px-5 py-4 md:flex-1 border-l border-red-900/30 hover:bg-red-600/20 transition-colors flex flex-col items-center justify-center min-w-[65px]"
                             >
-                                <div className="absolute inset-0 bg-red-900/50"></div>
-                                <div className="relative z-10 flex flex-col items-center">
-                                    <span className="text-2xl md:text-4xl font-black italic text-yellow-300 group-hover:scale-110 transition-transform">
-                                        {grade}
-                                    </span>
-                                    <span className="text-[7px] md:text-[9px] font-bold uppercase text-red-200">Lớp</span>
-                                </div>
+                                <span className="text-2xl md:text-4xl font-black italic text-yellow-100">{grade}</span>
+                                <span className="text-[8px] font-bold uppercase text-red-300">Lớp</span>
                             </button>
                         ))}
                     </div>
                 </div>
             </div>
 
-            {/* B. GRID 6 MỤC CHÍNH */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4 flex-1">
-                <CyberCard title="Chiến Binh Arena" subtitle="Đấu trường" icon={Sword} color="purple" delay={0} onClick={() => openGamePortal('CLASSIC')}/>
-                <CyberCard title="Biệt Đội Arena" subtitle="Hợp sức" icon={Shield} color="orange" delay={100} onClick={() => openGamePortal('RACE')}/>
-                <CyberCard title="Nhanh Như Chớp" subtitle="Tốc độ" icon={Zap} color="cyan" delay={200} onClick={() => openGamePortal('LIGHTNING')}/>
-                <CyberCard title="Arena Thi Online" subtitle="Khảo thí" icon={BookOpen} color="green" delay={300} onClick={() => router.push('/exam')}/>
-                <CyberCard title="Bảng Tương Tác" subtitle="Thời gian thực" icon={Users} color="blue" delay={400} onClick={() => router.push('/connect')}/>
-                <CyberCard title="Cổng Nộp Bài" subtitle="Học sinh" icon={UploadCloud} color="pink" delay={500} onClick={() => router.push('/submit')}/>
+            {/* GRID CARDS */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <CyberCard title="Chiến Binh Arena" subtitle="Đấu trường sinh tử" icon={Sword} color="purple" delay={0} onClick={() => openGamePortal('CLASSIC')}/>
+                <CyberCard title="Biệt Đội Arena" subtitle="Hợp sức tác chiến" icon={Shield} color="orange" delay={100} onClick={() => openGamePortal('RACE')}/>
+                <CyberCard title="Nhanh Như Chớp" subtitle="Tốc độ sấm sét" icon={Zap} color="cyan" delay={200} onClick={() => openGamePortal('LIGHTNING')}/>
+                <CyberCard title="Arena Thi Online" subtitle="Khảo thí online" icon={BookOpen} color="green" delay={300} onClick={() => router.push('/exam')}/>
+                <CyberCard title="Bảng Tương Tác" subtitle="Kết nối real-time" icon={Users} color="blue" delay={400} onClick={() => router.push('/connect')}/>
+                <CyberCard title="Cổng Nộp Bài" subtitle="Cho học sinh" icon={UploadCloud} color="pink" delay={500} onClick={() => router.push('/submit')}/>
             </div>
 
-            {/* C. FOOTER BAR: TỐI ƯU CUỘN NGANG CHO MOBILE */}
-            <div className="shrink-0 w-full bg-black/80 border-t-2 border-cyan-600/50 rounded-2xl overflow-hidden h-[75px] md:h-[85px]">
-                <div className="flex overflow-x-auto snap-x snap-mandatory [&::-webkit-scrollbar]:hidden h-full bg-slate-900/50">
-                    {[
-                        { label: 'Vòng Xoay\nGọi Tên', icon: Disc, path: '/bottom/SpinWheel' },
-                        { label: 'Vote\nLấy ý kiến', icon: BarChart2, path: '/bottom/VoteArena' },
-                        { label: 'Sắp ra mắt', icon: null },
-                        { label: 'Sắp ra mắt', icon: null },
-                        { label: 'Sắp ra mắt', icon: null },
-                        { label: 'Sắp ra mắt', icon: null },
-                        { label: 'Sắp ra mắt', icon: null },
-                        { label: 'Sắp ra mắt', icon: null },
-                    ].map((item, index) => (
-                        <button 
-                            key={index}
-                            onClick={() => item.path && router.push(item.path)}
-                            className={`flex-shrink-0 w-[25%] md:w-[12.5%] h-full flex flex-col items-center justify-center border-r border-cyan-900/20 snap-start
-                                ${item.path ? 'bg-cyan-900/10 active:bg-cyan-800/30' : 'opacity-40'}
-                            `}
-                        >
-                            {item.icon ? (
-                                <>
-                                    <item.icon size={22} className="text-cyan-400 mb-1"/>
-                                    <span className="text-[8px] font-black uppercase text-cyan-100 text-center leading-tight whitespace-pre-line">
-                                        {item.label}
-                                    </span>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="w-1 h-1 rounded-full bg-slate-500 mb-1"></div>
-                                    <span className="text-[7px] font-bold uppercase text-slate-500">Soon</span>
-                                </>
-                            )}
-                        </button>
+            {/* NAVIGATION BOTTOM - Chuẩn mobile */}
+            <div className="w-full bg-black/60 backdrop-blur-xl border-t-2 border-cyan-600/30 rounded-2xl overflow-hidden shadow-lg mt-auto">
+                <div className="grid grid-cols-4 md:grid-cols-8 w-full h-16 md:h-20">
+                    {/* Nút Vòng Xoay */}
+                    <button onClick={() => router.push('/bottom/SpinWheel')} className="flex flex-col items-center justify-center bg-cyan-900/20 border-r border-cyan-900/30">
+                        <Disc size={20} className="text-cyan-300 mb-1 animate-spin-slow"/>
+                        <span className="text-[8px] md:text-[9px] font-black uppercase text-cyan-100 text-center leading-tight">Vòng xoay<br/>gọi tên</span>
+                    </button>
+                    {/* Nút Vote */}
+                    <button onClick={() => router.push('/bottom/VoteArena')} className="flex flex-col items-center justify-center bg-cyan-900/20 border-r border-cyan-900/30">
+                        <BarChart2 size={20} className="text-cyan-300 mb-1"/>
+                        <span className="text-[8px] md:text-[9px] font-black uppercase text-cyan-100 text-center leading-tight">Vote<br/>lấy ý kiến</span>
+                    </button>
+                    {/* Các nút trống - Co lại trên mobile */}
+                    {[...Array(6)].map((_, i) => (
+                        <div key={i} className="hidden md:flex flex-col items-center justify-center border-r border-cyan-900/30 opacity-30">
+                            <div className="w-1 h-1 rounded-full bg-slate-500 mb-1"></div>
+                            <span className="text-[7px] uppercase text-slate-500">Sắp ra mắt</span>
+                        </div>
                     ))}
+                    {/* Hiển thị 2 ô trống cho đủ hàng Grid trên Mobile */}
+                    <div className="md:hidden flex items-center justify-center border-r border-cyan-900/30 opacity-20"><div className="w-1 h-1 rounded-full bg-slate-500"></div></div>
+                    <div className="md:hidden flex items-center justify-center opacity-20"><div className="w-1 h-1 rounded-full bg-slate-500"></div></div>
                 </div>
             </div>
-      </div>
+      </main>
 
-      {/* 3. FOOTER INFO */}
-      <footer className="h-[25px] shrink-0 bg-black flex items-center justify-between px-4 text-[7px] font-bold text-slate-500 uppercase">
-          <div className="flex items-center gap-2">
+      {/* FOOTER INFO */}
+      <footer className="h-8 shrink-0 bg-[#0a0a0a]/90 backdrop-blur border-t border-white/5 flex items-center justify-between px-4">
+            <div className="flex items-center gap-1">
                 <Eye size={10} className="text-purple-500"/>
-                <span>Visits: {realVisitorCount}</span>
-          </div>
-          <span>© 2026 Edu Arena</span>
+                <p className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">
+                    Visits: <span className="text-white">{realVisitorCount.toLocaleString()}</span>
+                </p>
+            </div>
+            <p className="text-slate-600 text-[7px] font-bold uppercase tracking-[0.2em]">
+                © 2026 Edu Arena Connect
+            </p>
       </footer>
 
-      {/* MODAL PIN - TỐI ƯU MOBILE */}
+      {/* MODAL PIN */}
       {showPinModal && (
-        <div className="fixed inset-0 z-[200] flex items-end md:items-center justify-center p-0 md:p-4 bg-black/90 backdrop-blur-md animate-in fade-in">
-          <div className="bg-[#0f172a] border-t border-cyan-500/30 p-6 rounded-t-[2rem] md:rounded-[3rem] w-full max-w-md animate-in slide-in-from-bottom">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md">
+          <div className="bg-[#0f172a] border border-cyan-500/30 p-6 rounded-[2.5rem] w-full max-w-sm shadow-2xl relative animate-in zoom-in-95">
             <button onClick={() => setShowPinModal(false)} className="absolute top-4 right-4 text-slate-400"><X size={24}/></button>
             <div className="text-center mb-6">
-              <h2 className="text-xl font-black text-white uppercase italic">Nhập mã PIN</h2>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">{targetGame}</p>
+              <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter mb-1">
+                  {targetGame === 'CLASSIC' ? 'Chiến Binh' : targetGame === 'RACE' ? 'Biệt Đội' : 'Nhanh Như Chớp'}
+              </h2>
+              <p className="text-slate-400 text-[10px] font-bold uppercase">Nhập mã PIN</p>
             </div>
             <form onSubmit={handleJoinGame} className="space-y-4">
-              <input autoFocus value={pin} onChange={(e) => setPin(e.target.value)} className="w-full bg-black border-2 border-slate-700 text-center text-4xl font-black text-white py-4 rounded-2xl focus:border-cyan-500 outline-none font-mono tracking-widest" placeholder="000000" maxLength={6}/>
-              <button type="submit" className="w-full py-4 rounded-2xl font-black text-lg bg-white text-black uppercase italic active:scale-95">Tham Chiến</button>
+              <input autoFocus value={pin} onChange={(e) => setPin(e.target.value)} className="w-full bg-[#050505] border-2 border-slate-700 text-center text-4xl font-black text-white py-4 rounded-2xl focus:border-cyan-500 outline-none" placeholder="000000" maxLength={6}/>
+              <button type="submit" className="w-full py-4 rounded-2xl font-black text-lg uppercase italic bg-white text-black hover:bg-cyan-400 transition-all flex items-center justify-center gap-2">
+                  Vào Ngay <ArrowRight size={20} strokeWidth={3}/>
+              </button>
             </form>
           </div>
         </div>
