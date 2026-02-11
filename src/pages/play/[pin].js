@@ -4,6 +4,8 @@ import { db } from '@/lib/firebase';
 import { ref, get, update, onValue, onDisconnect, remove } from 'firebase/database';
 import { Trophy, Zap, Flame, Shield, Lock, Loader2, CheckCircle, XCircle, Swords, Star, Send, Clock, User, Check, X, LogOut, Award, Volume2, VolumeX, Sparkles } from 'lucide-react';
 import confetti from 'canvas-confetti';
+// [NEW] Import MathRender để hiển thị công thức toán
+import MathRender from '@/components/MathRender'; 
 
 export default function ArenaPlayerController() {
   const router = useRouter();
@@ -12,7 +14,7 @@ export default function ArenaPlayerController() {
   const [playerId, setPlayerId] = useState(null);
   const [joined, setJoined] = useState(false);
   
-  // [FIX 1] Biến trạng thái để chặn lỗi khi thoát
+  // Biến trạng thái để chặn lỗi khi thoát
   const [isLeaving, setIsLeaving] = useState(false);
 
   const [gameData, setGameData] = useState(null); 
@@ -58,22 +60,48 @@ export default function ArenaPlayerController() {
       setIsMuted(!isMuted);
   };
 
+  // --- [NEW] HÀM RENDER VĂN BẢN KÈM ẢNH INLINE ---
+  const renderWithInlineImage = (text, imgUrl) => {
+    if (!text) return null;
+    
+    // Nếu có thẻ [img] và có link ảnh
+    if (text.includes('[img]') && imgUrl) {
+        const parts = text.split('[img]');
+        return (
+            <span>
+                {parts.map((part, index) => (
+                    <span key={index}>
+                        <MathRender content={part} />
+                        {/* Nếu chưa phải phần cuối cùng thì chèn ảnh vào giữa */}
+                        {index < parts.length - 1 && (
+                            <img 
+                                src={imgUrl} 
+                                className="inline-block align-middle mx-1 max-h-12 border rounded bg-white shadow-sm" 
+                                alt="minh-hoa"
+                            />
+                        )}
+                    </span>
+                ))}
+            </span>
+        );
+    }
+    
+    // Mặc định trả về text chứa công thức toán
+    return <MathRender content={text} />;
+  };
+
   // --- 1. LẮNG NGHE DỮ LIỆU ---
   useEffect(() => {
     if (!pin || !joined) return;
-    
-    // [FIX 1] Nếu đang thoát thì ngừng lắng nghe để tránh lỗi
     if (isLeaving) return;
 
     const roomRef = ref(db, `rooms/${pin}`);
     
     return onValue(roomRef, (snapshot) => {
-      // [FIX 1] Kiểm tra chặn lần nữa
       if (isLeaving) return;
 
       const data = snapshot.val();
       if (data) {
-        // [AUTO KICK] Chỉ kick nếu không phải do mình tự thoát
         if (data.players && playerId && !data.players[playerId] && !isLeaving) {
             alert("Tín hiệu bị ngắt bởi trung tâm!");
             if (bgmRef.current) bgmRef.current.pause();
@@ -165,7 +193,6 @@ export default function ArenaPlayerController() {
                     origin: { y: 0.6 },
                     colors: ['#22d3ee', '#d946ef', '#f472b6', '#facc15']
                 });
-                // [SAFETY] Kiểm tra tồn tại trước khi update
                 if (gameData.players && gameData.players[playerId]) {
                     update(ref(db, `rooms/${pin}/players/${playerId}`), { score: (gameData.players[playerId].score || 0) + points });
                 }
@@ -209,20 +236,12 @@ export default function ArenaPlayerController() {
     }
   };
 
-  // [FIX 1] Hàm thoát an toàn
   const handleLeave = async () => {
-      // Bật cờ thoát ngay lập tức
       setIsLeaving(true);
-      
       if (pin && playerId) {
-          try {
-              // Xóa dữ liệu trên DB
-              await remove(ref(db, `rooms/${pin}/players/${playerId}`));
-          } catch (e) { console.error(e); }
+          try { await remove(ref(db, `rooms/${pin}/players/${playerId}`)); } catch (e) { console.error(e); }
       }
       if (bgmRef.current) bgmRef.current.pause();
-      
-      // Chuyển trang ngay, không đợi
       router.push('/');
   };
 
@@ -273,7 +292,6 @@ export default function ArenaPlayerController() {
     </div>
   );
 
-  // [FIX 1] Nếu đang thoát thì hiển thị màn hình chờ/trống để tránh lỗi render
   if (isLeaving) return <div className="min-h-screen bg-[#020617]"></div>;
 
   if (!gameData) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-cyan-500" size={50}/></div>;
@@ -327,118 +345,124 @@ export default function ArenaPlayerController() {
         </div>
     );
 
-const q = quiz?.questions?.[gameData.currentQuestion];
+    const q = quiz?.questions?.[gameData.currentQuestion];
 
-return (
-  <div className="h-screen bg-[#020617] flex flex-col text-white font-sans overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
-    {/* HEADER */}
-    <div className="h-[auto] py-3 md:h-[90px] bg-[#0f172a]/90 backdrop-blur-md border-b border-purple-900/30 px-4 md:px-8 flex justify-between items-center shrink-0 relative z-20 shadow-[0_5px_30px_rgba(0,0,0,0.5)]">
-        <div className="flex items-center gap-3">
-            <button onClick={handleLeave} className="bg-white/5 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-red-500/20 transition"><LogOut size={20}/></button>
-            <button onClick={toggleMute} className={`p-2 rounded-xl transition ${isMuted ? 'bg-red-500/20 text-red-400' : 'bg-cyan-500/10 text-cyan-400'}`}>{isMuted ? <VolumeX size={20}/> : <Volume2 size={20}/>}</button>
-        </div>
-        <div className="flex flex-col items-center absolute left-1/2 -translate-x-1/2 pointer-events-none">
-            <h1 className="text-xl md:text-2xl font-black italic uppercase tracking-tighter leading-none text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400 drop-shadow-md">CHIẾN BINH ARENA</h1>
-            <div className="flex items-center gap-1 mt-1"><User size={10} className="text-slate-500"/><p className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">{name}</p></div>
-        </div>
-        <div className="flex items-center gap-3 md:gap-5">
-            <div className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-xl font-black font-mono text-xl md:text-2xl border-2 shadow-lg ${localTimer <= 5 ? 'bg-red-900/50 border-red-500 text-red-400 animate-pulse' : 'bg-slate-900/50 border-cyan-500/50 text-cyan-400'}`}>
-                <Clock size={20} className={localTimer <= 5 ? 'text-red-400' : 'text-cyan-400'}/> <span>{localTimer}</span>
+    return (
+      <div className="h-screen bg-[#020617] flex flex-col text-white font-sans overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
+        {/* HEADER */}
+        <div className="h-[auto] py-3 md:h-[90px] bg-[#0f172a]/90 backdrop-blur-md border-b border-purple-900/30 px-4 md:px-8 flex justify-between items-center shrink-0 relative z-20 shadow-[0_5px_30px_rgba(0,0,0,0.5)]">
+            <div className="flex items-center gap-3">
+                <button onClick={handleLeave} className="bg-white/5 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-red-500/20 transition"><LogOut size={20}/></button>
+                <button onClick={toggleMute} className={`p-2 rounded-xl transition ${isMuted ? 'bg-red-500/20 text-red-400' : 'bg-cyan-500/10 text-cyan-400'}`}>{isMuted ? <VolumeX size={20}/> : <Volume2 size={20}/>}</button>
             </div>
-            <div className="hidden md:flex flex-col items-end">
-                <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Điểm số</span>
-                <div className="flex items-center gap-2">
-                    <Zap size={18} className="text-yellow-400 fill-yellow-400 animate-pulse"/> 
-                    <span className="font-black text-2xl text-yellow-400 drop-shadow-md">{gameData.players?.[playerId]?.score || 0}</span>
+            <div className="flex flex-col items-center absolute left-1/2 -translate-x-1/2 pointer-events-none">
+                <h1 className="text-xl md:text-2xl font-black italic uppercase tracking-tighter leading-none text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400 drop-shadow-md">CHIẾN BINH ARENA</h1>
+                <div className="flex items-center gap-1 mt-1"><User size={10} className="text-slate-500"/><p className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">{name}</p></div>
+            </div>
+            <div className="flex items-center gap-3 md:gap-5">
+                <div className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-xl font-black font-mono text-xl md:text-2xl border-2 shadow-lg ${localTimer <= 5 ? 'bg-red-900/50 border-red-500 text-red-400 animate-pulse' : 'bg-slate-900/50 border-cyan-500/50 text-cyan-400'}`}>
+                    <Clock size={20} className={localTimer <= 5 ? 'text-red-400' : 'text-cyan-400'}/> <span>{localTimer}</span>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    {/* BODY */}
-    <div className="flex-1 overflow-y-auto p-4 pb-12 relative flex flex-col items-center">
-        <div className="absolute inset-0 bg-gradient-to-t from-purple-900/10 via-transparent to-transparent pointer-events-none"></div>
-        <div className="w-full max-w-4xl relative z-10 animate-in slide-in-from-bottom duration-500">
-            
-            {/* KHUNG CÂU HỎI */}
-            <div className={`bg-[#1e293b]/60 backdrop-blur-xl text-white rounded-[2rem] p-6 md:p-8 mb-6 shadow-2xl border border-white/10 relative overflow-hidden group`}>
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-cyan-500 to-purple-500"></div>
-                
-                <div className="flex justify-end mb-4">
-                    <div className="bg-white/5 border border-white/10 px-3 py-1 rounded-full text-xs font-bold text-cyan-200 uppercase tracking-widest flex items-center gap-2 shadow-lg">
-                        <Star size={12} className="text-yellow-400" fill="currentColor"/> Nhiệm vụ #{gameData.currentQuestion + 1}
+                <div className="hidden md:flex flex-col items-end">
+                    <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Điểm số</span>
+                    <div className="flex items-center gap-2">
+                        <Zap size={18} className="text-yellow-400 fill-yellow-400 animate-pulse"/> 
+                        <span className="font-black text-2xl text-yellow-400 drop-shadow-md">{gameData.players?.[playerId]?.score || 0}</span>
                     </div>
                 </div>
-
-                {q?.img && <img src={q.img} className="max-h-40 md:max-h-56 w-auto rounded-xl mx-auto mb-6 border-2 border-slate-700 shadow-lg bg-black/40 object-contain"/>}
-                
-                {/* [SỬA 1] Hiển thị nội dung câu hỏi (MATHML) */}
-                <h2 
-                    className={`text-lg md:text-2xl font-bold text-center leading-relaxed drop-shadow-md text-slate-100 ${q?.q.includes('\n') ? 'whitespace-pre-wrap font-mono text-left text-base' : ''}`}
-                    dangerouslySetInnerHTML={{ __html: q?.q }}
-                />
             </div>
+        </div>
 
-            {/* --- MCQ (TRẮC NGHIỆM) --- */}
-            {q.type === 'MCQ' && (
-                <div className="grid grid-cols-1 gap-3 md:gap-4">
-                    {shuffledOptions.map((item, idx) => (
-                        <button key={idx} onClick={() => submitMCQ(item.originalIndex)} className="group relative w-full touch-manipulation">
-                            <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-cyan-600 to-purple-600 rounded-2xl shadow-[0_5px_0_#4c1d95] transition-all group-active:shadow-none group-active:translate-y-1 opacity-80 group-hover:opacity-100"></div>
-                            <div className="relative bg-[#1e293b] p-4 md:p-5 rounded-2xl border-2 border-white/5 flex items-center gap-4 transition-all group-hover:bg-[#2e3b55] group-active:translate-y-1 group-active:border-purple-400">
-                                <span className="w-10 h-10 md:w-12 md:h-12 bg-black/40 rounded-xl flex items-center justify-center text-lg font-black text-slate-400 group-hover:text-white group-hover:bg-purple-500 transition shadow-inner border border-white/5 shrink-0">{String.fromCharCode(65+idx)}</span>
-                                <div className="flex-1 flex items-center font-bold text-base md:text-xl text-left text-slate-200 group-hover:text-white">
-                                    {/* [SỬA 2] Hiển thị đáp án (MATHML) */}
-                                    {item.img ? (
-                                        <img src={item.img} className="h-16 rounded-lg bg-white p-1 shadow-sm"/>
-                                    ) : (
-                                        <span dangerouslySetInnerHTML={{ __html: item.text }} />
-                                    )}
+        {/* BODY */}
+        <div className="flex-1 overflow-y-auto p-4 pb-12 relative flex flex-col items-center">
+            <div className="absolute inset-0 bg-gradient-to-t from-purple-900/10 via-transparent to-transparent pointer-events-none"></div>
+            <div className="w-full max-w-4xl relative z-10 animate-in slide-in-from-bottom duration-500">
+                
+                {/* KHUNG CÂU HỎI */}
+                <div className={`bg-[#1e293b]/60 backdrop-blur-xl text-white rounded-[2rem] p-6 md:p-8 mb-6 shadow-2xl border border-white/10 relative overflow-hidden group`}>
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-cyan-500 to-purple-500"></div>
+                    
+                    <div className="flex justify-end mb-4">
+                        <div className="bg-white/5 border border-white/10 px-3 py-1 rounded-full text-xs font-bold text-cyan-200 uppercase tracking-widest flex items-center gap-2 shadow-lg">
+                            <Star size={12} className="text-yellow-400" fill="currentColor"/> Nhiệm vụ #{gameData.currentQuestion + 1}
+                        </div>
+                    </div>
+
+                    {/* [UPDATED] Hiển thị nội dung câu hỏi TRƯỚC (Text + Inline Image) */}
+                    <div className={`text-lg md:text-2xl font-bold text-center leading-relaxed drop-shadow-md text-slate-100 mb-4 ${q?.q.includes('\n') ? 'whitespace-pre-wrap font-mono text-left text-base' : ''}`}>
+                        {renderWithInlineImage(q?.q, q?.img)}
+                    </div>
+
+                    {/* [UPDATED] Hiển thị ảnh khối SAU (nếu không có thẻ [img] trong text) */}
+                    {q?.img && !q?.q.includes('[img]') && (
+                        <div className="w-full flex justify-center">
+                            <img src={q.img} className="max-h-40 md:max-h-60 max-w-full rounded-xl border-2 border-slate-700 shadow-lg bg-black/40 object-contain"/>
+                        </div>
+                    )}
+                </div>
+
+                {/* --- MCQ (TRẮC NGHIỆM) --- */}
+                {q.type === 'MCQ' && (
+                    <div className="grid grid-cols-1 gap-3 md:gap-4">
+                        {shuffledOptions.map((item, idx) => (
+                            <button key={idx} onClick={() => submitMCQ(item.originalIndex)} className="group relative w-full touch-manipulation">
+                                <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-cyan-600 to-purple-600 rounded-2xl shadow-[0_5px_0_#4c1d95] transition-all group-active:shadow-none group-active:translate-y-1 opacity-80 group-hover:opacity-100"></div>
+                                <div className="relative bg-[#1e293b] p-4 md:p-5 rounded-2xl border-2 border-white/5 flex items-center gap-4 transition-all group-hover:bg-[#2e3b55] group-active:translate-y-1 group-active:border-purple-400">
+                                    <span className="w-10 h-10 md:w-12 md:h-12 bg-black/40 rounded-xl flex items-center justify-center text-lg font-black text-slate-400 group-hover:text-white group-hover:bg-purple-500 transition shadow-inner border border-white/5 shrink-0">{String.fromCharCode(65+idx)}</span>
+                                    <div className="flex-1 flex flex-col items-start font-bold text-base md:text-xl text-left text-slate-200 group-hover:text-white">
+                                        {/* [UPDATED] Hiển thị đáp án (Text + Inline Image) */}
+                                        <div>{renderWithInlineImage(item.text, item.img)}</div>
+                                        {/* Fallback ảnh khối cho đáp án nếu không có [img] */}
+                                        {item.img && !item.text.includes('[img]') && (
+                                            <img src={item.img} className="max-h-32 max-w-full rounded-lg border border-slate-600 mt-2 block bg-white p-1" />
+                                        )}
+                                    </div>
                                 </div>
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                {/* --- TF (ĐÚNG/SAI) --- */}
+                {q.type === 'TF' && (
+                    <div className="w-full">
+                        <div className="bg-[#1e293b]/80 backdrop-blur rounded-2xl border border-white/10 overflow-hidden shadow-xl">
+                            <div className="bg-black/40 p-3 grid grid-cols-12 gap-2 text-[10px] md:text-xs font-black uppercase text-cyan-400 tracking-[0.2em] border-b border-white/10">
+                                <div className="col-span-8">Nội dung</div>
+                                <div className="col-span-2 text-center text-green-400">Đúng</div>
+                                <div className="col-span-2 text-center text-red-400">Sai</div>
                             </div>
-                        </button>
-                    ))}
-                </div>
-            )}
-
-            {/* --- TF (ĐÚNG/SAI) --- */}
-            {q.type === 'TF' && (
-                <div className="w-full">
-                    <div className="bg-[#1e293b]/80 backdrop-blur rounded-2xl border border-white/10 overflow-hidden shadow-xl">
-                        <div className="bg-black/40 p-3 grid grid-cols-12 gap-2 text-[10px] md:text-xs font-black uppercase text-cyan-400 tracking-[0.2em] border-b border-white/10">
-                            <div className="col-span-8">Nội dung</div>
-                            <div className="col-span-2 text-center text-green-400">Đúng</div>
-                            <div className="col-span-2 text-center text-red-400">Sai</div>
+                            <div className="divide-y divide-white/5">
+                                {q.items.map((item, idx) => (
+                                    <div key={idx} className="grid grid-cols-12 gap-2 p-3 md:p-4 items-center hover:bg-white/5 transition">
+                                        <div className="col-span-8 font-bold text-sm md:text-base text-slate-200 leading-tight">
+                                            {/* [UPDATED] Hiển thị nội dung TF */}
+                                            {renderWithInlineImage(item.text, item.img)}
+                                            {item.img && !item.text.includes('[img]') && (
+                                                <img src={item.img} className="max-h-32 max-w-full rounded-lg border border-slate-600 mt-2 block bg-white p-1" />
+                                            )}
+                                        </div>
+                                        <div className="col-span-2 flex justify-center"><button onClick={() => toggleTF(idx, "true")} className={`w-10 h-10 rounded-xl border-2 flex items-center justify-center transition-all active:scale-95 touch-manipulation ${answer?.[idx] === "true" ? 'bg-green-600 border-green-400 text-white shadow-[0_0_15px_#22c55e]' : 'bg-slate-800 border-slate-600 text-slate-600'}`}><Check size={20} strokeWidth={4}/></button></div>
+                                        <div className="col-span-2 flex justify-center"><button onClick={() => toggleTF(idx, "false")} className={`w-10 h-10 rounded-xl border-2 flex items-center justify-center transition-all active:scale-95 touch-manipulation ${answer?.[idx] === "false" ? 'bg-red-600 border-red-400 text-white shadow-[0_0_15px_#ef4444]' : 'bg-slate-800 border-slate-600 text-slate-600'}`}><X size={20} strokeWidth={4}/></button></div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                        <div className="divide-y divide-white/5">
-                            {q.items.map((item, idx) => (
-                                <div key={idx} className="grid grid-cols-12 gap-2 p-3 md:p-4 items-center hover:bg-white/5 transition">
-                                    {/* [SỬA 3] Hiển thị nội dung ý đúng sai (MATHML) */}
-                                    <div 
-                                        className="col-span-8 font-bold text-sm md:text-base text-slate-200 leading-tight"
-                                        dangerouslySetInnerHTML={{ __html: item.text }}
-                                    />
-                                    <div className="col-span-2 flex justify-center"><button onClick={() => toggleTF(idx, "true")} className={`w-10 h-10 rounded-xl border-2 flex items-center justify-center transition-all active:scale-95 touch-manipulation ${answer?.[idx] === "true" ? 'bg-green-600 border-green-400 text-white shadow-[0_0_15px_#22c55e]' : 'bg-slate-800 border-slate-600 text-slate-600'}`}><Check size={20} strokeWidth={4}/></button></div>
-                                    <div className="col-span-2 flex justify-center"><button onClick={() => toggleTF(idx, "false")} className={`w-10 h-10 rounded-xl border-2 flex items-center justify-center transition-all active:scale-95 touch-manipulation ${answer?.[idx] === "false" ? 'bg-red-600 border-red-400 text-white shadow-[0_0_15px_#ef4444]' : 'bg-slate-800 border-slate-600 text-slate-600'}`}><X size={20} strokeWidth={4}/></button></div>
-                                </div>
-                            ))}
-                        </div>
+                        <button onClick={confirmSubmit} className="w-full mt-6 bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-black py-4 rounded-2xl text-xl shadow-lg uppercase italic tracking-wider flex items-center justify-center gap-3 active:scale-[0.98] transition-transform border border-white/10"><Send size={24}/> CHỐT ĐÁP ÁN</button>
                     </div>
-                    <button onClick={confirmSubmit} className="w-full mt-6 bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-black py-4 rounded-2xl text-xl shadow-lg uppercase italic tracking-wider flex items-center justify-center gap-3 active:scale-[0.98] transition-transform border border-white/10"><Send size={24}/> CHỐT ĐÁP ÁN</button>
-                </div>
-            )}
+                )}
 
-            {/* --- SA (TRẢ LỜI NGẮN) --- */}
-            {q.type === 'SA' && (
-                <div className="mt-8">
-                    <input type="text" value={answer || ''} onChange={(e) => setAnswer(e.target.value)} className="w-full bg-[#0f172a] border-4 border-slate-700 focus:border-cyan-500 p-5 rounded-[2rem] text-white font-black text-2xl outline-none text-center mb-6 uppercase placeholder:text-slate-600 transition-colors shadow-inner" placeholder="NHẬP ĐÁP ÁN..."/>
-                    <button onClick={confirmSubmit} className="w-full bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-black py-4 rounded-2xl text-xl shadow-lg uppercase italic tracking-wider flex items-center justify-center gap-3 active:scale-[0.98] transition-transform border border-white/10"><Send size={24}/> GỬI TRẢ LỜI</button>
-                </div>
-            )}
+                {/* --- SA (TRẢ LỜI NGẮN) --- */}
+                {q.type === 'SA' && (
+                    <div className="mt-8">
+                        <input type="text" value={answer || ''} onChange={(e) => setAnswer(e.target.value)} className="w-full bg-[#0f172a] border-4 border-slate-700 focus:border-cyan-500 p-5 rounded-[2rem] text-white font-black text-2xl outline-none text-center mb-6 uppercase placeholder:text-slate-600 transition-colors shadow-inner" placeholder="NHẬP ĐÁP ÁN..."/>
+                        <button onClick={confirmSubmit} className="w-full bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-black py-4 rounded-2xl text-xl shadow-lg uppercase italic tracking-wider flex items-center justify-center gap-3 active:scale-[0.98] transition-transform border border-white/10"><Send size={24}/> GỬI TRẢ LỜI</button>
+                    </div>
+                )}
+            </div>
         </div>
-    </div>
-  </div>
-);
+      </div>
+    );
   }
 
   // --- UI: KẾT QUẢ VÒNG ---

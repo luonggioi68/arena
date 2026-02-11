@@ -14,6 +14,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@google/generative-ai": "^0.24.1",
     "canvas-confetti": "^1.9.4",
+    "clsx": "^2.1.1",
     "firebase": "^12.8.0",
     "firebase-admin": "^13.6.1",
     "lucide-react": "^0.563.0",
@@ -26,6 +27,7 @@
     "react-quill-new": "^3.8.2",
     "rehype-katex": "^7.0.1",
     "remark-math": "^6.0.0",
+    "tailwind-merge": "^3.4.0",
     "xlsx": "^0.18.5",
     "yet-another-react-lightbox": "^3.28.0",
     "zustand": "^5.0.10"

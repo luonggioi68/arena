@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import { db, firestore } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { ref, set, onValue, update } from 'firebase/database';
-import { Shield, Flag, Users, Clock, Swords, Flame, Target, Zap, Trophy, Home, RotateCcw } from 'lucide-react';
+import { Shield, Flag, Users, Clock, Swords, Flame, Target, Zap, Trophy, Home, RotateCcw, CheckCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 // Màu sắc quân đoàn
@@ -35,10 +35,12 @@ export default function BietDoiArenaHost() {
     const generatedPin = Math.floor(100000 + Math.random() * 900000).toString();
     setPin(generatedPin);
     
+    // Khởi tạo phòng với globalSolved rỗng
     set(ref(db, `rooms/${generatedPin}`), { 
         status: 'LOBBY', 
         type: 'RACE', 
-        createdAt: Date.now() 
+        createdAt: Date.now(),
+        globalSolved: {} // Reset trạng thái khóa câu hỏi toàn cục
     });
 
     return onValue(ref(db, `rooms/${generatedPin}/teams`), (snap) => {
@@ -54,6 +56,7 @@ export default function BietDoiArenaHost() {
 
   // 2. KẾT THÚC GAME
   const finishGame = () => {
+    if (gameState === 'FINISHED') return; // Tránh gọi lặp lại
     setGameState('FINISHED');
     update(ref(db, `rooms/${pin}`), { status: 'FINISHED' });
     
@@ -66,7 +69,25 @@ export default function BietDoiArenaHost() {
     }());
   };
 
-  // 3. ĐỒNG HỒ ĐẾM NGƯỢC
+  // 3. LOGIC TỰ ĐỘNG KẾT THÚC (MỚI)
+  useEffect(() => {
+      if (gameState !== 'RACING') return;
+
+      // Đếm số lượng người chơi đã hoàn thành (hết câu hỏi khả dụng)
+      const finishedCount = teams.filter(t => t.isFinished).length;
+      const totalTeams = teams.length;
+
+      // Điều kiện:
+      // - Nếu chơi 1 mình: Xong thì end luôn.
+      // - Nếu chơi nhiều người: Có từ 2 người trở lên xong thì end.
+      if (totalTeams > 0) {
+          if ((totalTeams === 1 && finishedCount === 1) || (totalTeams >= 2 && finishedCount >= 2)) {
+              finishGame();
+          }
+      }
+  }, [teams, gameState]);
+
+  // 4. ĐỒNG HỒ ĐẾM NGƯỢC
   useEffect(() => {
     if (gameState !== 'RACING') return;
     const interval = setInterval(() => {
@@ -81,7 +102,7 @@ export default function BietDoiArenaHost() {
     return () => clearInterval(interval);
   }, [gameState, pin]);
 
-  // 4. BẮT ĐẦU
+  // 5. BẮT ĐẦU
   const startGame = () => {
     if (teams.length === 0) return alert("Chưa có quân đoàn nào tham chiến!");
     const durationInSeconds = initialTime * 60;
@@ -92,7 +113,8 @@ export default function BietDoiArenaHost() {
         status: 'RACING', 
         quizData: quiz.questions, 
         startTime: Date.now(),
-        duration: durationInSeconds 
+        duration: durationInSeconds,
+        globalSolved: {} // Đảm bảo reset lại khi bắt đầu
     });
   };
 
@@ -168,7 +190,7 @@ export default function BietDoiArenaHost() {
           </div>
         )}
 
-        {/* RACING VIEW (ĐÃ SỬA LỖI CHE ĐIỂM) */}
+        {/* RACING VIEW */}
         {gameState === 'RACING' && (
           <div className="h-full flex flex-col gap-6 relative z-10">
               <div className="flex-1 bg-slate-900/60 backdrop-blur-md rounded-[3rem] p-10 border-2 border-orange-600/20 relative overflow-hidden shadow-inner flex flex-col justify-center">
@@ -178,7 +200,6 @@ export default function BietDoiArenaHost() {
                   <div className="space-y-6 relative z-10 w-full overflow-y-auto max-h-full pr-4 custom-scrollbar">
                       {sortedTeams.map((team, idx) => {
                           const progress = Math.min(95, ((team.currentQ || 0) / (quiz.questions.length || 10)) * 95);
-                          // [LOGIC SỬA LỖI] Nếu > 55% thì đảo chiều hiển thị để không bị che điểm
                           const isNearEnd = progress > 55;
 
                           return (
@@ -191,15 +212,21 @@ export default function BietDoiArenaHost() {
                                       className={`absolute transition-all duration-1000 ease-out flex items-center gap-4 z-20 ${isNearEnd ? '-translate-x-full flex-row-reverse' : ''}`} 
                                       style={{ left: `${progress}%` }}
                                   >
-                                      {/* Avatar (Giữ Icon Flame đi kèm Avatar) */}
+                                      {/* Avatar */}
                                       <div className={`${team.color.bg} ${team.color.border} border-2 p-2 rounded-xl shadow-lg relative ${team.color.shadow} group-hover:scale-110 transition-transform shrink-0`}>
                                           {idx === 0 && <Flame className="absolute -top-6 -left-2 text-orange-500 animate-bounce" size={24} fill="currentColor" />}
+                                          {/* [NEW] Icon Hoàn thành */}
+                                          {team.isFinished && <div className="absolute -bottom-2 -right-2 bg-green-500 text-white rounded-full p-1 border-2 border-slate-900 z-10 animate-bounce"><Flag size={14} fill="currentColor"/></div>}
                                           <Users size={24} className={team.color.text} />
                                       </div>
 
                                       {/* Bảng điểm */}
                                       <div className="bg-slate-900/90 border-2 border-slate-700 px-3 py-1 rounded-xl shadow-xl backdrop-blur-sm whitespace-nowrap flex flex-col">
-                                          <p className={`font-black text-xs uppercase ${team.color.text.replace('100','400')}`}>{team.name}</p>
+                                          <div className="flex items-center gap-2">
+                                              <p className={`font-black text-xs uppercase ${team.color.text.replace('100','400')}`}>{team.name}</p>
+                                              {/* [NEW] Chỉ báo đã xong */}
+                                              {team.isFinished && <span className="text-[10px] bg-green-600 text-white px-1.5 rounded font-bold">DONE</span>}
+                                          </div>
                                           <div className="flex gap-2 text-xs">
                                               <span className="text-white font-bold">{team.currentQ}/{quiz.questions.length} câu</span>
                                               <span className="text-yellow-400 font-black italic border-l border-white/20 pl-2">{team.score}đ</span>

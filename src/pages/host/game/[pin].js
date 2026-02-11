@@ -5,6 +5,8 @@ import { ref, update, onValue } from 'firebase/database';
 import { Trophy, Clock, Monitor, Car, Hammer, Building, Volume2, VolumeX, Shield, Flame, ArrowLeft, SkipForward, Loader2, Crown, Check, X, FileSpreadsheet, Flag } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import * as XLSX from 'xlsx';
+// [NEW] Import MathRender
+import MathRender from '@/components/MathRender'; 
 
 export default function ArenaHostController() {
   const router = useRouter();
@@ -21,6 +23,36 @@ export default function ArenaHostController() {
   const [gameConfig, setGameConfig] = useState({}); 
 
   const bgmRef = useRef(null);
+
+  // [NEW] HÀM RENDER VĂN BẢN KÈM ẢNH INLINE
+  const renderWithInlineImage = (text, imgUrl) => {
+    if (!text) return null;
+    
+    // Nếu có thẻ [img] và có link ảnh
+    if (text.includes('[img]') && imgUrl) {
+        const parts = text.split('[img]');
+        return (
+            <span>
+                {parts.map((part, index) => (
+                    <span key={index}>
+                        <MathRender content={part} />
+                        {/* Nếu chưa phải phần cuối cùng thì chèn ảnh vào giữa */}
+                        {index < parts.length - 1 && (
+                            <img 
+                                src={imgUrl} 
+                                className="inline-block align-middle mx-1 max-h-16 border rounded bg-white shadow-sm" 
+                                alt="minh-hoa"
+                            />
+                        )}
+                    </span>
+                ))}
+            </span>
+        );
+    }
+    
+    // Mặc định trả về text chứa công thức toán
+    return <MathRender content={text} />;
+  };
 
   // 1. KHỞI TẠO & LẮNG NGHE
   useEffect(() => {
@@ -118,12 +150,9 @@ export default function ArenaHostController() {
   const handleStartGame = () => update(ref(db, `rooms/${pin}`), { gameState: 'PREPARE', currentQuestion: 0 });
   const skipTimer = () => setTimer(0);
   
-  // [MỚI] HÀM KẾT THÚC SỚM (VINH DANH NGAY)
   const handleEarlyFinish = () => {
       if (confirm("⚠️ KẾT THÚC SỚM?\nBạn có chắc muốn dừng trận đấu và vinh danh ngay lập tức?")) {
-          // Bắn pháo hoa hiệu ứng
           confetti({ particleCount: 300, spread: 100, origin: { y: 0.6 } });
-          // Cập nhật trạng thái FINISHED
           update(ref(db, `rooms/${pin}`), { gameState: 'FINISHED' });
       }
   };
@@ -242,14 +271,11 @@ export default function ArenaHostController() {
         <div className="flex items-center gap-3">
             <button onClick={toggleMute} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition text-white/50 hover:text-white">{isMuted ? <VolumeX size={20}/> : <Volume2 size={20} className="text-green-400"/>}</button>
             
-            {/* [MỚI] CỤM NÚT ĐIỀU KHIỂN GAME (KẾT THÚC SỚM + SKIP) */}
             {['PREPARE', 'QUESTION', 'RESULT'].includes(gameState) && (
                 <div className="flex gap-2">
-                    {/* Nút Kết thúc sớm */}
                     <button onClick={handleEarlyFinish} className="bg-red-500/20 hover:bg-red-600 p-2 rounded-full transition text-red-400 hover:text-white border border-red-500/30" title="Kết thúc sớm & Vinh danh">
                         <Flag size={20}/>
                     </button>
-                    {/* Nút Skip Timer */}
                     {gameState !== 'RESULT' && (
                         <button onClick={skipTimer} className="bg-white/10 hover:bg-white/20 p-2 rounded-full transition text-white/50 hover:text-white" title="Bỏ qua thời gian">
                             <SkipForward size={20}/>
@@ -279,7 +305,7 @@ export default function ArenaHostController() {
                         <Users size={24} className="text-indigo-400" />
                         <span className="font-bold text-xl"><span className="text-white text-2xl">{players.length}</span> người đã vào</span>
                     </div>
-                    <button onClick={handleStartGame} className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white px-12 py-5 rounded-2xl font-black text-2xl shadow-[0_10px_30px_rgba(16,185,129,0.4)] flex items-center gap-3 transform hover:scale-105 active:scale-95 transition-all uppercase italic">BẮT ĐẦU NGAY <Play fill="currentColor" size={24}/></button>
+                    <button onClick={handleStartGame} className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white px-12 py-5 rounded-2xl font-black text-2xl shadow-[0_10px_30px_rgba(16,185,129,0.4)] flex items-center gap-3 transform hover:scale-105 active:scale-95 transition-all uppercase italic">BẮT ĐẦU NGAY</button>
                 </div>
                 <div className="mt-8 flex flex-wrap justify-center gap-3 max-w-5xl">
                     {players.map((p) => (<div key={p.id} className="bg-white/10 backdrop-blur px-4 py-2 rounded-xl border border-white/10 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-4"><img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${p.name}`} className="w-6 h-6 rounded-full bg-slate-800" /><span className="font-bold text-sm">{p.name}</span></div>))}
@@ -297,14 +323,18 @@ export default function ArenaHostController() {
         {(gameState === 'QUESTION' || gameState === 'RESULT') && (
             <div className="flex flex-col h-full gap-4 animate-in fade-in duration-500">
                 {viewMode === 'CLASSIC' && (
-                    <div className="h-auto min-h-[22vh] max-h-[35vh] bg-slate-900 p-6 rounded-[2rem] border border-slate-800 text-center flex items-center justify-center shadow-2xl shrink-0 relative group overflow-y-auto custom-scrollbar">
+                    <div className="h-auto min-h-[22vh] max-h-[40vh] bg-slate-900 p-6 rounded-[2rem] border border-slate-800 text-center flex flex-col items-center justify-center shadow-2xl shrink-0 relative group overflow-y-auto custom-scrollbar">
                         <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 pointer-events-none"></div>
-                        {currentQuestion.img && <img src={currentQuestion.img} className="h-24 w-auto rounded object-contain mr-4 border border-white/10"/>}
-                        {/* [SỬA 1] Hiển thị câu hỏi dạng HTML/MathML */}
-                        <h1 
-                            className={`text-xl md:text-3xl font-bold text-white leading-normal relative z-10 ${currentQuestion.q.includes('\n') ? 'whitespace-pre-wrap font-mono text-left text-lg' : 'italic'}`}
-                            dangerouslySetInnerHTML={{ __html: currentQuestion.q }}
-                        />
+                        
+                        {/* [UPDATE] Hiển thị nội dung text trước */}
+                        <div className={`text-xl md:text-3xl font-bold text-white leading-normal relative z-10 ${currentQuestion.q.includes('\n') ? 'whitespace-pre-wrap font-mono text-left text-lg' : 'italic'}`}>
+                            {renderWithInlineImage(currentQuestion.q, currentQuestion.img)}
+                        </div>
+
+                        {/* [UPDATE] Hiển thị ảnh khối sau nếu không dùng inline */}
+                        {currentQuestion.img && !currentQuestion.q.includes('[img]') && (
+                            <img src={currentQuestion.img} className="h-48 w-auto rounded object-contain mt-4 border border-white/10"/>
+                        )}
                     </div>
                 )}
                 <div className="flex-1 min-h-0 relative z-10">
@@ -318,9 +348,12 @@ export default function ArenaHostController() {
                                     {currentQuestion.a.map((ans, idx) => (
                                         <div key={idx} className={`rounded-[2rem] flex flex-col items-center justify-center text-xl md:text-2xl font-bold text-white p-6 text-center border-b-[8px] shadow-xl transition-all ${gameState === 'RESULT' ? (idx === currentQuestion.correct ? 'bg-green-600 border-green-800 opacity-100 scale-105' : 'bg-slate-700 border-slate-900 opacity-50') : 'bg-indigo-600/90 border-indigo-900 hover:bg-indigo-600'}`}>
                                           <div className="absolute top-4 left-4 w-10 h-10 rounded-full bg-black/20 flex items-center justify-center text-sm font-black">{String.fromCharCode(65+idx)}</div>
-                                          {/* [SỬA 2] Hiển thị đáp án dạng HTML/MathML */}
-                                          <span dangerouslySetInnerHTML={{ __html: ans }} />
-                                          {currentQuestion.aImages?.[idx] && <img src={currentQuestion.aImages[idx]} className="h-20 w-auto mt-2 rounded bg-white p-1"/>}
+                                          
+                                          {/* [UPDATE] Render nội dung đáp án + ảnh inline */}
+                                          {renderWithInlineImage(ans, currentQuestion.aImages?.[idx])}
+                                          
+                                          {/* Fallback ảnh khối */}
+                                          {currentQuestion.aImages?.[idx] && !ans.includes('[img]') && <img src={currentQuestion.aImages[idx]} className="h-20 w-auto mt-2 rounded bg-white p-1"/>}
                                         </div>
                                     ))}
                                 </div>
@@ -332,11 +365,11 @@ export default function ArenaHostController() {
                                         <tbody>
                                             {currentQuestion.items.map((item, idx) => (
                                                 <tr key={idx} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition">
-                                                    {/* [SỬA 3] Hiển thị nội dung ý con dạng HTML/MathML */}
-                                                    <td 
-                                                        className="py-6 pl-4 font-bold"
-                                                        dangerouslySetInnerHTML={{ __html: item.text }}
-                                                    />
+                                                    {/* [UPDATE] Render nội dung TF */}
+                                                    <td className="py-6 pl-4 font-bold">
+                                                        {renderWithInlineImage(item.text, item.img)}
+                                                        {item.img && !item.text.includes('[img]') && <img src={item.img} className="h-16 mt-2 rounded border border-white/10"/>}
+                                                    </td>
                                                     <td className="py-6 text-center"><div className={`w-10 h-10 rounded-lg mx-auto flex items-center justify-center ${gameState === 'RESULT' && item.isTrue ? 'bg-green-500 shadow-[0_0_15px_#22c55e]' : 'bg-slate-700'}`}>{gameState === 'RESULT' && item.isTrue && <Check size={28} strokeWidth={4}/>}</div></td>
                                                     <td className="py-6 text-center"><div className={`w-10 h-10 rounded-lg mx-auto flex items-center justify-center ${gameState === 'RESULT' && !item.isTrue ? 'bg-green-500 shadow-[0_0_15px_#22c55e]' : 'bg-slate-700'}`}>{gameState === 'RESULT' && !item.isTrue && <Check size={28} strokeWidth={4}/>}</div></td>
                                                 </tr>
@@ -348,11 +381,10 @@ export default function ArenaHostController() {
                             {currentQuestion.type === 'SA' && (
                                 <div className="h-full flex flex-col items-center justify-center bg-slate-800/60 rounded-[2rem] border-2 border-dashed border-white/10">
                                     <div className="text-slate-400 uppercase font-black tracking-[0.5em] mb-6">ĐÁP ÁN CHÍNH XÁC</div>
-                                    {/* [SỬA 4] Hiển thị đáp án đúng SA dạng HTML/MathML */}
-                                    <div 
-                                        className="bg-white text-slate-950 text-6xl font-black px-16 py-8 rounded-3xl shadow-[0_10px_0_#cbd5e1] min-w-[60%] text-center uppercase tracking-wider"
-                                        dangerouslySetInnerHTML={{ __html: gameState === 'RESULT' ? currentQuestion.correct : "???" }}
-                                    />
+                                    <div className="bg-white text-slate-950 text-6xl font-black px-16 py-8 rounded-3xl shadow-[0_10px_0_#cbd5e1] min-w-[60%] text-center uppercase tracking-wider">
+                                        {/* [UPDATE] Render đáp án SA */}
+                                        {gameState === 'RESULT' ? renderWithInlineImage(currentQuestion.correct) : "???"}
+                                    </div>
                                 </div>
                             )}
                         </div>

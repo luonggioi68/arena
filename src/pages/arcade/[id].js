@@ -1,14 +1,17 @@
 import { useState, useEffect, useRef, useMemo } from 'react'; 
 import { useRouter } from 'next/router';
+import Link from 'next/link'; 
 import { firestore } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, increment } from 'firebase/firestore'; 
 import useAuthStore from '@/store/useAuthStore'; 
 import { 
-    ArrowLeft, CircleDashed, LayoutGrid, Gift, Grid3X3, CheckCircle, 
-    XCircle, Lock, RefreshCcw, Gamepad2, Package, X, Check, 
-    DollarSign, Phone, Users, Bot, Divide, HelpCircle, Trophy, Home 
+    FileText, ArrowLeft, CircleDashed, Gift, Grid3X3, CheckCircle, 
+    XCircle, Lock, RefreshCcw, Gamepad2, Package, X, 
+    DollarSign, Phone, Users, Bot, Trophy, Map, Check 
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import JourneyGame from './journey';
+import MathRender from '@/components/MathRender'; 
 
 const styles = `
   .perspective-1000 { perspective: 1000px; }
@@ -26,7 +29,6 @@ const styles = `
     to { opacity: 1; transform: translateY(0); }
   }
   .animate-card { animation: fadeInUp 0.5s ease-out forwards; }
-  /* [MOBILE FIX] Giảm clip-path trên mobile để đỡ bị mất chữ nếu muốn, hoặc giữ nguyên và cho scroll text */
   .mil-answer-clip { clip-path: polygon(5% 0, 95% 0, 100% 50%, 95% 100%, 5% 100%, 0 50%); }
   @media (min-width: 768px) {
     .mil-answer-clip { clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%); }
@@ -36,9 +38,41 @@ const styles = `
   @keyframes flash { 0% { background-color: #fbbf24; } 50% { background-color: #d97706; } 100% { background-color: #fbbf24; } }
 `;
 
+// HÀM RENDER VĂN BẢN KÈM ẢNH INLINE
+const renderWithInlineImage = (text, imgUrl) => {
+    if (!text) return null;
+    
+    // Nếu có thẻ [img] và có link ảnh
+    if (text.includes('[img]') && imgUrl) {
+        const parts = text.split('[img]');
+        return (
+            <span>
+                {parts.map((part, index) => (
+                    <span key={index}>
+                        <MathRender content={part} />
+                        {/* Chèn ảnh vào giữa */}
+                        {index < parts.length - 1 && (
+                            <img 
+                                src={imgUrl} 
+                                className="inline-block align-middle mx-1 max-h-12 border rounded bg-white shadow-sm" 
+                                alt="minh-hoa"
+                            />
+                        )}
+                    </span>
+                ))}
+            </span>
+        );
+    }
+    
+    return <MathRender content={text} />;
+};
+
 export default function ArcadeMode() {
   const router = useRouter();
-  const { id, game } = router.query;
+  
+  // [ĐÃ SỬA LỖI] Gộp khai báo biến tại đây (id, game, from)
+  const { id, game, from } = router.query;
+
   const [quiz, setQuiz] = useState(null);
   const [mode, setMode] = useState('MENU'); 
   const [loading, setLoading] = useState(true);
@@ -71,17 +105,25 @@ export default function ArcadeMode() {
     });
   }, [id]);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617] text-white font-bold text-xl"><div className="animate-spin mr-2">⏳</div> Đang tải dữ liệu...</div>;
-
+  // HÀM XỬ LÝ QUAY LẠI (Sửa logic điều hướng)
   const handleBack = () => {
-      if (mode !== 'MENU') {
-          setMode('MENU');
-          router.push({ pathname: router.pathname, query: { id } }, undefined, { shallow: true });
-      } else {
-          const backGrade = quiz.grade || 10;
-          router.push(`/training?grade=${backGrade}`);
+      // ƯU TIÊN 1: Nếu có cờ 'from=dashboard' -> Về thẳng Kho Vũ Khí
+      if (from === 'dashboard') {
+          router.push('/dashboard'); 
+          return;
+      }
+
+      // ƯU TIÊN 2: Mặc định về Lobby (Sảnh chọn game)
+      if (id) {
+          router.push(`/arcade/lobby/${id}`);
+      } 
+      // DỰ PHÒNG: Về trang luyện tập học sinh
+      else {
+          router.push('/training');
       }
   };
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617] text-white font-bold text-xl"><div className="animate-spin mr-2">⏳</div> Đang tải dữ liệu...</div>;
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-white font-sans overflow-hidden flex flex-col">
@@ -91,10 +133,10 @@ export default function ArcadeMode() {
       {mode !== 'MILLIONAIRE' && (
           <div className="p-4 flex justify-between items-center bg-slate-900 border-b border-slate-700 shadow-md z-50 relative shrink-0">
             <button onClick={handleBack} className="flex items-center gap-2 hover:text-yellow-400 font-bold transition uppercase text-sm">
-                <ArrowLeft size={20} /> {mode === 'MENU' ? 'Quay lại Lớp' : 'Chọn game khác'}
+                <ArrowLeft size={20} /> {from === 'dashboard' ? 'Về Kho Vũ Khí' : (mode === 'MENU' ? 'Quay lại Lớp' : 'Chọn game khác')}
             </button>
             <h1 className="text-lg md:text-xl font-black truncate max-w-md uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
-                {quiz?.title} <span className="text-slate-500 mx-2">|</span> ARCADE
+                {quiz?.title} <span className="text-slate-500 mx-2">|</span> KHO GAME - VUI HỌC 
             </h1>
           </div>
       )}
@@ -109,12 +151,31 @@ export default function ArcadeMode() {
                     <p className="text-slate-400 text-sm md:text-base">Vừa học vừa chơi - Sảng khoái tinh thần</p>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 px-4 pb-10">
-                    <GameCard title="Triệu Phú" desc="Trí tuệ & Kịch tính" icon={<DollarSign size={48}/>} color="from-blue-600 to-indigo-900" onClick={() => setMode('MILLIONAIRE')} delay={0} special={true} />
-                    <GameCard title="Vòng Quay" desc="Ngẫu nhiên & May mắn" icon={<CircleDashed size={48}/>} color="from-pink-500 to-rose-600" onClick={() => setMode('WHEEL')} delay={100} />
-                    <GameCard title="Lật Ô Chữ" desc="Chiến thuật & Đồng đội" icon={<LayoutGrid size={48}/>} color="from-emerald-500 to-teal-600" onClick={() => setMode('FLIP')} delay={200} />
-                    <GameCard title="Hộp Bí Mật" desc="Hồi hộp & Bất ngờ" icon={<Gift size={48}/>} color="from-violet-500 to-purple-600" onClick={() => setMode('BOX')} delay={300} />
-                    <GameCard title="Tìm Cặp" desc="Trí nhớ & Phản xạ" icon={<Grid3X3 size={48}/>} color="from-orange-400 to-amber-500" onClick={() => setMode('MATCH')} delay={400} />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 px-4 pb-10">
+                    <GameCard title="Arena Thi Online" desc="Mô phỏng thi thật" icon={<FileText size={48}/>} color="from-red-600 to-rose-900" onClick={() => router.push(`/arcade/exam/${id}`)} delay={0} special={true} />
+                    <GameCard title="Triệu Phú" desc="Trí tuệ & Kịch tính" icon={<DollarSign size={48}/>} color="from-blue-600 to-indigo-900" onClick={() => setMode('MILLIONAIRE')} delay={100} special={true} />
+                    <GameCard title="Vòng Quay" desc="Ngẫu nhiên & May mắn" icon={<CircleDashed size={48}/>} color="from-pink-500 to-rose-600" onClick={() => setMode('WHEEL')} delay={200} />
+                    
+                    {/* Game 4: Hành Trình Vượt Ải */}
+                    <div className="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-2xl overflow-hidden border-2 border-indigo-500/30 group hover:border-indigo-400 transition-all shadow-2xl animate-card h-64 flex flex-col relative" style={{ animationDelay: '300ms' }}>
+                        <div className="h-32 bg-slate-800 relative overflow-hidden">
+                             <div className="absolute inset-0 bg-gradient-to-br from-purple-600 to-indigo-600 opacity-80"></div>
+                             <Map className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white/20 rotate-12" size={80} />
+                             <span className="absolute top-3 right-3 bg-yellow-500 text-black text-[10px] font-black px-2 py-1 rounded uppercase shadow-lg animate-bounce">Mới</span>
+                        </div>
+                        <div className="p-4 flex-1 flex flex-col justify-between bg-[#0f172a]">
+                            <div>
+                                <h3 className="text-lg font-black text-white uppercase leading-tight mb-1">Hành Trình Vượt Ải</h3>
+                                <p className="text-slate-400 text-[10px] uppercase font-bold">Phiêu lưu & Chinh phục</p>
+                            </div>
+                            <button onClick={() => setMode('JOURNEY')} className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold uppercase text-xs shadow-lg shadow-indigo-600/20 transition-all flex items-center justify-center gap-2">
+                                <Gamepad2 size={16}/> Chơi Ngay
+                            </button>
+                        </div>
+                    </div>
+
+                    <GameCard title="Hộp Bí Mật" desc="Hồi hộp & Bất ngờ" icon={<Gift size={48}/>} color="from-violet-500 to-purple-600" onClick={() => setMode('BOX')} delay={400} />
+                    <GameCard title="Tìm Cặp" desc="Trí nhớ & Phản xạ" icon={<Grid3X3 size={48}/>} color="from-orange-400 to-amber-500" onClick={() => setMode('MATCH')} delay={500} />
                 </div>
             </div>
         </div>
@@ -122,22 +183,18 @@ export default function ArcadeMode() {
 
       {/* KHU VỰC RENDER GAME */}
       <div className="flex-1 relative bg-slate-900 overflow-hidden">
-        {mode === 'WHEEL' && <LuckyWheelGame questions={quiz.questions} onAddXP={handleAddXP} />}
-        {mode === 'FLIP' && <FlipCardGame questions={quiz.questions} onAddXP={handleAddXP} />}
-        {mode === 'BOX' && <MysteryBoxGame questions={quiz.questions} onAddXP={handleAddXP} />}
-        {mode === 'MATCH' && <MemoryMatchGame questions={quiz.questions} onAddXP={handleAddXP} />}
-        {mode === 'MILLIONAIRE' && <MillionaireGame questions={quiz.questions} onExit={() => setMode('MENU')} onAddXP={handleAddXP} />}
+        {mode === 'WHEEL' && <LuckyWheelGame questions={quiz.questions} onAddXP={handleAddXP} onExit={handleBack}/>}
+        {mode === 'BOX' && <MysteryBoxGame questions={quiz.questions} onAddXP={handleAddXP} onExit={handleBack}/>}
+        {mode === 'MATCH' && <MemoryMatchGame questions={quiz.questions} onAddXP={handleAddXP} onExit={handleBack} />}
+        {mode === 'MILLIONAIRE' && <MillionaireGame questions={quiz.questions} onAddXP={handleAddXP} onExit={handleBack}/>}
+        {mode === 'JOURNEY' && <JourneyGame questions={quiz.questions} onBack={handleBack} onExit={handleBack} />}
       </div>
     </div>
   );
 }
 
 const GameCard = ({ title, desc, icon, color, onClick, delay, special }) => (
-    <button 
-        onClick={onClick} 
-        className={`group relative h-64 bg-gradient-to-br ${color} rounded-3xl p-6 flex flex-col items-center justify-center hover:scale-105 transition-all duration-300 shadow-2xl border-4 ${special ? 'border-yellow-400 animate-pulse' : 'border-white/10'} hover:border-white/40 animate-card`}
-        style={{ animationDelay: `${delay}ms` }}
-    >
+    <button onClick={onClick} className={`group relative h-64 bg-gradient-to-br ${color} rounded-3xl p-6 flex flex-col items-center justify-center hover:scale-105 transition-all duration-300 shadow-2xl border-4 ${special ? 'border-yellow-400 animate-pulse' : 'border-white/10'} hover:border-white/40 animate-card`} style={{ animationDelay: `${delay}ms` }}>
         {special && <div className="absolute -top-3 -right-3 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase shadow-lg animate-bounce">Hot</div>}
         <div className="mb-4 p-4 bg-black/20 rounded-full group-hover:rotate-12 transition duration-500 shadow-inner text-white">{icon}</div>
         <h2 className="text-xl md:text-2xl font-black uppercase text-center mb-2 drop-shadow-md text-white tracking-tight">{title}</h2>
@@ -145,16 +202,17 @@ const GameCard = ({ title, desc, icon, color, onClick, delay, special }) => (
     </button>
 );
 
+// ====================================================================================
+// GAME COMPONENTS
+// ====================================================================================
 
-// ====================================================================================
-// GAME: AI LÀ TRIỆU PHÚ (MILLIONAIRE) - [FIX MOBILE SCROLL]
-// ====================================================================================
+// GAME: AI LÀ TRIỆU PHÚ
 function MillionaireGame({ questions, onExit, onAddXP }) { 
     const [level, setLevel] = useState(0); 
     const [status, setStatus] = useState('PLAYING'); 
     const [selectedAns, setSelectedAns] = useState(null); 
     const [tfSelection, setTfSelection] = useState({});   
-    
+    const [saInput, setSaInput] = useState("");
     const [locked, setLocked] = useState(false); 
     const [lifelines, setLifelines] = useState({ fifty: true, phone: true, audience: true, ai: true });
     const [hiddenOptions, setHiddenOptions] = useState([]); 
@@ -230,7 +288,7 @@ function MillionaireGame({ questions, onExit, onAddXP }) {
     const handleLock = () => {
         if (currentQ.type === 'MCQ' && selectedAns === null) return;
         if (currentQ.type === 'TF' && currentQ.items && Object.keys(tfSelection).length < currentQ.items.length) return;
-
+        if (currentQ.type === 'SA' && !saInput.trim()) return;
         setLocked(true);
         audioRefs.current.lock.play();
         audioRefs.current.bg.volume = 0.1;
@@ -245,7 +303,11 @@ function MillionaireGame({ questions, onExit, onAddXP }) {
                     return String(item.isTrue) === tfSelection[idx];
                 });
             }
-            
+            else if (currentQ.type === 'SA') {
+                const userAnswer = saInput.trim().toLowerCase();
+                const trueAnswer = String(currentQ.correct).trim().toLowerCase();
+                isCorrect = (userAnswer === trueAnswer);
+            }
             if (isCorrect) {
                 audioRefs.current.correct.play();
                 confetti({ particleCount: 100, spread: 70, origin: { y: 0.8 } });
@@ -256,6 +318,7 @@ function MillionaireGame({ questions, onExit, onAddXP }) {
                         setSelectedAns(null);
                         setTfSelection({});
                         setHiddenOptions([]);
+                        setSaInput("");
                         audioRefs.current.bg.volume = 0.3;
                     } else {
                         setStatus('WIN');
@@ -373,7 +436,6 @@ function MillionaireGame({ questions, onExit, onAddXP }) {
 
     return (
         <div className="h-full w-full mil-gradient text-white flex flex-col md:flex-row overflow-hidden font-sans relative">
-            {/* [FIX MOBILE] Thêm overflow-y-auto cho cột trái để cuộn được khi câu hỏi dài */}
             <div className="flex-1 flex flex-col relative z-10 p-2 md:p-6 overflow-y-auto custom-scrollbar h-full">
                 <div className="flex justify-between items-center mb-2 shrink-0">
                     <div onClick={handleWalkAway} className="bg-black/40 rounded-full px-4 py-2 border border-white/20 flex items-center gap-2 cursor-pointer hover:bg-red-900/50 transition">
@@ -388,12 +450,16 @@ function MillionaireGame({ questions, onExit, onAddXP }) {
                 </div>
 
                 <div className="flex-1 flex flex-col justify-center items-center py-4">
-                    {currentQ.img && <img src={currentQ.img} className="max-h-32 md:max-h-40 rounded-lg border-2 border-white/20 mb-4 bg-black/50 object-contain shadow-lg" />}
-                    <div className="w-full bg-blue-900/90 border-2 border-slate-300 rounded-2xl p-4 md:p-8 text-center shadow-[0_0_40px_rgba(30,58,138,0.6)] relative mb-4 mil-answer-clip min-h-[120px] flex items-center justify-center">
+                    <div className="w-full bg-blue-900/90 border-2 border-slate-300 rounded-2xl p-4 md:p-8 text-center shadow-[0_0_40px_rgba(30,58,138,0.6)] relative mb-4 mil-answer-clip min-h-[120px] flex flex-col items-center justify-center">
                         <div className="absolute -left-0 top-1/2 -translate-y-1/2 w-full h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none"></div>
-                        {/* [FIX MOBILE] Font chữ responsive */}
-                        <h2 className="text-lg md:text-2xl font-bold leading-relaxed relative z-10 drop-shadow-md px-6 md:px-0" dangerouslySetInnerHTML={{ __html: currentQ.q }} />
+                        <h2 className="text-lg md:text-2xl font-bold leading-relaxed relative z-10 drop-shadow-md px-6 md:px-0">
+                            {renderWithInlineImage(currentQ.q, currentQ.img)}
+                        </h2>
                     </div>
+                    {/* Ảnh khối cho câu hỏi nếu không có inline */}
+                    {currentQ.img && !currentQ.q.includes('[img]') && (
+                        <img src={currentQ.img} className="max-h-32 md:max-h-48 rounded-lg border-2 border-white/20 mb-4 bg-black/50 object-contain shadow-lg" />
+                    )}
                 </div>
 
                 <div className="w-full max-w-5xl mx-auto mb-4 min-h-fit md:min-h-[160px] flex items-center justify-center">
@@ -410,7 +476,13 @@ function MillionaireGame({ questions, onExit, onAddXP }) {
                                 return (
                                     <button key={idx} onClick={() => handleSelectMCQ(idx)} disabled={locked || isHidden} className={`relative p-3 md:p-5 rounded-full border-2 ${isSelected ? 'border-yellow-400' : 'border-white/30'} flex items-center transition-all duration-200 group bg-gradient-to-b ${bgClass} ${isHidden ? 'opacity-0 pointer-events-none' : 'opacity-100 shadow-lg'}`}>
                                         <span className={`font-black text-yellow-400 mr-2 md:mr-4 text-base md:text-xl ${isSelected || (locked && isCorrect) ? 'text-white' : ''}`}>{getAnswerLabel(idx)}:</span>
-                                        <span className="font-bold text-sm md:text-lg text-left flex-1" dangerouslySetInnerHTML={{ __html: opt }} />
+                                        {/* [UPDATED] Đáp án MCQ: Inline + Block fallback */}
+                                        <span className="font-bold text-sm md:text-lg text-left flex-1 flex flex-col">
+                                            {renderWithInlineImage(opt, currentQ.aImages?.[idx])}
+                                            {currentQ.aImages?.[idx] && !opt.includes('[img]') && (
+                                                <img src={currentQ.aImages[idx]} className="h-12 w-auto mt-1 rounded bg-white p-0.5 self-start" />
+                                            )}
+                                        </span>
                                     </button>
                                 )
                             })}
@@ -421,7 +493,13 @@ function MillionaireGame({ questions, onExit, onAddXP }) {
                             <div className="space-y-3">
                                 {currentQ.items.map((item, idx) => (
                                     <div key={idx} className="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-white/10">
-                                        <span className="flex-1 font-bold text-base mr-4" dangerouslySetInnerHTML={{ __html: item.text }} />
+                                        {/* [UPDATED] Nội dung TF: Inline + Block fallback */}
+                                        <span className="flex-1 font-bold text-base mr-4">
+                                            {renderWithInlineImage(item.text, item.img)}
+                                            {item.img && !item.text.includes('[img]') && (
+                                                <img src={item.img} className="h-12 mt-1 rounded border border-white/20 block" />
+                                            )}
+                                        </span>
                                         <div className="flex gap-2">
                                             <button onClick={() => handleSelectTF(idx, "true")} disabled={locked} className={`w-12 h-12 rounded-lg font-black border-2 transition-all ${tfSelection[idx] === "true" ? (locked && String(item.isTrue) === "true" ? 'bg-green-600 border-green-400' : locked && String(item.isTrue) !== "true" ? 'bg-red-600 border-red-400' : 'bg-blue-600 border-blue-400 scale-110') : 'bg-slate-900 border-slate-700 text-slate-500'}`}>Đ</button>
                                             <button onClick={() => handleSelectTF(idx, "false")} disabled={locked} className={`w-12 h-12 rounded-lg font-black border-2 transition-all ${tfSelection[idx] === "false" ? (locked && String(item.isTrue) === "false" ? 'bg-green-600 border-green-400' : locked && String(item.isTrue) !== "false" ? 'bg-red-600 border-red-400' : 'bg-blue-600 border-blue-400 scale-110') : 'bg-slate-900 border-slate-700 text-slate-500'}`}>S</button>
@@ -429,6 +507,32 @@ function MillionaireGame({ questions, onExit, onAddXP }) {
                                     </div>
                                 ))}
                             </div>
+                        </div>
+                    )}
+                    {currentQ.type === 'SA' && (
+                        <div className="w-full max-w-2xl px-4">
+                            <input 
+                                value={saInput}
+                                onChange={(e) => setSaInput(e.target.value)}
+                                disabled={locked}
+                                placeholder="NHẬP CÂU TRẢ LỜI CỦA BẠN..."
+                                className={`
+                                    w-full py-4 px-6 text-center text-xl md:text-3xl font-black uppercase rounded-full border-4 outline-none shadow-2xl transition-all duration-300
+                                    ${locked 
+                                        ? (saInput.trim().toLowerCase() === String(currentQ.correct).trim().toLowerCase()
+                                            ? 'bg-green-600 border-green-400 text-white shadow-[0_0_50px_rgba(34,197,94,0.6)] scale-105' 
+                                            : 'bg-red-600 border-red-400 text-white opacity-80') 
+                                        : 'bg-slate-900/80 border-blue-500 text-yellow-400 focus:border-yellow-400 focus:shadow-[0_0_30px_rgba(234,179,8,0.5)] placeholder-slate-600' 
+                                    }
+                                `}
+                            />
+                            {locked && saInput.trim().toLowerCase() !== String(currentQ.correct).trim().toLowerCase() && (
+                                <div className="mt-4 bg-yellow-500 text-black font-bold p-3 rounded-xl text-center animate-in slide-in-from-top shadow-lg">
+                                    ĐÁP ÁN ĐÚNG: <span className="text-xl uppercase font-black">
+                                        {renderWithInlineImage(currentQ.correct)}
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -468,7 +572,6 @@ function MillionaireGame({ questions, onExit, onAddXP }) {
                             {modal.type === 'PHONE' && "Gọi điện thoại"}
                             {modal.type === 'AI' && "AI Phân tích"}
                         </h3>
-                        {/* ... Modal content ... */}
                         {modal.type === 'AUDIENCE' && (
                             <div className="flex justify-around items-end h-40 gap-2">
                                 {modal.data.map((percent, i) => (
@@ -511,125 +614,8 @@ const LifelineButton = ({ icon, label, active, onClick, special }) => (
     </div>
 );
 
-// --- COMPONENT POPUP TRẢ LỜI CÂU HỎI (HỖ TRỢ MCQ, TF, SA & MATHML) ---
-function InteractiveQuestion({ data, onClose, gameType }) {
-    const [selectedIdx, setSelectedIdx] = useState(null); 
-    const [saInput, setSaInput] = useState("");
-    const [tfSelection, setTfSelection] = useState({});
-    
-    const [isLocked, setIsLocked] = useState(false); 
-    const [isCorrect, setIsCorrect] = useState(null); 
-    const labels = ['A', 'B', 'C', 'D'];
-
-    const handleLock = () => {
-        setIsLocked(true);
-        let correct = false;
-
-        if (data.type === 'MCQ') {
-            if (selectedIdx === null) return;
-            correct = parseInt(data.correct) === selectedIdx;
-        } 
-        else if (data.type === 'SA') {
-            const userAnswer = saInput.trim().toUpperCase();
-            const trueAnswer = data.correct.trim().toUpperCase();
-            correct = userAnswer === trueAnswer;
-        }
-        else if (data.type === 'TF') {
-            const allCorrect = data.items.every((item, idx) => {
-                const userChoice = tfSelection[idx];
-                const trueKey = String(item.isTrue);
-                return userChoice === trueKey;
-            });
-            correct = allCorrect;
-        }
-
-        setIsCorrect(correct);
-        if (correct) confetti({ particleCount: 200, spread: 120, origin: { y: 0.6 } });
-    };
-
-    const handleFinish = () => onClose(isCorrect); 
-
-    const getButtonLabel = () => {
-        if (gameType === 'WHEEL') return "Hoàn thành (Xóa ô này)";
-        return isCorrect ? "Đóng Lại (Tiếp tục)" : "Thử lại sau";
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-            <div className="bg-[#1e293b] text-white p-6 md:p-8 rounded-[2rem] max-w-4xl w-full text-center relative max-h-[90vh] flex flex-col shadow-2xl border-4 border-indigo-500/50">
-                <button onClick={() => onClose(null)} className="absolute top-4 right-4 bg-white/10 p-2 rounded-full hover:bg-red-500 transition z-10"><X size={20}/></button>
-                
-                <div className="overflow-y-auto flex-1 pr-2 custom-scrollbar">
-                    <span className="text-xs font-black text-indigo-400 mb-2 uppercase tracking-[0.2em] block">
-                        {data.type === 'MCQ' ? 'TRẮC NGHIỆM' : data.type === 'TF' ? 'ĐÚNG / SAI' : 'TRẢ LỜI NGẮN'}
-                    </span>
-                    
-                    {data.img && <img src={data.img} className="h-32 md:h-40 mx-auto object-contain mb-4 rounded-xl border-2 border-white/10 shadow-lg bg-black/20" />}
-                    
-                    <h1 className="text-lg md:text-2xl font-bold mb-6 leading-snug whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: data.q }} />
-
-                    {data.type === 'MCQ' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                            {data.a.map((ans, idx) => {
-                                let statusClass = "bg-slate-800 border-slate-700 hover:bg-slate-700";
-                                if (!isLocked && selectedIdx === idx) statusClass = "bg-indigo-600 border-indigo-500 shadow-lg scale-[1.02]"; 
-                                if (isLocked) {
-                                    const correctIndex = parseInt(data.correct);
-                                    if (isCorrect && idx === correctIndex) statusClass = "bg-green-600 border-green-500 shadow-xl scale-105 z-10";
-                                    else if (!isCorrect && idx === selectedIdx) statusClass = "bg-red-600 border-red-500 opacity-80";
-                                    else statusClass = "bg-slate-800 border-slate-700 opacity-30 grayscale";
-                                }
-                                return (
-                                    <div key={idx} onClick={() => !isLocked && setSelectedIdx(idx)} className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 flex items-center min-h-[60px] ${statusClass}`}>
-                                        <div className="absolute left-4 w-8 h-8 rounded-full bg-black/20 flex items-center justify-center font-black text-sm">{labels[idx]}</div>
-                                        <div className="pl-10 w-full flex justify-center text-base font-bold">
-                                            {typeof ans === 'string' && ans.startsWith('http') ? <img src={ans} className="h-12 object-contain" /> : <span dangerouslySetInnerHTML={{ __html: ans }} />}
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    )}
-
-                    {data.type === 'TF' && (
-                        <div className="space-y-2 mb-4 text-left">
-                            {data.items.map((item, idx) => (
-                                <div key={idx} className="flex justify-between items-center bg-slate-800 p-3 rounded-xl border border-slate-700">
-                                    <div className="flex-1 mr-4 font-bold text-sm md:text-base"><span dangerouslySetInnerHTML={{ __html: item.text }} /></div>
-                                    <div className="flex gap-2 shrink-0">
-                                        <button onClick={() => !isLocked && setTfSelection(p => ({...p, [idx]: "true"}))} className={`w-10 h-10 rounded-lg border-2 font-black transition-all ${tfSelection[idx] === "true" ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-900 border-slate-600 text-slate-500'} ${isLocked && item.isTrue === true ? 'ring-2 ring-green-500' : ''}`}>Đ</button>
-                                        <button onClick={() => !isLocked && setTfSelection(p => ({...p, [idx]: "false"}))} className={`w-10 h-10 rounded-lg border-2 font-black transition-all ${tfSelection[idx] === "false" ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-900 border-slate-600 text-slate-500'} ${isLocked && item.isTrue === false ? 'ring-2 ring-green-500' : ''}`}>S</button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {data.type === 'SA' && (
-                        <div className="mb-4">
-                            <input value={saInput} onChange={(e) => setSaInput(e.target.value)} disabled={isLocked} className={`w-full bg-slate-900 border-4 p-4 rounded-2xl text-center font-black text-2xl uppercase outline-none placeholder-slate-600 ${isLocked ? (isCorrect ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400') : 'border-indigo-500 focus:shadow-[0_0_20px_#6366f1]'}`} placeholder="NHẬP ĐÁP ÁN..."/>
-                            {isLocked && !isCorrect && (<div className="mt-3 text-green-400 font-bold animate-pulse">Đáp án đúng: <span dangerouslySetInnerHTML={{ __html: data.correct }} /></div>)}
-                        </div>
-                    )}
-                </div>
-
-                <div className="pt-4 border-t border-white/10 mt-2">
-                    {!isLocked ? (
-                        <button onClick={handleLock} className="w-full py-3 rounded-xl font-black text-lg shadow-lg flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:scale-[1.01] transition-all"><Lock size={20}/> CHỐT ĐÁP ÁN</button>
-                    ) : (
-                        <div className="animate-in slide-in-from-bottom fade-in duration-300">
-                            <div className={`py-2 text-xl font-black uppercase mb-2 ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>{isCorrect ? "🎉 CHÍNH XÁC!" : "😢 SAI RỒI!"}</div>
-                            <button onClick={handleFinish} className="w-full bg-white text-slate-900 font-black py-3 rounded-xl shadow-xl hover:bg-gray-100 transition uppercase tracking-widest">{getButtonLabel()}</button>
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ---------------- GAME 1: VÒNG QUAY MAY MẮN ----------------
-function LuckyWheelGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
+// ---------------- GAME: VÒNG QUAY MAY MẮN ----------------
+function LuckyWheelGame({ questions, onAddXP, onExit }) {
     const [activeQuestions, setActiveQuestions] = useState(questions); 
     const [spinning, setSpinning] = useState(false);
     const [result, setResult] = useState(null);
@@ -643,6 +629,7 @@ function LuckyWheelGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
         const randomSpins = 360 * (5 + Math.random() * 5); 
         const totalRotation = rotation + randomSpins + Math.random() * 360;
         setRotation(totalRotation);
+
         setTimeout(() => {
             setSpinning(false);
             const sliceSize = 360 / activeQuestions.length; 
@@ -653,8 +640,9 @@ function LuckyWheelGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
 
     const handleCloseModal = (isCorrect) => {
         if (isCorrect === true) {
-            onAddXP(50); // [UPDATE] Trả lời đúng +50 XP
+            onAddXP(50); 
             setActiveQuestions(prev => prev.filter(q => q !== result));
+            confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
         }
         setResult(null);
     };
@@ -667,80 +655,118 @@ function LuckyWheelGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
         const center = size / 2;
         const radius = size / 2 - 20;
         const total = activeQuestions.length; 
+        
         canvas.width = size; canvas.height = size;
-        if (total === 0) { ctx.beginPath(); ctx.arc(center, center, radius, 0, 2 * Math.PI); ctx.fillStyle = "#334155"; ctx.fill(); return; }
+        if (total === 0) return;
+
         const slice = (2 * Math.PI) / total;
         const colors = ['#ec4899', '#8b5cf6', '#6366f1', '#3b82f6', '#0ea5e9', '#10b981', '#f59e0b', '#f97316'];
+        
         activeQuestions.forEach((q, i) => {
-            ctx.beginPath(); ctx.moveTo(center, center); ctx.arc(center, center, radius, i * slice, (i + 1) * slice); ctx.fillStyle = colors[i % colors.length]; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#0f172a"; ctx.stroke();
-            ctx.save(); ctx.translate(center, center); ctx.rotate(i * slice + slice / 2); ctx.textAlign = "right"; ctx.fillStyle = "#fff"; ctx.font = "bold 24px Arial"; ctx.fillText((i + 1).toString(), radius - 40, 10); ctx.restore();
+            ctx.beginPath();
+            ctx.moveTo(center, center);
+            ctx.arc(center, center, radius, i * slice, (i + 1) * slice);
+            ctx.fillStyle = colors[i % colors.length];
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "#0f172a";
+            ctx.stroke();
+            ctx.save();
+            ctx.translate(center, center);
+            ctx.rotate(i * slice + slice / 2);
+            ctx.textAlign = "right";
+            ctx.fillStyle = "#fff";
+            ctx.font = "bold 24px Arial";
+            ctx.fillText((i + 1).toString(), radius - 40, 10);
+            ctx.restore();
         });
     }, [activeQuestions]);
 
-    if (activeQuestions.length === 0) return <div className="flex flex-col items-center justify-center h-full"><div className="text-8xl mb-4">🏆</div><h2 className="text-4xl font-black text-yellow-400 mb-6 uppercase">Hoàn thành!</h2><button onClick={() => setActiveQuestions(questions)} className="bg-white text-slate-900 px-8 py-3 rounded-xl font-bold hover:bg-gray-100 flex items-center gap-2 shadow-lg"><RefreshCcw /> Chơi lại</button></div>;
+    if (activeQuestions.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full animate-in zoom-in p-4 text-center">
+                <div className="text-8xl mb-4 animate-bounce">🏆</div>
+                <h2 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-yellow-600 mb-6 uppercase drop-shadow-sm">Hoàn thành xuất sắc!</h2>
+                <p className="text-slate-400 mb-8 text-lg">Bạn đã chinh phục tất cả câu hỏi trong vòng quay may mắn.</p>
+                <div className="flex flex-col md:flex-row gap-4 w-full max-w-md">
+                    <button onClick={() => setActiveQuestions(questions)} className="flex-1 bg-white text-slate-900 px-6 py-4 rounded-xl font-bold hover:bg-gray-100 flex items-center justify-center gap-2 shadow-lg transition hover:-translate-y-1"><RefreshCcw size={20}/> Chơi lại</button>
+                    <button onClick={onExit} className="flex-1 bg-slate-800 text-white px-6 py-4 rounded-xl font-bold hover:bg-slate-700 flex items-center justify-center gap-2 shadow-lg transition hover:-translate-y-1 border border-slate-600"><ArrowLeft size={20}/> Về Sảnh</button>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="flex flex-col items-center justify-center h-full relative overflow-hidden">
-            <div className="absolute top-[5%] z-20 text-6xl text-yellow-400 drop-shadow-lg">▼</div>
-            <div className="relative transform transition-transform duration-[5000ms] cubic-bezier(0.1, 0.7, 0.1, 1)" style={{ transform: `rotate(${rotation}deg)` }}>
-                <canvas ref={canvasRef} className="rounded-full shadow-2xl border-4 border-slate-700" />
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white w-16 h-16 rounded-full shadow-inner border-4 border-slate-200 flex items-center justify-center font-black text-slate-900">Edu</div>
+        <div className="flex flex-col items-center justify-center h-full relative overflow-hidden py-10">
+            <div className="absolute top-[10%] md:top-[5%] z-20 text-6xl text-yellow-400 drop-shadow-[0_4px_0_rgba(0,0,0,0.5)]">▼</div>
+            <div className="relative transform transition-transform cubic-bezier(0.1, 0.7, 0.1, 1)" style={{ transform: `rotate(${rotation}deg)`, transitionDuration: '5000ms' }}>
+                <canvas ref={canvasRef} className="rounded-full shadow-2xl border-8 border-slate-800 w-[300px] h-[300px] md:w-[500px] md:h-[500px]" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white w-16 h-16 md:w-20 md:h-20 rounded-full shadow-inner border-4 border-slate-200 flex items-center justify-center font-black text-slate-900 text-xl">Edu</div>
             </div>
-            <button onClick={handleSpin} disabled={spinning} className="mt-8 bg-gradient-to-r from-pink-500 to-orange-500 px-12 py-4 rounded-full font-black text-2xl shadow-xl hover:scale-105 active:scale-95 transition disabled:opacity-50 text-white">{spinning ? '...' : 'QUAY NGAY'}</button>
+            <button onClick={handleSpin} disabled={spinning} className="mt-8 md:mt-12 bg-gradient-to-r from-pink-500 to-orange-500 px-12 py-4 rounded-full font-black text-2xl shadow-[0_0_30px_rgba(236,72,153,0.5)] hover:scale-110 active:scale-95 transition disabled:opacity-50 disabled:scale-100 text-white border-4 border-white/20">{spinning ? 'ĐANG QUAY...' : 'QUAY NGAY'}</button>
             {result && <InteractiveQuestion data={result} onClose={handleCloseModal} gameType="WHEEL" />}
         </div>
     );
 }
 
-// ---------------- GAME 2: LẬT HÌNH ----------------
-function FlipCardGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
-    const [cards, setCards] = useState(questions.map((q, i) => ({ ...q, id: i, status: null })));
-    const [currentCard, setCurrentCard] = useState(null);
-    const handleResult = (isCorrect) => {
-        if (isCorrect !== null) {
-            setCards(cards.map(c => c.id === currentCard.id ? { ...c, status: isCorrect ? 'CORRECT' : 'WRONG' } : c));
-            if(isCorrect) onAddXP(50); // [UPDATE] Đúng +50 XP
-        }
-        setCurrentCard(null);
-    };
-    return (
-        <div className="p-4 md:p-8 h-full flex flex-col items-center">
-            <div className="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 w-full max-w-6xl overflow-y-auto pb-20 custom-scrollbar">
-                {cards.map((card, idx) => {
-                    let style = "bg-gradient-to-br from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 border-white/10";
-                    let content = <span className="drop-shadow-md">{idx + 1}</span>;
-                    if (card.status === 'CORRECT') { style = "bg-green-600 border-green-400 opacity-90"; content = <CheckCircle size={40} className="mx-auto text-white"/>; }
-                    else if (card.status === 'WRONG') { style = "bg-red-600 border-red-400 opacity-50 grayscale"; content = <XCircle size={40} className="mx-auto text-white"/>; }
-                    return <button key={idx} onClick={() => !card.status && setCurrentCard(card)} disabled={card.status !== null} className={`relative aspect-square rounded-2xl shadow-xl text-4xl font-black transition transform hover:scale-105 border-4 ${style} flex items-center justify-center`}>{content}</button>
-                })}
-            </div>
-            {currentCard && <InteractiveQuestion data={currentCard} onClose={handleResult} gameType="FLIP" />}
-        </div>
-    );
-}
-
-// ---------------- GAME 3: HỘP QUÀ BÍ MẬT ----------------
-function MysteryBoxGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
+// ---------------- GAME: HỘP QUÀ BÍ MẬT ----------------
+function MysteryBoxGame({ questions, onAddXP, onExit }) {
     const [boxes, setBoxes] = useState(questions.map((q, i) => ({ ...q, id: i, opened: false })));
     const [currentGift, setCurrentGift] = useState(null);
+    const [finished, setFinished] = useState(false);
+
+    useEffect(() => {
+        if (boxes.length > 0 && boxes.every(b => b.opened) && !finished) {
+            setTimeout(() => {
+                setFinished(true);
+                onAddXP(200); 
+                confetti({ particleCount: 300, spread: 120, origin: { y: 0.6 } });
+            }, 500);
+        }
+    }, [boxes, finished, onAddXP]);
+
     const handleResult = (isCorrect) => {
         if (isCorrect === true) {
             setBoxes(boxes.map(b => b.id === currentGift.id ? { ...b, opened: true } : b));
-            onAddXP(50); // [UPDATE] Đúng +50 XP
+            onAddXP(50); 
         }
         setCurrentGift(null);
     };
+
+    const handleReset = () => {
+        setBoxes(questions.map((q, i) => ({ ...q, id: i, opened: false })));
+        setFinished(false);
+    };
+
+    if (finished) {
+        const totalXP = (questions.length * 50) + 200;
+        return (
+            <div className="flex flex-col items-center justify-center h-full animate-in zoom-in duration-500 text-center p-4">
+                <div className="text-8xl mb-6 animate-bounce drop-shadow-2xl">🎁</div>
+                <h2 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-purple-400 to-pink-500 mb-2 uppercase drop-shadow-sm">XUẤT SẮC!</h2>
+                <p className="text-slate-300 text-sm md:text-lg mb-6 font-bold uppercase tracking-widest">Bạn đã mở khóa toàn bộ hộp bí mật</p>
+                <div className="bg-gradient-to-r from-yellow-900/40 to-orange-900/40 border border-yellow-500/30 p-4 rounded-2xl mb-8 flex flex-col items-center shadow-lg animate-pulse">
+                    <span className="text-yellow-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Tổng phần thưởng</span>
+                    <div className="text-4xl font-black text-yellow-300 drop-shadow-md">+{totalXP} XP</div>
+                </div>
+                <button onClick={handleReset} className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-10 py-4 rounded-full font-black uppercase shadow-[0_0_30px_rgba(147,51,234,0.5)] transition transform hover:scale-105 flex items-center gap-3 border-2 border-white/20"><RefreshCcw size={24} /> Chơi Lại</button>
+            </div>
+        );
+    }
+
     return (
-        <div className="p-4 md:p-8 h-full flex justify-center overflow-y-auto">
-            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-8 w-full max-w-6xl">
+        <div className="p-4 md:p-8 h-full flex justify-center overflow-y-auto custom-scrollbar">
+            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-8 w-full max-w-6xl content-start">
                 {boxes.map((box, idx) => (
-                    <div key={idx} onClick={() => !box.opened && setCurrentGift(box)} className={`cursor-pointer transition-all duration-500 transform ${box.opened ? 'opacity-50 grayscale scale-95 cursor-default' : 'hover:scale-110 hover:-translate-y-4'}`}>
+                    <div key={idx} onClick={() => !box.opened && setCurrentGift(box)} className={`cursor-pointer transition-all duration-500 transform ${box.opened ? 'opacity-50 grayscale scale-95 cursor-default' : 'hover:scale-110 hover:-translate-y-2'}`}>
                         <div className="relative aspect-square">
                             {box.opened ? (
                                 <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800/80 rounded-2xl border-2 border-slate-600"><CheckCircle size={48} className="text-green-500 mb-2"/><span className="text-sm font-bold text-gray-400 uppercase">Đã mở</span></div>
                             ) : (
                                 <div className="w-full h-full bg-gradient-to-b from-purple-500 to-indigo-600 rounded-2xl shadow-2xl border-b-8 border-indigo-900 flex items-center justify-center relative group">
-                                    <div className="absolute top-0 w-full h-1/3 bg-purple-400 rounded-t-2xl border-b-4 border-black/10 z-10"></div><Gift size={56} className="text-yellow-400 drop-shadow-xl transform group-hover:scale-125 transition duration-300"/><span className="absolute bottom-2 right-3 font-black text-2xl text-white/30">#{idx + 1}</span>
+                                    <div className="absolute top-0 w-full h-1/3 bg-purple-400 rounded-t-2xl border-b-4 border-black/10 z-10"></div>
+                                    <Gift size={56} className="text-yellow-400 drop-shadow-xl transform group-hover:scale-125 transition duration-300"/>
+                                    <span className="absolute bottom-2 right-3 font-black text-2xl text-white/30">#{idx + 1}</span>
                                 </div>
                             )}
                         </div>
@@ -752,8 +778,8 @@ function MysteryBoxGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
     );
 }
 
-// ---------------- GAME 4: TÌM CẶP ----------------
-function MemoryMatchGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
+// ---------------- GAME: TÌM CẶP ----------------
+function MemoryMatchGame({ questions, onAddXP, onExit }) {
     const [cards, setCards] = useState([]);
     const [flipped, setFlipped] = useState([]);
     const [solved, setSolved] = useState([]);
@@ -781,7 +807,7 @@ function MemoryMatchGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
                     setSolved(prev => [...prev, c1.id, c2.id]); 
                     setFlipped([]); 
                     confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } });
-                    onAddXP(30); // [UPDATE] Tìm được cặp +30 XP
+                    onAddXP(30); 
                 }, 500);
             } else setTimeout(() => setFlipped([]), 1000);
         }
@@ -799,12 +825,185 @@ function MemoryMatchGame({ questions, onAddXP }) { // [UPDATE] Nhận onAddXP
                                 <div className="flip-card-front bg-gradient-to-br from-orange-500 to-red-500 rounded-xl shadow-lg border-2 border-white/20 flex items-center justify-center"><Package size={32} className="text-white opacity-80" /></div>
                                 <div className={`flip-card-back h-full w-full bg-white text-slate-900 rounded-xl shadow-lg flex flex-col items-center justify-center p-2 border-4 ${isSolved ? 'border-green-500 bg-green-50' : 'border-blue-500'}`}>
                                     <span className={`text-[10px] font-black uppercase mb-1 ${card.type === 'QUESTION' ? 'text-blue-500' : 'text-green-600'}`}>{card.type === 'QUESTION' ? 'CÂU HỎI' : 'ĐÁP ÁN'}</span>
-                                    <div className="flex-1 flex items-center justify-center overflow-hidden w-full">{card.isImg ? <img src={card.content} className="w-full h-full object-contain" /> : <p className="text-xs sm:text-sm font-bold line-clamp-4 leading-snug">{card.content}</p>}</div>
+                                    <div className="flex-1 flex items-center justify-center overflow-hidden w-full">
+                                        {card.isImg ? (
+                                            <img src={card.content} className="w-full h-full object-contain" /> 
+                                        ) : (
+                                            // [UPDATE] Dùng MathRender cho nội dung thẻ
+                                            <div className="text-xs sm:text-sm font-bold line-clamp-4 leading-snug">
+                                                <MathRender content={card.content} />
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     );
                 })}
+            </div>
+        </div>
+    );
+}
+
+// --- COMPONENT POPUP TRẢ LỜI CÂU HỎI (Dùng cho Wheel & Box) ---
+function InteractiveQuestion({ data, onClose, gameType }) {
+    const [selectedIdx, setSelectedIdx] = useState(null); 
+    const [saInput, setSaInput] = useState("");
+    const [tfSelection, setTfSelection] = useState({});
+    
+    const [isLocked, setIsLocked] = useState(false); 
+    const [isCorrect, setIsCorrect] = useState(null); 
+    const labels = ['A', 'B', 'C', 'D'];
+
+    const handleLock = () => {
+        setIsLocked(true);
+        let correct = false;
+
+        // 1. Kiểm tra đáp án
+        if (data.type === 'MCQ') {
+            if (selectedIdx === null) return;
+            correct = parseInt(data.correct) === selectedIdx;
+        } 
+        else if (data.type === 'SA') {
+            const userAnswer = saInput.trim().toUpperCase();
+            const trueAnswer = data.correct.trim().toUpperCase();
+            correct = userAnswer === trueAnswer;
+        }
+        else if (data.type === 'TF') {
+            const allCorrect = data.items.every((item, idx) => {
+                const userChoice = tfSelection[idx];
+                const trueKey = String(item.isTrue);
+                return userChoice === trueKey;
+            });
+            correct = allCorrect;
+        }
+
+        setIsCorrect(correct);
+
+        // 2. Xử lý kết quả
+        if (correct) {
+            confetti({ particleCount: 200, spread: 120, origin: { y: 0.6 } });
+            // Tự động đóng sau 1.5 giây nếu đúng
+            setTimeout(() => {
+                onClose(true);
+            }, 1500);
+        } else {
+            // Nếu sai thì không tự đóng
+        }
+    };
+
+    const handleFinish = () => onClose(isCorrect); 
+
+    const getButtonLabel = () => {
+        if (isCorrect) return "Đang xử lý..."; 
+        if (gameType === 'WHEEL') return "Đóng lại (Quay tiếp)";
+        return "Thử lại sau";
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+            <div className="bg-[#1e293b] text-white p-6 md:p-8 rounded-[2rem] max-w-4xl w-full text-center relative max-h-[90vh] flex flex-col shadow-2xl border-4 border-indigo-500/50">
+                <button onClick={() => onClose(null)} className="absolute top-4 right-4 bg-white/10 p-2 rounded-full hover:bg-red-500 transition z-10"><X size={20}/></button>
+                
+                <div className="overflow-y-auto flex-1 pr-2 custom-scrollbar">
+                    <span className="text-xs font-black text-indigo-400 mb-2 uppercase tracking-[0.2em] block">
+                        {data.type === 'MCQ' ? 'TRẮC NGHIỆM' : data.type === 'TF' ? 'ĐÚNG / SAI' : 'TRẢ LỜI NGẮN'}
+                    </span>
+                    
+                    {/* [UPDATE] Hiển thị câu hỏi (Text trước - Ảnh sau) */}
+                    <div className="text-lg md:text-2xl font-bold mb-6 leading-snug whitespace-pre-wrap">
+                        {renderWithInlineImage(data.q, data.img)}
+                    </div>
+                    {data.img && !data.q.includes('[img]') && (
+                        <img src={data.img} className="h-32 md:h-40 mx-auto object-contain mb-4 rounded-xl border-2 border-white/10 shadow-lg bg-black/20" />
+                    )}
+
+                    {/* --- HIỂN THỊ TRẮC NGHIỆM --- */}
+                    {data.type === 'MCQ' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                            {data.a.map((ans, idx) => {
+                                let statusClass = "bg-slate-800 border-slate-700 hover:bg-slate-700";
+                                if (!isLocked && selectedIdx === idx) statusClass = "bg-indigo-600 border-indigo-500 shadow-lg scale-[1.02]"; 
+                                
+                                if (isLocked) {
+                                    const correctIndex = parseInt(data.correct);
+                                    if (idx === correctIndex) {
+                                        if (gameType === 'WHEEL' && !isCorrect) {
+                                            statusClass = "bg-slate-800 border-slate-700 opacity-30 grayscale"; 
+                                        } else {
+                                            statusClass = "bg-green-600 border-green-500 shadow-xl scale-105 z-10"; 
+                                        }
+                                    }
+                                    else if (!isCorrect && idx === selectedIdx) statusClass = "bg-red-600 border-red-500 opacity-80";
+                                    else statusClass = "bg-slate-800 border-slate-700 opacity-30 grayscale";
+                                }
+                                return (
+                                    <div key={idx} onClick={() => !isLocked && setSelectedIdx(idx)} className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 flex items-center min-h-[60px] ${statusClass}`}>
+                                        <div className="absolute left-4 w-8 h-8 rounded-full bg-black/20 flex items-center justify-center font-black text-sm">{labels[idx]}</div>
+                                        <div className="pl-10 w-full flex justify-center text-base font-bold flex-col items-center">
+                                            {/* [UPDATE] Render đáp án inline + fallback block */}
+                                            {renderWithInlineImage(ans, data.aImages?.[idx])}
+                                            {data.aImages?.[idx] && !ans.includes('[img]') && (
+                                                <img src={data.aImages[idx]} className="h-16 w-auto mt-2 rounded border bg-white p-1" />
+                                            )}
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    )}
+
+                    {/* --- HIỂN THỊ ĐÚNG SAI --- */}
+                    {data.type === 'TF' && (
+                        <div className="space-y-2 mb-4 text-left">
+                            {data.items.map((item, idx) => (
+                                <div key={idx} className="flex justify-between items-center bg-slate-800 p-3 rounded-xl border border-slate-700">
+                                    {/* [UPDATE] Render nội dung TF */}
+                                    <div className="flex-1 mr-4 font-bold text-sm md:text-base">
+                                        {renderWithInlineImage(item.text, item.img)}
+                                        {item.img && !item.text.includes('[img]') && (
+                                            <img src={item.img} className="h-12 mt-2 rounded border border-white/20 block" />
+                                        )}
+                                    </div>
+                                    <div className="flex gap-2 shrink-0">
+                                        <button onClick={() => !isLocked && setTfSelection(p => ({...p, [idx]: "true"}))} className={`w-10 h-10 rounded-lg border-2 font-black transition-all ${tfSelection[idx] === "true" ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-900 border-slate-600 text-slate-500'} ${isLocked && (gameType !== 'WHEEL' || isCorrect) && item.isTrue === true ? 'ring-2 ring-green-500' : ''}`}>Đ</button>
+                                        <button onClick={() => !isLocked && setTfSelection(p => ({...p, [idx]: "false"}))} className={`w-10 h-10 rounded-lg border-2 font-black transition-all ${tfSelection[idx] === "false" ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-900 border-slate-600 text-slate-500'} ${isLocked && (gameType !== 'WHEEL' || isCorrect) && item.isTrue === false ? 'ring-2 ring-green-500' : ''}`}>S</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* --- HIỂN THỊ ĐIỀN KHUYẾT (SA) --- */}
+                    {data.type === 'SA' && (
+                        <div className="mb-4">
+                            <input value={saInput} onChange={(e) => setSaInput(e.target.value)} disabled={isLocked} className={`w-full bg-slate-900 border-4 p-4 rounded-2xl text-center font-black text-2xl uppercase outline-none placeholder-slate-600 ${isLocked ? (isCorrect ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400') : 'border-indigo-500 focus:shadow-[0_0_20px_#6366f1]'}`} placeholder="NHẬP ĐÁP ÁN..."/>
+                            {isLocked && !isCorrect && gameType !== 'BOX' && (
+                                <div className="mt-3 text-green-400 font-bold animate-pulse">
+                                    Đáp án chưa đúng <span className="uppercase text-xl">
+                                       
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div className="pt-4 border-t border-white/10 mt-2">
+                    {!isLocked ? (
+                        <button onClick={handleLock} className="w-full py-3 rounded-xl font-black text-lg shadow-lg flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:scale-[1.01] transition-all"><Lock size={20}/> CHỐT ĐÁP ÁN</button>
+                    ) : (
+                        <div className="animate-in slide-in-from-bottom fade-in duration-300">
+                            <div className={`py-2 text-xl font-black uppercase mb-2 ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>
+                                {isCorrect ? "🎉 CHÍNH XÁC!" : (gameType === 'WHEEL' ? "😢 CHƯA ĐÚNG - QUAY LẠI SAU NHÉ" : "😢 SAI RỒI!")}
+                            </div>
+                            {!isCorrect && (
+                                <button onClick={handleFinish} className="w-full bg-white text-slate-900 font-black py-3 rounded-xl shadow-xl hover:bg-gray-100 transition uppercase tracking-widest">{getButtonLabel()}</button>
+                            )}
+                            {isCorrect && (<div className="text-slate-400 text-sm animate-pulse">Đang hoàn thành ô này...</div>)}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

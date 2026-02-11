@@ -31,43 +31,55 @@ const GRADE_OPTIONS = ["12", "11", "10", "9", "8", "7", "6", "5", "4", "3", "2",
 // --- HÀM CHUYỂN ĐỔI LATEX -> MATHML ---
 const convertToMathML = (text) => {
     if (!text) return "";
-    
     return text
-        // 1. Xử lý dạng \[ ... \] (Thường gặp khi copy từ Word/MathType)
-        .replace(/\\\[(.*?)\\\]/g, (match, formula) => {
+        .replace(/\\\[(.*?)\\\]|\$\$(.*?)\$\$/g, (match, p1, p2) => {
             try { 
-                return katex.renderToString(formula, { 
-                    output: "mathml", 
-                    throwOnError: false,
-                    displayMode: false // false để hiện cùng dòng, true để xuống dòng riêng
+                return katex.renderToString(p1 || p2, { 
+                    output: "mathml", throwOnError: false, displayMode: true 
                 }); 
             } catch (e) { return match; }
         })
-        // 2. Xử lý dạng \( ... \) (Chuẩn LaTeX khác)
-        .replace(/\\\((.*?)\\\)/g, (match, formula) => {
+        .replace(/\\\((.*?)\\\)|\$(.*?)\$/g, (match, p1, p2) => {
             try { 
-                return katex.renderToString(formula, { 
-                    output: "mathml", 
-                    throwOnError: false,
-                    displayMode: false 
-                }); 
-            } catch (e) { return match; }
-        })
-        // 3. Xử lý dạng $ ... $ (Chuẩn chúng ta đang dùng)
-        .replace(/\$(.*?)\$/g, (match, formula) => {
-            try { 
-                return katex.renderToString(formula, { 
-                    output: "mathml", 
-                    throwOnError: false,
-                    displayMode: false 
+                return katex.renderToString(p1 || p2, { 
+                    output: "mathml", throwOnError: false, displayMode: false 
                 }); 
             } catch (e) { return match; }
         });
 };
 
+// --- HÀM RENDER VĂN BẢN KÈM ẢNH INLINE ---
+const renderWithInlineImage = (text, imgUrl) => {
+    if (!text) return null;
+    
+    // Nếu có thẻ [img] và có link ảnh
+    if (text.includes('[img]') && imgUrl) {
+        const parts = text.split('[img]');
+        return (
+            <span>
+                {parts.map((part, index) => (
+                    <span key={index}>
+                        <MathRender content={part} />
+                        {/* Nếu chưa phải phần cuối cùng thì chèn ảnh vào giữa */}
+                        {index < parts.length - 1 && (
+                            <img 
+                                src={imgUrl} 
+                                className="inline-block align-middle mx-1 max-h-12 border rounded bg-white shadow-sm" 
+                                alt="minh-hoa"
+                            />
+                        )}
+                    </span>
+                ))}
+            </span>
+        );
+    }
+    
+    // Mặc định trả về text chứa công thức toán
+    return <MathRender content={text} />;
+};
+
 export default function CreateQuiz() {
   const router = useRouter();
-  // [NEW] Lấy thêm tham số grade, subject, from từ URL
   const { id, grade: queryGrade, subject: querySubject, from } = router.query;
   
   const fileInputRef = useRef(null);
@@ -93,7 +105,6 @@ export default function CreateQuiz() {
     tl_biet: 0, tl_hieu: 0, tl_vd: 0, 
   });
 
-  // Dữ liệu đề thi
   const [title, setTitle] = useState('');
   const [examCode, setExamCode] = useState(''); 
   const [grade, setGrade] = useState('10');
@@ -101,8 +112,8 @@ export default function CreateQuiz() {
   const [assignedClass, setAssignedClass] = useState('');
   const [duration, setDuration] = useState(45);
   const [scoreConfig, setScoreConfig] = useState({ p1: 6, p3: 1 });
-  // [NEW] Thêm state origin để biết đề thuộc Kho nào (LIBRARY hay GAME_REPO)
   const [origin, setOrigin] = useState('LIBRARY');
+  const [showFullPreview, setShowFullPreview] = useState(false);
 
   const [questions, setQuestions] = useState([
     { id: Date.now(), type: 'MCQ', part: 1, q: '', img: '', a: ['', '', '', ''], aImages: ['', '', '', ''], correct: 0 }
@@ -131,11 +142,9 @@ export default function CreateQuiz() {
     return () => unsubscribe();
   }, []);
 
-  // [NEW] Cập nhật logic khởi tạo dữ liệu
   useEffect(() => {
     if (user) {
         if (id) {
-            // Chế độ Sửa (Edit)
             getDoc(doc(firestore, "quizzes", id)).then(snap => {
                 if(snap.exists()) {
                     const data = snap.data();
@@ -146,28 +155,37 @@ export default function CreateQuiz() {
                     setAssignedClass(data.assignedClass || '');
                     setDuration(data.duration || 45);
                     if (data.scoreConfig) setScoreConfig(data.scoreConfig);
-                    // Lấy origin từ DB nếu có
                     setOrigin(data.origin || 'LIBRARY');
                     
                     if (data.rawQuestions) {
-                        setQuestions(data.rawQuestions);
+                        const formattedQuestions = data.rawQuestions.map(q => {
+                           if (q.type === 'TF') {
+                               return {
+                                   ...q,
+                                   items: q.items.map(item => ({ ...item, img: item.img || '' }))
+                               };
+                           }
+                           return q;
+                        });
+                        setQuestions(formattedQuestions);
                     } else {
-                        setQuestions(data.questions.map(q => ({ ...q, img: q.img || '', aImages: q.aImages || ['', '', '', ''] })));
+                        setQuestions(data.questions.map(q => ({ 
+                            ...q, 
+                            img: q.img || '', 
+                            aImages: q.aImages || ['', '', '', ''],
+                            items: q.type === 'TF' ? (q.items || []).map(i => ({...i, img: i.img || ''})) : null
+                        })));
                     }
                 }
             });
         } else {
-            // Chế độ Tạo Mới (Create New)
             setExamCode(generateExamCode());
-            
-            // [NEW] Nếu có tham số từ URL (khi bấm tạo từ Kho Game), điền sẵn vào form
             if (queryGrade) setGrade(queryGrade);
             if (querySubject) {
-                // Tìm môn học khớp với ID hoặc Name
                 const matchedSubject = SUBJECT_OPTIONS.find(s => s === querySubject || s === querySubject);
                 setSubject(matchedSubject || querySubject);
             }
-            if (from) setOrigin(from); // Set origin là GAME_REPO nếu từ đó qua
+            if (from) setOrigin(from);
         }
     }
   }, [id, user, queryGrade, querySubject, from]);
@@ -186,6 +204,30 @@ export default function CreateQuiz() {
     } catch (error) { setImgUploading(false); return null; }
   };
 
+  const handlePaste = async (e, qIndex, type, subIndex = -1) => {
+      const items = e.clipboardData.items;
+      for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf("image") !== -1) {
+              e.preventDefault(); 
+              const blob = items[i].getAsFile();
+              const url = await handleImageUpload(blob);
+              if (!url) return;
+
+              const newQs = [...questions];
+              if (type === 'QUESTION') {
+                  newQs[qIndex].img = url;
+              } else if (type === 'ANSWER') {
+                   if (!newQs[qIndex].aImages) newQs[qIndex].aImages = ['', '', '', ''];
+                   newQs[qIndex].aImages[subIndex] = url;
+              } else if (type === 'TF_ITEM') {
+                   newQs[qIndex].items[subIndex].img = url;
+              }
+              setQuestions(newQs);
+              break; 
+          }
+      }
+  };
+
   const onFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -193,17 +235,23 @@ export default function CreateQuiz() {
     if (!url) return;
     const newQs = [...questions];
     const { qIndex, aIndex, type } = uploadTarget;
-    if (type === 'QUESTION') newQs[qIndex].img = url;
-    else if (type === 'ANSWER') {
+    
+    if (type === 'QUESTION') {
+        newQs[qIndex].img = url;
+    } else if (type === 'ANSWER') {
         if (!newQs[qIndex].aImages) newQs[qIndex].aImages = ['', '', '', ''];
         newQs[qIndex].aImages[aIndex] = url;
+    } else if (type === 'TF_ITEM') {
+        newQs[qIndex].items[aIndex].img = url;
     }
     setQuestions(newQs);
+    e.target.value = null;
   };
 
   const triggerUpload = (qIdx, aIdx = -1, type = 'QUESTION') => {
     setUploadTarget({ qIndex: qIdx, aIndex: aIdx, type });
-    if (type === 'QUESTION') qImgRef.current.click(); else aImgRef.current.click();
+    if (type === 'QUESTION') qImgRef.current.click(); 
+    else aImgRef.current.click();
   };
 
   const handleFileUpload = async (event) => {
@@ -218,38 +266,58 @@ export default function CreateQuiz() {
             setQuestions(prev => [...prev, ...parsedQuestions]);
             alert(`✅ Đã nhập ${parsedQuestions.length} câu hỏi!`);
         } else alert("⚠️ Không tìm thấy câu hỏi.");
-      } catch (error) { alert("Lỗi đọc file Word!"); }
+      } catch (error) { console.error(error); alert("Lỗi đọc file Word!"); }
     };
     reader.readAsArrayBuffer(file);
     event.target.value = null; 
   };
 
- // --- HÀM XỬ LÝ NỘI DUNG WORD (NÂNG CẤP) ---
-  const parseDocxContent = (htmlContent) => {
+const sanitizeMathText = (text) => {
+    if (!text) return "";
+    return text
+        .replace(/√/g, '\\sqrt').replace(/π/g, '\\pi').replace(/≤/g, '\\le')
+        .replace(/≥/g, '\\ge').replace(/≠/g, '\\ne').replace(/±/g, '\\pm')
+        .replace(/∈/g, '\\in').replace(/±/g, '\\pm').replace(/∓/g, '\\mp')
+        .replace(/∑/g, '\\sum').replace(/∏/g, '\\prod').replace(/∫/g, '\\int')
+        .replace(/∞/g, '\\infty').replace(/lim/g, '\\lim').replace(/α/g, '\\alpha')
+        .replace(/β/g, '\\beta').replace(/γ/g, '\\gamma').replace(/Δ/g, '\\Delta')
+        .replace(/δ/g, '\\delta').replace(/θ/g, '\\theta').replace(/λ/g, '\\lambda')
+        .replace(/μ/g, '\\mu').replace(/π/g, '\\pi').replace(/σ/g, '\\sigma')
+        .replace(/ω/g, '\\omega').replace(/→/g, '\\to').replace(/←/g, '\\leftarrow')
+        .replace(/↔/g, '\\leftrightarrow').replace(/⇒/g, '\\Rightarrow')
+        .replace(/⇐/g, '\\Leftarrow').replace(/°/g, '^\\circ')
+        .replace(/⊂/g, '\\subset').replace(/∞/g, '\\infty').replace(/α/g, '\\alpha')
+        .replace(/β/g, '\\beta').replace(/∆/g, '\\Delta')
+        .replace(/≈/g, '\\approx').replace(/≡/g, '\\equiv').replace(/∧/g, '\\land')
+        .replace(/∨/g, '\\lor').replace(/¬/g, '\\neg').replace(/⇒/g, '\\Rightarrow')
+        .replace(/⇔/g, '\\Leftrightarrow').replace(/∠/g, '\\angle');
+};
+
+// [UPDATED] Hàm parseDocxContent đã được sửa để bắt đáp án có *
+const parseDocxContent = (htmlContent) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlContent, 'text/html');
+    const elements = Array.from(doc.body.querySelectorAll('p, li, tr'));
     
-    // Lấy tất cả thẻ p, li, tr... chứa text
-    const elements = Array.from(doc.body.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, tr'));
-    
-    let currentPart = 1; // Mặc định phần 1
+    let currentPart = 1;
     const newQuestions = []; 
     let currentQ = null;
 
-    // Regex nhận diện
     const partRegex = /\[P([1-3])\]|PHẦN ([1-3])/i;
-    // Bắt câu hỏi: "Câu 1:", "Câu 1.", "Bài 1:"...
     const questionRegex = /^(Câu|Bài)\s+\d+[:.]?\s*(.*)/i; 
-    // Bắt đáp án: "A.", "A)", "a."...
-    const answerRegex = /^([A-D])\s*[:.)]\s*(.*)/i;
-    // Bắt ý đúng sai: "a)", "a.", "1)"...
-    const tfItemRegex = /^([a-d])\s*[:.)]\s*(.*)/i;
+    
+    // [FIX] Regex cho MCQ (A. B. C. D.) - Có thể có * ở đầu, dấu chấm hoặc ngoặc
+    // Group 1: Dấu * (nếu có)
+    // Group 2: Ký tự A-D
+    // Group 3: Nội dung đáp án
+    const answerRegex = /^\s*(\*?)\s*([A-D])\s*[:.)]\s*(.*)/i;
+    
+    // [FIX] Regex cho TF (a. b. c. d.) - Có thể có * ở đầu
+    const tfItemRegex = /^\s*(\*?)\s*([a-d])\s*[:.)]\s*(.*)/i;
 
     const pushCurrentQ = () => {
         if (currentQ) {
-            // Chuẩn hóa trước khi push
             if (currentQ.type === 'MCQ') {
-                // Đảm bảo đủ 4 đáp án rỗng nếu thiếu
                 while(currentQ.a.length < 4) currentQ.a.push("");
             }
             newQuestions.push(currentQ); 
@@ -258,13 +326,11 @@ export default function CreateQuiz() {
     };
 
     elements.forEach(el => {
-        // Lấy text và làm sạch các ký tự ẩn
-        let text = el.textContent.trim().replace(/\s+/g, ' '); 
-        let innerHTML = el.innerHTML; 
+        let text = el.textContent.trim();
+        text = sanitizeMathText(text);
 
         if (!text) return;
 
-        // 1. Kiểm tra chuyển phần (P1, P2, P3)
         const partMatch = text.match(partRegex);
         if (partMatch) { 
             pushCurrentQ(); 
@@ -272,13 +338,11 @@ export default function CreateQuiz() {
             return; 
         }
 
-        // 2. Kiểm tra bắt đầu câu hỏi mới
         const qMatch = text.match(questionRegex);
         if (qMatch) {
             pushCurrentQ(); 
-            const qContent = qMatch[2]; 
+            let qContent = qMatch[2];
             
-            // Khởi tạo câu hỏi mới theo phần hiện tại
             if (currentPart === 1) {
                 currentQ = { id: Date.now() + Math.random(), type: 'MCQ', part: 1, q: qContent, a: [], aImages: [], correct: 0 };
             } else if (currentPart === 2) {
@@ -289,50 +353,75 @@ export default function CreateQuiz() {
             return;
         }
 
-        // 3. Xử lý nội dung bên trong câu hỏi (Đáp án, Ý đúng sai...)
         if (currentQ) {
             if (currentQ.type === 'MCQ') {
-                const ansMatch = text.match(answerRegex);
-                if (ansMatch) {
-                    currentQ.a.push(ansMatch[2]);
-                    // Tự động nhận diện đáp án đúng nếu được bôi đậm, gạch chân hoặc tô đỏ trong Word
-                    if (innerHTML.includes('<b>') || innerHTML.includes('<strong>') || innerHTML.includes('<u>') || el.style.color === 'red' || text.includes('*')) {
-                        currentQ.correct = currentQ.a.length - 1;
-                    }
+                // Xử lý MCQ - Tách nhiều đáp án trên 1 dòng nếu có (VD: A. Táo  B. Cam)
+                // Regex tìm [Dấu * tùy chọn] [A-D] [Dấu chấm/ngoặc]
+                const parts = text.split(/(?:^|\s+)(\*?[A-D])\s*[:.)]\s+/i).filter(Boolean);
+                
+                if (parts.length >= 2 && /^\*?[A-D]$/i.test(parts[0])) {
+                     // Nếu dòng có nhiều đáp án ngang
+                     for (let i = 0; i < parts.length; i += 2) {
+                         const label = parts[i]; // Ví dụ: "A" hoặc "*A"
+                         const content = parts[i+1].trim();
+                         
+                         const hasStar = label.includes('*');
+                         currentQ.a.push(content);
+                         
+                         // Check đúng: Có dấu * HOẶC in đậm/gạch chân HOẶC ký hiệu * trong text gốc
+                         if (hasStar || el.innerHTML.includes('<b>') || el.innerHTML.includes('<u>') || text.includes('*')) {
+                             currentQ.correct = currentQ.a.length - 1; 
+                         }
+                     }
                 } else {
-                    // Nếu dòng không phải đáp án A,B,C,D thì cộng dồn vào câu hỏi (câu hỏi nhiều dòng)
-                    // Trừ khi nó là dòng "Lời giải" hoặc "Hướng dẫn"
-                    if (!text.toLowerCase().startsWith('lời giải') && currentQ.a.length === 0) {
-                         currentQ.q += " " + text;
+                    // Xử lý dòng đơn lẻ
+                    const ansMatch = text.match(answerRegex);
+                    if (ansMatch) {
+                        const hasStar = !!ansMatch[1]; // Group 1 là dấu *
+                        // const label = ansMatch[2];
+                        const content = ansMatch[3];
+                        
+                        currentQ.a.push(content);
+                        if (hasStar || el.innerHTML.includes('<b>') || el.innerHTML.includes('<u>') || text.includes('*')) {
+                            currentQ.correct = currentQ.a.length - 1;
+                        }
+                    } else if (currentQ.a.length === 0) {
+                        currentQ.q += " " + text;
                     }
                 }
-            } 
-            else if (currentQ.type === 'TF') {
+            } else if (currentQ.type === 'TF') {
                 const itemMatch = text.match(tfItemRegex);
                 if (itemMatch) {
-                    let isTrue = false;
-                    // Check keyword "Đúng" hoặc gạch chân/bôi đậm
-                    if (text.toLowerCase().includes('đúng') || innerHTML.includes('<u>') || innerHTML.includes('<b>')) {
-                        isTrue = true;
-                    }
-                    // Loại bỏ chữ "Đúng"/"Sai" ở cuối nếu có để lấy nội dung sạch
-                    let cleanText = itemMatch[2].replace(/\s*[-–(]?\s*(Đúng|Sai)\s*[)]?$/i, '').trim();
+                    const hasStar = !!itemMatch[1]; // Group 1 là dấu *
+                    // const label = itemMatch[2];
+                    const content = itemMatch[3];
                     
-                    currentQ.items.push({ text: cleanText, isTrue });
+                    const html = el.innerHTML.toLowerCase();
+                    // Đúng nếu: Có dấu * ở đầu HOẶC in đậm/gạch chân HOẶC có chữ "đúng"
+                    const isTrue = hasStar || html.includes('<b>') || html.includes('<strong>') || html.includes('<u>') || text.toLowerCase().includes('đúng');
+                    
+                    currentQ.items.push({
+                        text: content,
+                        isTrue: isTrue,
+                        img: ''
+                    });
+                } else if (currentQ.items.length === 0) {
+                     currentQ.q += " " + text;
                 }
-            } 
-            else if (currentQ.type === 'SA') {
-                // Tìm dòng chứa "Đáp án:" hoặc "Key:"
-                if (text.toLowerCase().startsWith('đáp án:') || text.toLowerCase().startsWith('key:')) {
-                    currentQ.correct = text.split(/[:]/)[1].trim();
+            } else if (currentQ.type === 'SA') {
+                if (text.toLowerCase().startsWith('key:') || text.toLowerCase().startsWith('đáp án:')) {
+                    const ans = text.split(/[:]/).slice(1).join(':').trim();
+                    currentQ.correct = ans;
+                } else {
+                     currentQ.q += " " + text;
                 }
             }
         }
     });
 
-    pushCurrentQ(); // Push câu cuối cùng
+    pushCurrentQ();
     return newQuestions;
-  };
+};
 
   const handleGenerateAI = async () => {
     if (!aiTopic) return alert("Thầy chưa nhập chủ đề!");
@@ -354,14 +443,20 @@ export default function CreateQuiz() {
       const prompt = `
         Đóng vai giáo viên môn ${aiSubject} lớp ${aiLevel}. Soạn đề thi chủ đề: "${aiTopic}".
         Tài liệu tham khảo: ${aiSource}
+        - Câu trả lời không được chứa thông tin ngoài lề, chỉ tập trung vào việc tạo câu hỏi. Không chứa các đáp án dạng tất cả đều đúng/sai, A,B,C,D đều đúng/sai.
+        - Lời dẫn không chứa các thông tin như theo sách, theo tài liệu, theo chương trình học, theo bộ giáo dục...
+        - Bám sát giáo khoa và chuẩn kiến thức kỹ năng hiện hành của Việt Nam.
         CẤU TRÚC ĐỀ THI:
         - PHẦN 1 (Trắc nghiệm): Tổng ${countTN} câu (${matrix.tn_biet} Biết, ${matrix.tn_hieu} Hiểu, ${matrix.tn_vd} Vận dụng).
         - PHẦN 2 (Đúng/Sai): Tổng ${matrix.ds_count} câu lớn. Mỗi câu 4 ý (${matrix.ds_biet} Biết, ${matrix.ds_hieu} Hiểu, ${matrix.ds_vd} Vận dụng).
         - PHẦN 3 (Trả lời ngắn): Tổng ${countTL} câu (${matrix.tl_biet} Biết, ${matrix.tl_hieu} Hiểu, ${matrix.tl_vd} Vận dụng).
         
-        QUY TẮC ĐỊNH DẠNG (QUAN TRỌNG):
-        1. CHỈ dùng dấu $...$ cho công thức phức tạp như mũ, log, giới hạn, đạo hàm,dấu lớn hơn hoặc bằng, dấu nhỏ hơn hoặc bằng, căn bậc hai,bậc ba,... (ví dụ: $\\frac{1}{2}$, $\\sqrt{x}$). Công thức đơn giản (ví dụ: x > 0, 3x+2=0) KHÔNG cần dấu $.
-        2. Ký tự backslash (\\) trong LaTeX phải được escape thành (\\\\). (Ví dụ: "\\\\frac" thay vì "\\frac").
+        QUY TẮC ĐỊNH DẠNG:
+        1. CHỈ dùng dấu $...$ cho công thức phức tạp:Đạo hàm, Lũy thừa, căn bậc 2, bậc 3, chỉ số, phân số, tích phân, giới hạn, hàm lượng giác, ma trận, v.v. ví dụ: $x^2$, $\\frac{a}{b}$, $\\int_a^b f(x)dx$, $sqrt(x-4)$....
+        2. KHÔNG dùng $...$ cho các biểu thức, toán tử đơn giản: cộng, trừ, nhân, chia, căn bậc hai, v.v. Ví dụ: 2 + 2 = 4, √5, a × b = ab.  
+        3. Ký tự backslash (\\) trong LaTeX phải được escape thành (\\\\).
+        4. Đáp câu hỏi ngắn(SA) là số tối đa 4 từ kể nếu dấu chấm, dấu âm. ví dụ: 5, -3, 12.5, -10.2, 2006
+        5. Lời dẫn câu hỏi đúng/sai là 1 tình huống bám sát nội dung bài trong sgk và dài khoảng 3-4 dòng.
         
         OUTPUT JSON (Mảng duy nhất):
         [
@@ -374,7 +469,8 @@ export default function CreateQuiz() {
       const text = result.response.text();
       const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
       const aiQuestions = JSON.parse(cleanText).map(q => ({
-          ...q, id: Date.now() + Math.random(), aImages: [], a: q.a || ['', '', '', ''], correct: q.correct ?? ''
+          ...q, id: Date.now() + Math.random(), aImages: [], a: q.a || ['', '', '', ''], correct: q.correct ?? '',
+          items: q.type==='TF' ? q.items.map(i => ({...i, img: ''})) : null
       }));
       setQuestions([...questions, ...aiQuestions]);
       setShowAiModal(false);
@@ -387,7 +483,7 @@ export default function CreateQuiz() {
     const newId = Date.now();
     let newQ = { id: newId, q: '', img: '' };
     if (type === 'MCQ') newQ = { ...newQ, type: 'MCQ', part: 1, a: ['', '', '', ''], aImages: ['', '', '', ''], correct: 0 };
-    else if (type === 'TF') newQ = { ...newQ, type: 'TF', part: 2, items: [{ text: '', isTrue: false }, { text: '', isTrue: false }, { text: '', isTrue: false }, { text: '', isTrue: false }] };
+    else if (type === 'TF') newQ = { ...newQ, type: 'TF', part: 2, items: [{ text: '', isTrue: false, img: '' }, { text: '', isTrue: false, img: '' }, { text: '', isTrue: false, img: '' }, { text: '', isTrue: false, img: '' }] };
     else if (type === 'SA') newQ = { ...newQ, type: 'SA', part: 3, correct: '' };
     setQuestions([...questions, newQ]);
   };
@@ -396,21 +492,22 @@ export default function CreateQuiz() {
   const updateTFItem = (qIndex, itemIndex, field, value) => { const newQs = [...questions]; newQs[qIndex].items[itemIndex][field] = value; setQuestions(newQs); };
   const removeQuestion = (index) => { if (confirm("Xóa câu hỏi này?")) setQuestions(questions.filter((_, i) => i !== index)); };
 
-  // --- HÀM LƯU ĐỀ THI ---
-// --- HÀM LƯU ĐỀ THI ---
+const handleOpenPreview = () => {
+    if (!title.trim()) return alert("Vui lòng nhập tên bài thi để xem trước!");
+    setShowFullPreview(true);
+};
+
   const handleSave = async () => {
     if (!title.trim()) return alert("Vui lòng nhập tên bài thi!");
     if (!subject) return alert("Vui lòng chọn Môn học!");
     setLoading(true);
     
-    // ... (Giữ nguyên đoạn xử lý questionsForGame) ...
     const questionsForGame = questions.map(q => {
-        // ... (Giữ nguyên code xử lý MathML) ...
         const baseQ = {
             ...q,
             q: convertToMathML(q.q || ""), 
             a: q.type === 'MCQ' ? (q.a || []).map(ans => convertToMathML(ans || "")) : null,
-            items: q.type === 'TF' ? (q.items || []).map(i => ({...i, text: convertToMathML(i.text || "")})) : null,
+            items: q.type === 'TF' ? (q.items || []).map(i => ({...i, text: convertToMathML(i.text || ""), img: i.img || null})) : null,
             correct: q.type === 'SA' ? convertToMathML(q.correct || "") : (q.correct || 0),
             img: q.img || null,
             aImages: q.aImages || null
@@ -434,13 +531,10 @@ export default function CreateQuiz() {
           rawQuestions: questions,     
           status: 'OPEN',
           origin: origin,
-          
-          // [FIX QUAN TRỌNG] Tự động Public nếu tạo trong Kho Game
           isPublic: origin === 'GAME_REPO' ? true : false 
       };
       
       const cleanData = JSON.parse(JSON.stringify(quizData));
-      
       cleanData.updatedAt = serverTimestamp();
       if (!id) cleanData.createdAt = serverTimestamp();
 
@@ -448,13 +542,7 @@ export default function CreateQuiz() {
       else await addDoc(collection(firestore, "quizzes"), cleanData);
       
       alert("Lưu thành công!");
-      
-      if (origin === 'GAME_REPO') {
-          router.push('/dashboard'); 
-      } else {
-          router.push('/dashboard');
-      }
-      
+      router.push('/dashboard');
     } catch (e) { 
         console.error("Lỗi lưu:", e);
         alert("Lỗi lưu: " + e.message); 
@@ -500,7 +588,8 @@ export default function CreateQuiz() {
         <div className="flex gap-3">
           <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow transition"><Upload size={18} /> Upload Word</button>
           <button onClick={() => setShowAiModal(true)} className="flex items-center gap-2 bg-[#15803d] hover:bg-emerald-800 text-white px-4 py-2 rounded-lg font-bold shadow transition animate-pulse"><Sparkles size={18} /> AI Soạn Đề</button>
-          <button onClick={handleSave} disabled={loading || imgUploading} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition">{loading ? <Loader2 className="animate-spin"/> : <><Save size={18} /> Lưu Đề Thi</>}</button>
+            <button onClick={handleOpenPreview} className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold shadow transition"><Eye size={18} /> Xem trước đề</button>
+          <button onClick={handleSave} disabled={loading || imgUploading} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition">{loading || imgUploading ? <Loader2 className="animate-spin"/> : <><Save size={18} /> Lưu Đề Thi</>}</button>
         </div>
       </header>
 
@@ -509,7 +598,6 @@ export default function CreateQuiz() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <div className="flex justify-between items-center mb-4">
               <h3 className="font-black text-slate-700 flex items-center gap-2 uppercase text-sm"><Info size={18} /> Thông tin chung</h3>
-              {/* [NEW] Hiển thị nguồn tạo đề để thầy dễ nhận biết */}
               {origin === 'GAME_REPO' && <span className="bg-rose-100 text-rose-600 px-3 py-1 rounded-full text-xs font-bold">ĐANG TẠO CHO KHO GAME</span>}
               <div className="flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-lg border border-slate-200 shadow-sm">
                   <Hash size={14} className="text-indigo-500"/>
@@ -548,17 +636,27 @@ export default function CreateQuiz() {
             {/* Ô NHẬP CÂU HỎI */}
             <div className="space-y-2">
                 <div className="flex gap-2">
-                    <textarea value={q.q} onChange={(e) => updateQuestion(qIndex, 'q', e.target.value)} rows={3} className="w-full border-2 border-slate-100 rounded-xl p-4 font-bold text-lg focus:border-indigo-500 outline-none bg-slate-50 transition-all" placeholder="Gõ câu hỏi (Kẹp $...$ để dùng công thức Toán)..." />
+                    <textarea 
+                        value={q.q} 
+                        onChange={(e) => updateQuestion(qIndex, 'q', e.target.value)} 
+                        onPaste={(e) => handlePaste(e, qIndex, 'QUESTION')}
+                        rows={3} 
+                        className="w-full border-2 border-slate-100 rounded-xl p-4 font-bold text-lg focus:border-indigo-500 outline-none bg-slate-50 transition-all" 
+                        placeholder="Gõ nội dung hoặc dùng [img] để chèn ảnh. (Paste ảnh để upload nhanh)..." 
+                    />
                     <button onClick={() => triggerUpload(qIndex, -1, 'QUESTION')} className="p-3 bg-slate-100 hover:bg-indigo-100 rounded-xl transition text-slate-500 hover:text-indigo-600" title="Thêm ảnh"><ImageIcon size={24}/></button>
                 </div>
-                {/* PREVIEW TOÁN */}
-                {q.q && q.q.includes('$') && (
-                    <details className="mt-2 group">
-                        <summary className="list-none text-xs font-bold text-indigo-500 cursor-pointer flex items-center gap-1 select-none"><Eye size={14}/> Xem trước công thức</summary>
-                        <div className="mt-2 p-3 bg-indigo-50 rounded-xl border border-indigo-100"><MathRender content={q.q} className="text-lg font-bold" /></div>
+                {/* PREVIEW TOÁN VÀ ẢNH INLINE */}
+                {q.q && (
+                    <details className="mt-2 group" open={q.q.includes('$') || q.q.includes('[img]')}>
+                        <summary className="list-none text-xs font-bold text-indigo-500 cursor-pointer flex items-center gap-1 select-none"><Eye size={14}/> Xem trước nội dung</summary>
+                        <div className="mt-2 p-3 bg-indigo-50 rounded-xl border border-indigo-100 text-lg font-bold">
+                            {renderWithInlineImage(q.q, q.img)}
+                        </div>
                     </details>
                 )}
-                {q.img && <div className="relative inline-block mt-2"><img src={q.img} className="max-h-48 rounded-lg shadow-lg border border-slate-200"/><button onClick={()=>updateQuestion(qIndex, 'img', '')} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md"><X size={12}/></button></div>}
+                {/* Chỉ hiện ảnh thumbnail nếu KHÔNG dùng [img] */}
+                {q.img && !q.q.includes('[img]') && <div className="relative inline-block mt-2"><img src={q.img} className="max-h-48 rounded-lg shadow-lg border border-slate-200"/><button onClick={()=>updateQuestion(qIndex, 'img', '')} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md"><X size={12}/></button></div>}
             </div>
 
             {/* MCQ Answers */}
@@ -568,17 +666,21 @@ export default function CreateQuiz() {
                         <div key={aIdx} className={`p-4 border-2 rounded-2xl transition-all shadow-sm ${q.correct === aIdx ? 'border-green-500 bg-green-50' : 'border-slate-100 bg-white hover:border-blue-300'}`}>
                             <div className="flex gap-3 items-center mb-2">
                                 <div onClick={()=>updateQuestion(qIndex, 'correct', aIdx)} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center cursor-pointer transition-colors ${q.correct===aIdx?'bg-green-500 border-green-500 text-white':'bg-white border-slate-200 text-slate-300'}`}>{String.fromCharCode(65+aIdx)}</div>
-                                <input value={ans} onChange={(e)=>updateMCQAnswer(qIndex, aIdx, e.target.value)} className="flex-1 bg-transparent outline-none font-bold text-lg" placeholder="Nhập đáp án..." />
+                                <input 
+                                    value={ans} 
+                                    onChange={(e)=>updateMCQAnswer(qIndex, aIdx, e.target.value)} 
+                                    onPaste={(e) => handlePaste(e, qIndex, 'ANSWER', aIdx)}
+                                    className="flex-1 bg-transparent outline-none font-bold text-lg" 
+                                    placeholder="Đáp án... (Dùng [img] để chèn ảnh)" 
+                                />
                                 <button onClick={() => triggerUpload(qIndex, aIdx, 'ANSWER')} className="text-slate-300 hover:text-blue-500 transition-colors"><ImageIcon size={18}/></button>
                             </div>
-                            {/* Xem trước đáp án */}
-                            {ans && ans.includes('$') && (
-                                <details className="mt-1">
-                                    <summary className="list-none text-[10px] text-blue-400 cursor-pointer select-none">Xem trước</summary>
-                                    <div className="text-sm font-medium"><MathRender content={ans} /></div>
+                            {ans && (
+                                <details className="mt-1"><summary className="list-none text-[10px] text-blue-400 cursor-pointer select-none">Xem trước</summary>
+                                    <div className="text-sm font-medium">{renderWithInlineImage(ans, q.aImages?.[aIdx])}</div>
                                 </details>
                             )}
-                            {q.aImages?.[aIdx] && <div className="relative mt-2 inline-block"><img src={q.aImages[aIdx]} className="h-20 rounded border"/><button onClick={()=>{const n=[...q.aImages]; n[aIdx]=''; updateQuestion(qIndex, 'aImages', n)}} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 shadow"><X size={10}/></button></div>}
+                            {q.aImages?.[aIdx] && !ans.includes('[img]') && <div className="relative mt-2 inline-block"><img src={q.aImages[aIdx]} className="h-20 rounded border object-contain"/><button onClick={()=>{const n=[...q.aImages]; n[aIdx]=''; updateQuestion(qIndex, 'aImages', n)}} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 shadow"><X size={10}/></button></div>}
                         </div>
                     ))}
                 </div>
@@ -590,12 +692,27 @@ export default function CreateQuiz() {
                     <div className="bg-slate-100 p-3 text-[10px] font-black text-slate-500 grid grid-cols-12 gap-2 uppercase tracking-wider"><div className="col-span-8 pl-4">Nội dung ý con</div><div className="col-span-2 text-center">Đúng</div><div className="col-span-2 text-center">Sai</div></div>
                     {q.items.map((item, iIdx) => (
                         <div key={iIdx} className="p-3 border-t bg-white grid grid-cols-12 gap-2 items-center hover:bg-slate-50">
-                            <div className="col-span-8 space-y-1 pl-4">
-                                <input value={item.text} onChange={(e)=>updateTFItem(qIndex, iIdx, 'text', e.target.value)} className="w-full bg-transparent outline-none font-bold text-lg" placeholder="..." />
-                                {item.text && item.text.includes('$') && (
-                                    <details>
-                                        <summary className="list-none text-[10px] text-blue-400 cursor-pointer">Xem trước</summary>
-                                        <div className="text-sm"><MathRender content={item.text} /></div>
+                            <div className="col-span-8 space-y-2 pl-4">
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        value={item.text} 
+                                        onChange={(e)=>updateTFItem(qIndex, iIdx, 'text', e.target.value)}
+                                        onPaste={(e) => handlePaste(e, qIndex, 'TF_ITEM', iIdx)} 
+                                        className="w-full bg-transparent outline-none font-bold text-lg" 
+                                        placeholder="Nhập nội dung... (Dùng [img] để chèn ảnh)" 
+                                    />
+                                     <button onClick={() => triggerUpload(qIndex, iIdx, 'TF_ITEM')} className="text-slate-300 hover:text-blue-500 transition-colors"><ImageIcon size={18}/></button>
+                                </div>
+                                {/* Hiển thị ảnh thumbnail nếu KHÔNG có [img] */}
+                                {item.img && !item.text.includes('[img]') && (
+                                    <div className="relative inline-block">
+                                        <img src={item.img} className="h-16 rounded border object-contain" />
+                                        <button onClick={() => updateTFItem(qIndex, iIdx, 'img', '')} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 shadow"><X size={10}/></button>
+                                    </div>
+                                )}
+                                {item.text && (
+                                    <details><summary className="list-none text-[10px] text-blue-400 cursor-pointer">Xem trước</summary>
+                                        <div className="text-sm">{renderWithInlineImage(item.text, item.img)}</div>
                                     </details>
                                 )}
                             </div>
@@ -610,12 +727,14 @@ export default function CreateQuiz() {
             {q.type === 'SA' && (
                 <div className="bg-green-50 p-6 rounded-2xl border border-green-100 shadow-inner">
                     <label className="block text-[10px] font-black text-green-700 uppercase mb-3 tracking-widest">Đáp án chính xác (Học sinh phải gõ khớp):</label>
-                    <input value={q.correct} onChange={(e) => updateQuestion(qIndex, 'correct', e.target.value)} className="w-full border-2 border-green-200 p-4 rounded-xl focus:border-green-500 outline-none font-black text-xl text-green-900 bg-white shadow-sm" placeholder="..." />
+                    <input 
+                        value={q.correct} 
+                        onChange={(e) => updateQuestion(qIndex, 'correct', e.target.value)} 
+                        className="w-full border-2 border-green-200 p-4 rounded-xl focus:border-green-500 outline-none font-black text-xl text-green-900 bg-white shadow-sm" 
+                        placeholder="..." 
+                    />
                     {q.correct && q.correct.includes('$') && (
-                        <details className="mt-2">
-                            <summary className="list-none text-xs text-green-600 cursor-pointer">Xem trước công thức</summary>
-                            <div className="mt-1 p-3 bg-white/50 rounded-lg"><MathRender content={q.correct} className="text-lg font-bold" /></div>
-                        </details>
+                        <details className="mt-2"><summary className="list-none text-xs text-green-600 cursor-pointer">Xem trước công thức</summary><div className="mt-1 p-3 bg-white/50 rounded-lg"><MathRender content={q.correct} className="text-lg font-bold" /></div></details>
                     )}
                 </div>
             )}
@@ -628,6 +747,83 @@ export default function CreateQuiz() {
             <button onClick={() => addQuestion('SA')} className="py-4 bg-white border-2 border-dashed border-green-300 text-green-600 rounded-xl font-bold hover:bg-green-50 transition flex items-center justify-center gap-2 shadow-sm"><Type size={20}/> Thêm Trả Lời Ngắn (P3)</button>
         </div>
       </main>
+{showFullPreview && (
+  <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+    <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
+      <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
+        <h2 className="font-black text-slate-700 uppercase">Xem trước đề thi</h2>
+        <button onClick={() => setShowFullPreview(false)} className="p-1 hover:bg-slate-200 rounded-full transition"><X size={24} className="text-slate-400" /></button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-8 space-y-8 text-slate-800" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+        <div className="text-center mb-8">
+          <h1 className="text-xl font-bold uppercase mb-1">{title || "TÊN BÀI KIỂM TRA"}</h1>
+          <p className="font-medium">Môn: {subject || "..."} | Khối: {grade} | Thời gian: {duration} phút</p>
+          <div className="w-20 h-0.5 bg-black mx-auto mt-2"></div>
+        </div>
+
+        <div className="space-y-10">
+          {questions.length > 0 ? (
+            questions.map((q, idx) => (
+              <div key={q.id || idx} className="space-y-3">
+                <div className="flex gap-2 items-start">
+                  <span className="font-bold whitespace-nowrap">Câu {idx + 1}:</span>
+                  <div className="inline-block leading-relaxed">
+                      {/* [NEW] Hiển thị Inline Image */}
+                      {renderWithInlineImage(q.q, q.img)}
+                  </div>
+                </div>
+                {/* [NEW] Chỉ hiển thị ảnh Block nếu KHÔNG dùng thẻ [img] trong text */}
+                {q.img && !q.q.includes('[img]') && (
+                    <div className="my-2"><img src={q.img} alt="Question" className="max-h-64 rounded-lg border shadow-sm mx-auto" /></div>
+                )}
+
+                {q.type === 'MCQ' && q.a && (
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-2 pl-6">
+                    {q.a.map((ans, aIdx) => (
+                      <div key={aIdx} className="flex gap-2 items-start">
+                        <span className="font-bold">{String.fromCharCode(65 + aIdx)}.</span>
+                        <div className="flex flex-col">
+                            {/* [NEW] Render Inline Image cho đáp án */}
+                            {renderWithInlineImage(ans, q.aImages?.[aIdx])}
+                            {/* Fallback ảnh block cũ */}
+                            {q.aImages && q.aImages[aIdx] && !ans.includes('[img]') && (
+                                <img src={q.aImages[aIdx]} className="max-h-32 mt-1 rounded border object-contain"/>
+                            )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {q.type === 'TF' && q.items && (
+                  <div className="pl-6 space-y-2">
+                    {q.items.map((item, iIdx) => (
+                      <div key={iIdx} className="flex gap-3 items-start italic border-b border-dashed pb-2 last:border-0">
+                        <span className="min-w-[25px]">{String.fromCharCode(97 + iIdx)})</span>
+                        <div className="flex-1">
+                             {/* [NEW] Render Inline Image cho TF */}
+                             {renderWithInlineImage(item.text, item.img)}
+                             {item.img && !item.text.includes('[img]') && <img src={item.img} className="max-h-32 mt-1 rounded border object-contain block"/>}
+                        </div>
+                        <span className="text-xs text-slate-400 font-bold ml-auto">[{item.isTrue ? "Đúng" : "Sai"}]</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {q.type === 'SA' && <div className="pl-6 italic text-slate-500">(Học sinh trả lời ngắn vào ô trống)</div>}
+              </div>
+            ))
+          ) : (<div className="text-center py-10 text-slate-400">Chưa có câu hỏi nào để hiển thị.</div>)}
+        </div>
+      </div>
+      <div className="p-4 border-t bg-slate-50 flex justify-end rounded-b-2xl">
+         <button onClick={() => setShowFullPreview(false)} className="px-8 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-lg">ĐÓNG XEM TRƯỚC</button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }

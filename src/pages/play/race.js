@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { db } from '@/lib/firebase';
 import { ref, get, set, onValue, update, push, onDisconnect, remove } from 'firebase/database';
-import { Trophy, ShieldAlert, CheckCircle, X, Flame, Zap, Shield, Flag, Lock, Target, Swords, ArrowLeft, Send, Clock, Check, LogOut, Sparkles, Gem, Loader2, Volume2, VolumeX } from 'lucide-react';
+import { Trophy, ShieldAlert, CheckCircle, X, Flame, Zap, Shield, Flag, Lock, Target, Swords, ArrowLeft, Send, Clock, Check, LogOut, Sparkles, Gem, Loader2, Volume2, VolumeX, Ban } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import MathRender from '@/components/MathRender'; 
 
 export default function BietDoiArenaPlayer() {
   const router = useRouter();
@@ -14,7 +15,8 @@ export default function BietDoiArenaPlayer() {
   const [teamId, setTeamId] = useState(null);
   
   const [roomData, setRoomData] = useState(null);
-  
+  const [forceEnd, setForceEnd] = useState(false); // State kích hoạt màn hình kết thúc
+
   // State Gameplay
   const [currentIdx, setCurrentIdx] = useState(null);
   const [multiplier, setMultiplier] = useState(1); 
@@ -29,11 +31,9 @@ export default function BietDoiArenaPlayer() {
 
   // --- HỆ THỐNG ÂM THANH ---
   useEffect(() => {
-      // Khởi tạo nhạc nền
       bgmRef.current = new Audio('/sounds/bgm.mp3');
       bgmRef.current.loop = true;
-      bgmRef.current.volume = 0.4; // Âm lượng nhạc nền vừa phải
-      
+      bgmRef.current.volume = 0.4; 
       return () => {
           if (bgmRef.current) {
               bgmRef.current.pause();
@@ -55,6 +55,31 @@ export default function BietDoiArenaPlayer() {
           else bgmRef.current.pause();
       }
       setIsMuted(!isMuted);
+  };
+
+  // --- HÀM RENDER VĂN BẢN KÈM ẢNH INLINE ---
+  const renderWithInlineImage = (text, imgUrl) => {
+    if (!text) return null;
+    if (text.includes('[img]') && imgUrl) {
+        const parts = text.split('[img]');
+        return (
+            <span>
+                {parts.map((part, index) => (
+                    <span key={index}>
+                        <MathRender content={part} />
+                        {index < parts.length - 1 && (
+                            <img 
+                                src={imgUrl} 
+                                className="inline-block align-middle mx-1 max-h-12 border rounded bg-white shadow-sm" 
+                                alt="minh-hoa"
+                            />
+                        )}
+                    </span>
+                ))}
+            </span>
+        );
+    }
+    return <MathRender content={text} />;
   };
 
   // --- LOGIC GIA NHẬP ---
@@ -85,7 +110,6 @@ export default function BietDoiArenaPlayer() {
     setTeamId(newId); 
     setJoined(true);
 
-    // Bắt đầu phát nhạc khi vào game
     if (!isMuted && bgmRef.current) {
         bgmRef.current.play().catch(e => console.log("Autoplay prevented:", e));
     }
@@ -99,31 +123,80 @@ export default function BietDoiArenaPlayer() {
       router.push('/');
   };
 
-  // --- LOGIC GAMEPLAY ---
+  // --- LOGIC GAMEPLAY & ĐỒNG BỘ ---
   useEffect(() => {
     if (!joined || !pin) return;
     const roomRef = ref(db, `rooms/${pin}`);
+    
     return onValue(roomRef, (snap) => {
       if (snap.exists()) {
         const data = snap.val();
         setRoomData(data);
+
+        // 1. Kiểm tra Global Lock khi đang làm bài
+        if (currentIdx !== null) {
+             const globalSolved = data.globalSolved || {};
+             if (globalSolved[currentIdx] && globalSolved[currentIdx] !== teamId) {
+                 alert("⚠️ Chậm chân rồi! Câu hỏi đã bị đội khác chiếm lĩnh!");
+                 setCurrentIdx(null);
+             }
+        }
+
+        // 2. Logic kiểm tra "Hết nước đi" (No Moves Left)
+        if (teamId && data.teams && data.teams[teamId] && data.quizData) {
+            const myTeam = data.teams[teamId];
+            const globalSolved = data.globalSolved || {};
+            const mySolved = myTeam.solved || {};
+            const totalQuestions = data.quizData.length;
+
+            let hasAvailableMove = false;
+            for (let i = 0; i < totalQuestions; i++) {
+                // Một câu hỏi còn "khả dụng" nếu:
+                // Chưa bị khóa Global bởi người khác VÀ Mình chưa trả lời (đúng hoặc sai)
+                const isGloballyLocked = globalSolved[i] && globalSolved[i] !== teamId;
+                const isLocallyLocked = mySolved[i]; // 'correct' or 'wrong'
+                
+                if (!isGloballyLocked && !isLocallyLocked) {
+                    hasAvailableMove = true;
+                    break;
+                }
+            }
+
+            // Nếu không còn nước đi nào và chưa đánh dấu finished -> Cập nhật lên DB
+            if (!hasAvailableMove && !myTeam.isFinished) {
+                update(ref(db, `rooms/${pin}/teams/${teamId}`), { 
+                    isFinished: true,
+                    finishedAt: Date.now()
+                });
+            }
+        }
+
+        // 3. Logic Kết thúc Game (2 người trở lên hết câu hỏi)
+        if (data.teams) {
+            const teamsArr = Object.values(data.teams);
+            const finishedCount = teamsArr.filter(t => t.isFinished).length;
+            const totalPlayers = teamsArr.length;
+            
+            // Điều kiện kết thúc: Phòng đóng HOẶC (Có >= 2 người xong) HOẶC (Chơi 1 mình và đã xong)
+            if (data.status === 'FINISHED' || (totalPlayers > 1 && finishedCount >= 2) || (totalPlayers === 1 && finishedCount === 1)) {
+                setForceEnd(true);
+                setCurrentIdx(null);
+                if (bgmRef.current) bgmRef.current.pause();
+            }
+        }
+
         if (data.teams && teamId && !data.teams[teamId]) {
             alert("Bạn đã rời khỏi chiến dịch!");
             router.push('/');
-        }
-        if (data.status === 'FINISHED') {
-            setCurrentIdx(null);
-            if (bgmRef.current) bgmRef.current.pause();
         }
       } else {
           alert("Chiến dịch hủy!");
           router.push('/');
       }
     });
-  }, [joined, pin, teamId]);
+  }, [joined, pin, teamId, currentIdx]);
 
   useEffect(() => {
-      // Logic đồng hồ chấp nhận cả RACING và PLAYING
       const isPlaying = roomData?.status === 'RACING' || roomData?.status === 'PLAYING';
       
       if (isPlaying && roomData?.startTime && roomData?.duration) {
@@ -165,11 +238,21 @@ export default function BietDoiArenaPlayer() {
       else setMultiplier(val);
   };
 
+  // --- XỬ LÝ NỘP BÀI ---
   const handleSubmitAnswer = (payload) => {
     if (!roomData?.quizData || currentIdx === null) return;
+    
+    // Check lần cuối xem có ai giải ĐÚNG chưa
+    if (roomData.globalSolved && roomData.globalSolved[currentIdx]) {
+        alert("Câu này vừa bị đội khác trả lời xong!");
+        setCurrentIdx(null);
+        return;
+    }
+
     const q = roomData.quizData[currentIdx];
     let basePoints = 0; 
 
+    // Logic chấm điểm
     if (q.type === 'MCQ') {
         if (payload === q.correct) basePoints = 100;
     }
@@ -186,48 +269,59 @@ export default function BietDoiArenaPlayer() {
     }
 
     let finalDelta = 0;
-    if (basePoints > 0) {
-        // --- TRẢ LỜI ĐÚNG ---
-        finalDelta = basePoints * multiplier; 
-        playSFX('correct'); // Âm thanh đúng
-        
-        // Hiệu ứng pháo hoa BUNG LỤA (nhiều màu sắc)
-        confetti({ 
-            particleCount: 150, 
-            spread: 100, 
-            origin: { y: 0.7 }, 
-            colors: ['#d946ef', '#22d3ee', '#facc15', '#f43f5e'],
-            scalar: 1.2
-        });
-    } else {
-        // --- TRẢ LỜI SAI ---
-        playSFX('wrong'); // Âm thanh sai
-        if (multiplier > 1) {
-            finalDelta = -(100 * multiplier);
-            if (multiplier >= 5) setFreezeTime(10); 
-            else if (multiplier >= 3) setFreezeTime(5);
-        }
-    }
-    
     const team = roomData.teams[teamId];
     const updates = {};
-    updates[`score`] = (team.score || 0) + finalDelta;
-    updates[`currentQ`] = (team.currentQ || 0) + 1;
-    updates[`solved/${currentIdx}`] = true;
+    const totalQuestions = roomData.quizData.length;
 
-    update(ref(db, `rooms/${pin}/teams/${teamId}`), updates);
+    if (basePoints > 0) {
+        // --- TRƯỜNG HỢP: TRẢ LỜI ĐÚNG ---
+        finalDelta = basePoints * multiplier; 
+        playSFX('correct'); 
+        confetti({ particleCount: 150, spread: 100, origin: { y: 0.7 }, colors: ['#d946ef', '#22d3ee', '#facc15', '#f43f5e'], scalar: 1.2 });
+
+        updates[`teams/${teamId}/score`] = (team.score || 0) + finalDelta;
+        
+        let solvedCount = 0;
+        if(team.solved) {
+            solvedCount = Object.keys(team.solved).length;
+        }
+        updates[`teams/${teamId}/currentQ`] = solvedCount + 1;
+        
+        // Đánh dấu CÁ NHÂN: "correct"
+        updates[`teams/${teamId}/solved/${currentIdx}`] = "correct";
+
+        // [QUAN TRỌNG] Đánh dấu TOÀN CỤC: Khóa câu hỏi với tất cả mọi người
+        updates[`globalSolved/${currentIdx}`] = teamId;
+
+    } else {
+        // --- TRƯỜNG HỢP: TRẢ LỜI SAI ---
+        playSFX('wrong'); 
+        
+        // Đánh dấu CÁ NHÂN: "wrong" -> Để khóa bản thân không được trả lời lại
+        updates[`teams/${teamId}/solved/${currentIdx}`] = "wrong";
+
+        // Tăng số câu đã tương tác
+        let solvedCount = 0;
+        if(team.solved) {
+            solvedCount = Object.keys(team.solved).length;
+        }
+        updates[`teams/${teamId}/currentQ`] = solvedCount + 1;
+    }
+
+    update(ref(db, `rooms/${pin}`), updates);
+    
+    // Đóng cửa sổ ngay lập tức để tìm câu khác
     setCurrentIdx(null);
   };
 
-  // --- STYLE HIDE SCROLLBAR ---
   const globalStyles = `
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   `;
 
-  // --- UI: LOGIN ---
   if (!joined) return (
     <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4 relative overflow-hidden font-sans selection:bg-purple-500 selection:text-white">
+      {/* (Phần Login giữ nguyên) */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#222_1px,transparent_1px),linear-gradient(to_bottom,#222_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20"></div>
       <div className="bg-[#0a0a0a]/90 backdrop-blur-xl p-8 rounded-3xl border border-purple-500/50 shadow-[0_0_60px_rgba(168,85,247,0.3)] w-full max-w-md text-center relative z-10 animate-in zoom-in duration-500">
         <div className="w-24 h-24 bg-gradient-to-br from-purple-600 to-cyan-500 rounded-2xl mx-auto mb-6 flex items-center justify-center shadow-[0_0_30px_rgba(34,211,238,0.5)] rotate-3 hover:rotate-0 transition-all duration-500"><Shield size={48} className="text-white drop-shadow-md" strokeWidth={2.5}/></div>
@@ -245,7 +339,7 @@ export default function BietDoiArenaPlayer() {
 
   const questions = roomData.quizData || [];
   const team = roomData.teams[teamId];
-  const solvedCount = team.currentQ || 0;
+  const q = questions[currentIdx];
 
   // --- UI: LOBBY ---
   if (roomData.status === 'LOBBY') return (
@@ -264,17 +358,22 @@ export default function BietDoiArenaPlayer() {
   );
 
   // --- UI: FINISHED ---
-  if (roomData.status === 'FINISHED') {
+  if (forceEnd || roomData.status === 'FINISHED') {
       const allTeams = Object.values(roomData.teams || {});
       const sortedTeams = allTeams.sort((a,b) => b.score - a.score);
       const myRank = sortedTeams.findIndex(t => t.id === teamId) + 1;
+      const isRoomFinished = roomData.status === 'FINISHED';
+      
       return (
         <div className="h-screen bg-[#050505] flex flex-col items-center justify-center p-6 text-center animate-in zoom-in relative overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-purple-900/20 via-black to-black pointer-events-none"></div>
           <Trophy size={140} className="text-yellow-400 mb-6 animate-bounce drop-shadow-[0_0_50px_#facc15] relative z-10"/>
-          <h1 className="text-6xl font-black uppercase italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-orange-600 mb-8 relative z-10">TỔNG KẾT</h1>
+          <h1 className="text-5xl md:text-6xl font-black uppercase italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-orange-600 mb-4 relative z-10">
+              {isRoomFinished ? "TỔNG KẾT" : "HOÀN THÀNH!"}
+          </h1>
+          {!isRoomFinished && (<p className="text-cyan-400 font-bold uppercase tracking-widest mb-6 animate-pulse relative z-10">Bạn đã hoàn thành tất cả nhiệm vụ!</p>)}
           <div className="bg-[#111]/80 backdrop-blur-md p-8 rounded-[3rem] shadow-2xl border-2 border-purple-500/30 w-full max-w-sm relative z-10">
-            <div className="mb-6"><p className="text-slate-500 font-bold text-xs uppercase tracking-[0.3em] mb-2">Hạng</p><div className="text-7xl font-black text-white italic drop-shadow-lg">#{myRank}</div></div>
+            <div className="mb-6"><p className="text-slate-500 font-bold text-xs uppercase tracking-[0.3em] mb-2">Hạng hiện tại</p><div className="text-7xl font-black text-white italic drop-shadow-lg">#{myRank}</div></div>
             <div className="w-full h-px bg-white/10 rounded-full mb-6"></div>
             <div><p className="text-slate-500 font-bold text-xs uppercase tracking-[0.3em] mb-2">Điểm số</p><p className="text-5xl font-black text-cyan-400 font-mono text-shadow-glow">{team.score}</p></div>
           </div>
@@ -282,8 +381,6 @@ export default function BietDoiArenaPlayer() {
         </div>
       );
   }
-
-  const q = questions[currentIdx];
 
   // --- UI: GAME BOARD ---
   return (
@@ -294,22 +391,12 @@ export default function BietDoiArenaPlayer() {
       <header className="h-[70px] md:h-[80px] bg-[#0a0a0a]/90 backdrop-blur-md border-b border-purple-900/30 px-3 md:px-6 flex justify-between items-center shadow-[0_5px_20px_rgba(0,0,0,0.8)] shrink-0 z-20">
         <div className="flex items-center gap-2 md:gap-4">
           <button onClick={handleLeave} className="p-2 rounded-xl bg-white/5 hover:bg-red-500/20 hover:text-red-400 text-slate-400 transition"><ArrowLeft size={20}/></button>
-          
-          {/* NÚT LOA MUTE/UNMUTE */}
-          <button onClick={toggleMute} className={`p-2 rounded-xl transition ${isMuted ? 'bg-red-900/20 text-red-500' : 'bg-white/5 text-cyan-400 hover:text-white'}`}>
-              {isMuted ? <VolumeX size={20}/> : <Volume2 size={20}/>}
-          </button>
+          <button onClick={toggleMute} className={`p-2 rounded-xl transition ${isMuted ? 'bg-red-900/20 text-red-500' : 'bg-white/5 text-cyan-400 hover:text-white'}`}>{isMuted ? <VolumeX size={20}/> : <Volume2 size={20}/>}</button>
         </div>
-
-        {/* LOGO GIỮA */}
         <div className="flex flex-col items-center justify-center absolute left-1/2 -translate-x-1/2 pointer-events-none">
-            <h1 className="text-lg md:text-3xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-cyan-400 to-purple-400 drop-shadow-[0_0_15px_rgba(168,85,247,0.6)] leading-none">
-                BIỆT ĐỘI ARENA
-            </h1>
+            <h1 className="text-lg md:text-3xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-cyan-400 to-purple-400 drop-shadow-[0_0_15px_rgba(168,85,247,0.6)] leading-none">BIỆT ĐỘI ARENA</h1>
             <p className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-[0.3em] mt-1">{teamName}</p>
         </div>
-
-        {/* RIGHT SIDE */}
         <div className="flex items-center gap-3 md:gap-5">
              <div className="flex flex-col items-end">
                  <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Điểm số</span>
@@ -318,7 +405,6 @@ export default function BietDoiArenaPlayer() {
                     <span className="text-xl md:text-2xl font-black text-yellow-400 leading-none drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]">{team.score}</span>
                  </div>
              </div>
-
              {localTimeLeft > 0 && (
                  <div className={`px-2 md:px-4 py-1 rounded-full font-black font-mono border flex items-center gap-2 shadow-[0_0_10px_inset_rgba(0,0,0,0.5)] ${localTimeLeft < 60 ? 'bg-red-950/50 border-red-500 text-red-500 animate-pulse' : 'bg-slate-900 border-slate-700 text-cyan-400'}`}>
                      <Clock size={16}/> <span className="text-sm md:text-lg">{Math.floor(localTimeLeft / 60)}:{String(localTimeLeft % 60).padStart(2, '0')}</span>
@@ -327,29 +413,48 @@ export default function BietDoiArenaPlayer() {
         </div>
       </header>
 
-      {/* MAIN */}
-<main className="flex-1 flex flex-col p-2 md:p-6 relative overflow-hidden bg-[radial-gradient(circle_at_bottom,_var(--tw-gradient-stops))] from-purple-900/10 via-[#050505] to-black">
+      <main className="flex-1 flex flex-col p-2 md:p-6 relative overflow-hidden bg-[radial-gradient(circle_at_bottom,_var(--tw-gradient-stops))] from-purple-900/10 via-[#050505] to-black">
         
-        {/* === A. BẢN ĐỒ (Giữ nguyên) === */}
         {currentIdx === null ? (
+          /* === A. BẢN ĐỒ === */
           <div className="flex-1 flex flex-col items-center justify-center animate-in fade-in zoom-in">
             <h2 className="text-cyan-500 font-black text-xl md:text-3xl uppercase tracking-[0.2em] mb-4 md:mb-8 drop-shadow-[0_0_10px_#22d3ee] italic flex items-center gap-3">
                 <Flag size={24} className="animate-bounce"/> Bản đồ nhiệm vụ
             </h2>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 md:gap-4 w-full max-w-4xl px-2 overflow-y-auto max-h-[75vh] custom-scrollbar no-scrollbar">
               {questions.map((_, idx) => {
-                const isSolved = team.solved && team.solved[idx];
+                // LOGIC HIỂN THỊ MỚI
+                const myStatus = team.solved ? team.solved[idx] : null; 
+                const isGlobalSolved = roomData.globalSolved && roomData.globalSolved[idx];
+                
+                // Bị khóa nếu: Đã có người trả lời đúng (bất kể ai) HOẶC mình đã làm sai
+                const isLocked = isGlobalSolved || myStatus;
+                
+                let btnClass = "bg-gradient-to-br from-purple-900/40 to-slate-900 border-purple-500/50 text-white hover:border-cyan-400 hover:shadow-[0_0_20px_#22d3ee] hover:bg-purple-800/50 active:scale-95";
+                let Icon = null;
+                
+                if (myStatus === "correct" || myStatus === true) {
+                    btnClass = "bg-green-900/30 border-green-600 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.3)] cursor-not-allowed";
+                    Icon = <CheckCircle size={32} className="mx-auto" />;
+                } else if (myStatus === "wrong") {
+                    btnClass = "bg-red-900/20 border-red-800 text-red-500 cursor-not-allowed grayscale opacity-70";
+                    Icon = <Ban size={32} className="mx-auto" />; 
+                } else if (isGlobalSolved) {
+                    btnClass = "bg-slate-900/50 border-slate-700 text-slate-600 cursor-not-allowed grayscale";
+                    Icon = <Lock size={32} className="mx-auto text-slate-500" />;
+                }
+
                 return (
-                  <button key={idx} onClick={() => setCurrentIdx(idx)} disabled={isSolved} className={`aspect-square rounded-xl font-black text-2xl md:text-3xl transition-all relative overflow-hidden border backdrop-blur-sm touch-manipulation ${isSolved ? 'bg-slate-900/50 border-slate-800 text-slate-700 cursor-not-allowed grayscale' : 'bg-gradient-to-br from-purple-900/40 to-slate-900 border-purple-500/50 text-white hover:border-cyan-400 hover:shadow-[0_0_20px_#22d3ee] hover:bg-purple-800/50 active:scale-95'}`}>
-                    {!isSolved && <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent opacity-0 hover:opacity-100 transition-opacity"></div>}
-                    {isSolved ? <CheckCircle size={32} className="mx-auto text-green-600/50" /> : <span className="drop-shadow-md">{idx + 1}</span>}
+                  <button key={idx} onClick={() => setCurrentIdx(idx)} disabled={isLocked} className={`aspect-square rounded-xl font-black text-2xl md:text-3xl transition-all relative overflow-hidden border backdrop-blur-sm touch-manipulation ${btnClass}`}>
+                    {!isLocked && <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent opacity-0 hover:opacity-100 transition-opacity"></div>}
+                    {Icon ? Icon : <span className="drop-shadow-md">{idx + 1}</span>}
                   </button>
                 );
               })}
             </div>
           </div>
         ) : (
-          /* === B. GIAO DIỆN TRẢ LỜI === */
+          /* === B. TRẢ LỜI CÂU HỎI === */
           <div className="flex-1 flex flex-col animate-in slide-in-from-bottom duration-300 h-full max-w-4xl mx-auto w-full overflow-hidden">
             
             <div className="flex items-center justify-between mb-2 shrink-0">
@@ -368,25 +473,34 @@ export default function BietDoiArenaPlayer() {
             <div className="bg-[#0f172a]/90 backdrop-blur-xl rounded-xl border border-cyan-500/30 flex-1 flex flex-col shadow-[0_0_30px_rgba(34,211,238,0.1)] overflow-hidden relative">
               <div className="flex-1 overflow-y-auto no-scrollbar p-3">
                   <div className="text-center mb-4">
-                      {q?.img && (<img src={q.img} className="max-h-24 mx-auto mb-2 object-contain rounded border border-slate-800 bg-black" />)}
-                      {/* [CẬP NHẬT] Câu hỏi to hơn và hiển thị MathML */}
-                      <h2 
-                        className={`text-xl md:text-3xl font-bold text-white leading-snug ${q?.q.length > 100 ? 'text-lg md:text-2xl' : ''}`}
-                        dangerouslySetInnerHTML={{ __html: q?.q }}
-                      />
+                      <h2 className={`text-xl md:text-3xl font-bold text-white leading-snug mb-3 ${q?.q.length > 100 ? 'text-lg md:text-2xl' : ''}`}>
+                          {renderWithInlineImage(q?.q, q?.img)}
+                      </h2>
+                      
+                      {q?.img && !q?.q.includes('[img]') && (
+                          <div className="w-full flex justify-center mb-3">
+                              <img 
+                                  src={q.img} 
+                                  className="max-h-40 md:max-h-60 max-w-full rounded border border-slate-800 bg-black object-contain" 
+                              />
+                          </div>
+                      )}
                   </div>
 
                   <div className="w-full">
                     {q.type === 'MCQ' && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {q?.a.map((ans, i) => (
-                              <button key={i} onClick={() => handleSubmitAnswer(i)} className="bg-slate-800/50 hover:bg-purple-900/40 text-slate-300 hover:text-white p-4 rounded-lg font-bold text-lg md:text-xl border border-slate-700 hover:border-purple-500 active:scale-[0.98] transition-all flex items-center gap-3 shadow-sm group touch-manipulation text-left">
-                                <span className="w-8 h-8 rounded bg-black/50 flex items-center justify-center text-sm font-black text-slate-500 group-hover:text-purple-400 border border-slate-700 shrink-0">{String.fromCharCode(65+i)}</span>
-                                {/* [CẬP NHẬT] Đáp án to hơn và hiển thị MathML */}
-                                <span 
-                                    className="leading-tight line-clamp-3"
-                                    dangerouslySetInnerHTML={{ __html: ans }}
-                                />
+                              <button key={i} onClick={() => handleSubmitAnswer(i)} className="bg-slate-800/50 hover:bg-purple-900/40 text-slate-300 hover:text-white p-4 rounded-lg font-bold text-lg md:text-xl border border-slate-700 hover:border-purple-500 active:scale-[0.98] transition-all flex flex-col gap-2 shadow-sm group touch-manipulation text-left">
+                                <div className="flex items-start gap-3 w-full">
+                                    <span className="w-8 h-8 rounded bg-black/50 flex items-center justify-center text-sm font-black text-slate-500 group-hover:text-purple-400 border border-slate-700 shrink-0">{String.fromCharCode(65+i)}</span>
+                                    <div className="leading-tight line-clamp-3 flex-1">
+                                        {renderWithInlineImage(ans, q?.aImages?.[i])}
+                                    </div>
+                                </div>
+                                {q?.aImages?.[i] && !ans.includes('[img]') && (
+                                    <img src={q.aImages[i]} className="max-h-32 max-w-full rounded border border-slate-600 self-start mt-2" />
+                                )}
                               </button>
                             ))}
                         </div>
@@ -397,11 +511,12 @@ export default function BietDoiArenaPlayer() {
                             <div className="divide-y divide-white/5">
                                 {q.items.map((item, idx) => (
                                     <div key={idx} className="grid grid-cols-12 gap-1 p-3 items-center">
-                                        {/* [CẬP NHẬT] Ý TF to hơn và hiển thị MathML */}
-                                        <div 
-                                            className="col-span-8 text-slate-300 font-bold text-base md:text-xl leading-tight pr-1"
-                                            dangerouslySetInnerHTML={{ __html: item.text }}
-                                        />
+                                        <div className="col-span-8 text-slate-300 font-bold text-base md:text-xl leading-tight pr-1">
+                                            {renderWithInlineImage(item.text, item.img)}
+                                            {item.img && !item.text.includes('[img]') && (
+                                                <img src={item.img} className="max-h-32 max-w-full rounded border border-slate-600 mt-2 block" />
+                                            )}
+                                        </div>
                                         <div className="col-span-2 flex justify-center"><button onClick={() => setTfSelection(prev => ({...prev, [idx]: "true"}))} className={`w-10 h-10 rounded border transition-all flex items-center justify-center ${tfSelection[idx] === "true" ? 'bg-green-600 border-green-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-600'}`}><Check size={20}/></button></div>
                                         <div className="col-span-2 flex justify-center"><button onClick={() => setTfSelection(prev => ({...prev, [idx]: "false"}))} className={`w-10 h-10 rounded border transition-all flex items-center justify-center ${tfSelection[idx] === "false" ? 'bg-red-600 border-red-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-600'}`}><X size={20}/></button></div>
                                     </div>
@@ -413,7 +528,6 @@ export default function BietDoiArenaPlayer() {
 
                     {q.type === 'SA' && (
                         <div className="mt-4">
-                            {/* [CẬP NHẬT] Input to hơn */}
                             <input value={saInput} onChange={(e) => setSaInput(e.target.value)} className="w-full bg-[#050505] border-2 border-slate-700 focus:border-cyan-500 p-4 rounded-lg text-white font-black text-2xl outline-none text-center mb-4 uppercase placeholder:text-slate-700 transition-colors" placeholder="NHẬP ĐÁP ÁN..."/>
                             <button onClick={() => handleSubmitAnswer()} className="w-full bg-gradient-to-r from-purple-600 to-cyan-600 text-white py-3 rounded-lg font-black text-xl shadow-lg uppercase italic flex items-center justify-center gap-2 hover:opacity-90"><Send size={20}/> Gửi bài</button>
                         </div>
@@ -425,7 +539,6 @@ export default function BietDoiArenaPlayer() {
         )}
       </main>
 
-      {/* OVERLAY HỎNG MÁY */}
       {freezeTime > 0 && (
         <div className="fixed inset-0 z-[100] bg-red-950/90 flex flex-col items-center justify-center text-center backdrop-blur-xl animate-in zoom-in px-4">
           <ShieldAlert size={80} className="text-red-500 mb-4 animate-bounce drop-shadow-[0_0_30px_red]" />

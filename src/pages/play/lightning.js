@@ -2,11 +2,9 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { db } from '@/lib/firebase';
 import { ref, get, set, onValue, update, runTransaction, onDisconnect, remove } from 'firebase/database';
-// [ĐÃ SỬA] Thêm Loader2 vào dòng import dưới đây
 import { Zap, Shield, Lock, CheckCircle, XCircle, Trophy, User, Home, Ban, Check, X, Send, Star, Clock, Flame, Crown, Volume2, VolumeX, Loader2 } from 'lucide-react';
-
-// [TỐI ƯU] Không dùng confetti để máy yếu chạy mượt
-// import confetti from 'canvas-confetti';
+// Import MathRender
+import MathRender from '@/components/MathRender'; 
 
 export default function LightningArenaPlayer() {
   const router = useRouter();
@@ -29,12 +27,41 @@ export default function LightningArenaPlayer() {
   const [isMuted, setIsMuted] = useState(true); 
   const bgmRef = useRef(null); 
 
-  // State để đồng bộ thời gian với Server
   const [serverOffset, setServerOffset] = useState(0);
 
   const [mcqSelection, setMcqSelection] = useState(null);
   const [tfSelection, setTfSelection] = useState({});
   const [saInput, setSaInput] = useState("");
+
+  // HÀM RENDER VĂN BẢN KÈM ẢNH INLINE
+  const renderWithInlineImage = (text, imgUrl) => {
+    if (!text) return null;
+    
+    // Nếu có thẻ [img] và có link ảnh
+    if (text.includes('[img]') && imgUrl) {
+        const parts = text.split('[img]');
+        return (
+            <span>
+                {parts.map((part, index) => (
+                    <span key={index}>
+                        <MathRender content={part} />
+                        {/* Chèn ảnh vào giữa các đoạn text */}
+                        {index < parts.length - 1 && (
+                            <img 
+                                src={imgUrl} 
+                                className="inline-block align-middle mx-1 max-h-12 border rounded bg-white shadow-sm" 
+                                alt="minh-hoa"
+                            />
+                        )}
+                    </span>
+                ))}
+            </span>
+        );
+    }
+    
+    // Mặc định trả về Component hiển thị toán
+    return <MathRender content={text} />;
+  };
 
   useEffect(() => {
       if (queryPin) setPin(queryPin);
@@ -52,7 +79,6 @@ export default function LightningArenaPlayer() {
       };
   }, []);
 
-  // Lắng nghe độ lệch thời gian của máy trạm so với Server
   useEffect(() => {
       const offsetRef = ref(db, ".info/serverTimeOffset");
       const unsub = onValue(offsetRef, (snap) => {
@@ -76,14 +102,12 @@ export default function LightningArenaPlayer() {
       setIsMuted(!isMuted);
   };
 
-  // Logic đồng hồ đếm ngược có bù giờ (Sync Time)
   useEffect(() => {
       if (roomData?.status === 'PLAYING' && roomData.startTime) {
           const duration = (roomData.duration || 300) * 1000; 
           const endTime = roomData.startTime + duration;
 
           const interval = setInterval(() => {
-              // Tính thời gian hiện tại dựa trên giờ Server (An toàn tuyệt đối)
               const now = Date.now() + serverOffset;
               const diff = Math.floor((endTime - now) / 1000);
               
@@ -227,21 +251,16 @@ export default function LightningArenaPlayer() {
       }
   };
 
-  // --- LOGIN SCREEN (STYLE GAMING) ---
   if (!joined) return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4 font-sans bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
       <div className="bg-slate-900/90 border-2 border-orange-500/50 p-8 rounded-[2rem] w-full max-w-md text-center shadow-[0_0_50px_rgba(234,88,12,0.3)] relative overflow-hidden backdrop-blur-md animate-in zoom-in">
-          {/* Top Line */}
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-500 via-red-500 to-orange-500"></div>
-          
           <div className="relative mb-6">
               <div className="absolute inset-0 bg-orange-500 blur-[60px] opacity-20 animate-pulse"></div>
               <Zap size={70} className="text-yellow-400 mx-auto drop-shadow-[0_0_15px_rgba(250,204,21,0.8)] relative z-10" fill="currentColor"/>
           </div>
-          
           <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter mb-2 text-transparent bg-clip-text bg-gradient-to-br from-yellow-300 to-red-600 drop-shadow-sm">NHANH NHƯ CHỚP</h1>
           <p className="text-orange-200/60 font-bold text-[10px] uppercase tracking-[0.4em] mb-8">Lightning Arena</p>
-          
           <form onSubmit={handleJoin} className="space-y-4 relative z-10">
               {!queryPin && <input value={pin} onChange={e=>setPin(e.target.value)} className="w-full bg-black/60 border-2 border-slate-700 text-yellow-400 text-center text-3xl font-black p-4 rounded-xl outline-none focus:border-orange-500 placeholder-slate-700 tracking-widest font-mono shadow-inner transition-colors" placeholder="000000"/>}
               <input value={name} onChange={e=>setName(e.target.value)} className="w-full bg-black/60 border-2 border-slate-700 text-white text-center text-xl font-bold p-4 rounded-xl outline-none focus:border-orange-500 uppercase placeholder-slate-700 shadow-inner transition-colors" placeholder="TÊN CHIẾN BINH"/>
@@ -283,48 +302,35 @@ export default function LightningArenaPlayer() {
       );
   }
 
-  // --- GAME BOARD (RỰC LỬA & TỐI ƯU) ---
+  // --- GAME BOARD ---
   return (
     <div className="min-h-screen bg-[#020617] text-white font-sans flex flex-col overflow-hidden">
-        {/* HEADER RỰC LỬA */}
+        {/* HEADER */}
         <header className="h-[70px] bg-slate-950 border-b border-orange-900/40 flex justify-between items-center px-4 shrink-0 relative shadow-[0_5px_20px_rgba(0,0,0,0.5)] z-20">
-            {/* Glow nền Header */}
             <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-yellow-500 via-red-600 to-orange-500 shadow-[0_0_10px_#f97316]"></div>
-
-            {/* Left */}
             <div className="flex items-center gap-2 z-10">
                 <button onClick={handleLeave} className="bg-slate-900 hover:bg-slate-800 p-2 rounded-lg text-slate-400 hover:text-white border border-slate-800 transition"><Home size={18}/></button>
                 <button onClick={toggleMute} className={`p-2 rounded-lg border transition ${isMuted ? 'text-red-500 bg-red-950/30 border-red-900/50' : 'text-cyan-400 bg-cyan-950/30 border-cyan-900/50'}`}>
                     {isMuted ? <VolumeX size={18}/> : <Volume2 size={18}/>}
                 </button>
             </div>
-
-            {/* Center: Logo Text Rực Lửa */}
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
                 <h1 className="hidden md:flex items-center gap-2 text-2xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-orange-500 to-red-600 drop-shadow-[0_2px_0px_rgba(0,0,0,1)]" style={{textShadow: "0 0 20px rgba(234,88,12,0.4)"}}>
                     <Zap className="text-yellow-400 fill-yellow-400 drop-shadow-md animate-pulse" size={24} />
                     NHANH NHƯ CHỚP
                 </h1>
-                {/* Mobile Icon Only */}
                 <div className="md:hidden">
                      <Zap className="text-orange-500 fill-yellow-400 drop-shadow-[0_0_10px_rgba(234,88,12,0.8)]" size={32} />
                 </div>
             </div>
-
-            {/* Right: Info */}
             <div className="flex items-center gap-3 z-10">
-                {/* Tên Chiến Binh */}
                 <div className="hidden sm:flex items-center gap-2 bg-slate-900/80 border border-slate-700 px-3 py-1.5 rounded-full shadow-inner">
                     <User size={14} className="text-slate-400"/>
                     <span className="text-xs font-bold text-slate-200 uppercase truncate max-w-[100px]">{name}</span>
                 </div>
-
-                {/* Timer (Đã sync) */}
                 <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 font-mono font-black text-lg shadow-inner ${timeLeft <= 10 ? 'bg-red-950/80 border-red-500 text-red-500 animate-pulse' : 'bg-slate-900 border-slate-700 text-cyan-400'}`}>
                     <Clock size={16}/><span>{formatTime(timeLeft)}</span>
                 </div>
-
-                {/* Score */}
                 <div className="flex flex-col items-end">
                     <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-0.5">Điểm</span>
                     <div className="text-xl font-black text-yellow-400 leading-none drop-shadow-md flex items-center gap-1">
@@ -334,7 +340,7 @@ export default function LightningArenaPlayer() {
             </div>
         </header>
 
-        {/* Content - Màu các ô SÁNG & RÕ RÀNG */}
+        {/* MAIN GAME */}
         <main className="flex-1 p-4 overflow-y-auto bg-[#020617]">
             <div className="max-w-7xl mx-auto pt-4 md:pt-8">
                 <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
@@ -345,7 +351,6 @@ export default function LightningArenaPlayer() {
                         const hasFailed = failedQuestions.includes(idx);
 
                         let bgClass = 'bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700 hover:border-cyan-500 hover:text-cyan-400'; 
-                        
                         if (isSolved) {
                             if (isMine) bgClass = 'bg-green-600 border-green-400 text-white shadow-[0_0_15px_rgba(34,197,94,0.4)] z-10'; 
                             else bgClass = 'bg-slate-900 border-slate-800 text-slate-700 opacity-50 cursor-not-allowed'; 
@@ -383,23 +388,28 @@ export default function LightningArenaPlayer() {
                     )}
 
                     <div className="flex-1 overflow-y-auto p-6">
-                        {/* [CẬP NHẬT] Hiển thị câu hỏi MathML */}
-                        <h2 
-                            className="text-xl md:text-2xl font-bold text-white mb-6 leading-relaxed"
-                            dangerouslySetInnerHTML={{ __html: activeQ.q }}
-                        />
-                        {activeQ.img && <img src={activeQ.img} className="mx-auto mb-6 max-h-48 w-auto object-contain rounded-xl border-2 border-slate-700 bg-black shadow-lg"/>}
+                        {/* HIỂN THỊ CÂU HỎI (ĐÃ SỬA LỖI) */}
+                        <div className="text-center mb-6">
+                            <h2 className="text-xl md:text-2xl font-bold text-white leading-relaxed">
+                                {renderWithInlineImage(activeQ.q, activeQ.img)}
+                            </h2>
+                            {/* Hiển thị ảnh khối nếu không có thẻ [img] trong text */}
+                            {activeQ.img && !activeQ.q.includes('[img]') && (
+                                <img src={activeQ.img} className="mx-auto mt-4 max-h-48 w-auto object-contain rounded-xl border-2 border-slate-700 bg-black shadow-lg"/>
+                            )}
+                        </div>
 
                         {activeQ.type === 'MCQ' && (
                             <div className="grid gap-3">
                                 {activeQ.a.map((ans, i) => (
                                     <button key={i} onClick={() => setMcqSelection(i)} className={`p-4 rounded-xl border-2 text-left font-bold text-lg transition-all active:scale-[0.98] flex gap-3 ${mcqSelection === i ? 'bg-indigo-600 border-indigo-400 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)]' : 'bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700 hover:border-slate-500'}`}>
                                         <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-black shrink-0 ${mcqSelection === i ? 'bg-white text-indigo-700' : 'bg-slate-900 text-slate-500'}`}>{String.fromCharCode(65+i)}</span>
-                                        {/* [CẬP NHẬT] Hiển thị đáp án MathML */}
-                                        <span 
-                                            className="mt-0.5"
-                                            dangerouslySetInnerHTML={{ __html: ans }}
-                                        />
+                                        <div className="flex-1">
+                                            <span>{renderWithInlineImage(ans, activeQ.aImages?.[i])}</span>
+                                            {activeQ.aImages?.[i] && !ans.includes('[img]') && (
+                                                <img src={activeQ.aImages[i]} className="h-16 w-auto mt-2 rounded border border-slate-600 bg-white p-0.5" />
+                                            )}
+                                        </div>
                                     </button>
                                 ))}
                             </div>
@@ -409,11 +419,14 @@ export default function LightningArenaPlayer() {
                             <div className="space-y-3">
                                 {activeQ.items.map((item, idx) => (
                                     <div key={idx} className="flex justify-between items-center bg-slate-800 p-3 rounded-xl border border-slate-700">
-                                        {/* [CẬP NHẬT] Hiển thị nội dung TF MathML */}
-                                        <span 
-                                            className="text-sm md:text-base font-bold text-slate-200 flex-1 mr-4 leading-tight"
-                                            dangerouslySetInnerHTML={{ __html: item.text }}
-                                        />
+                                        <div className="flex-1 mr-4">
+                                            <span className="text-sm md:text-base font-bold text-slate-200 leading-tight block">
+                                                {renderWithInlineImage(item.text, item.img)}
+                                            </span>
+                                            {item.img && !item.text.includes('[img]') && (
+                                                <img src={item.img} className="h-12 mt-2 rounded border border-slate-600" />
+                                            )}
+                                        </div>
                                         <div className="flex gap-2 shrink-0">
                                             <button onClick={() => setTfSelection(p => ({...p, [idx]: "true"}))} className={`w-10 h-10 rounded-lg border-2 font-black transition-all ${tfSelection[idx] === "true" ? 'bg-green-600 border-green-400 text-white shadow-lg' : 'bg-slate-900 border-slate-600 text-slate-600 hover:bg-slate-700'}`}>Đ</button>
                                             <button onClick={() => setTfSelection(p => ({...p, [idx]: "false"}))} className={`w-10 h-10 rounded-lg border-2 font-black transition-all ${tfSelection[idx] === "false" ? 'bg-red-600 border-red-400 text-white shadow-lg' : 'bg-slate-900 border-slate-600 text-slate-600 hover:bg-slate-700'}`}>S</button>

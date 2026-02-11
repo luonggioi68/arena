@@ -1,13 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { db, firestore } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { ref, set, onValue, update } from 'firebase/database';
-// [MỚI] Thêm FileSpreadsheet và Download vào import
-import { Zap, Trophy, Flag, Lock, Home, Power, Clock, Shield, AlertTriangle, FileSpreadsheet, Download } from 'lucide-react';
+import { Zap, Trophy, Flag, Lock, Home, Power, Clock, Shield, AlertTriangle, FileSpreadsheet, Download, Users } from 'lucide-react';
 import confetti from 'canvas-confetti';
-// [MỚI] Import thư viện Excel
 import * as XLSX from 'xlsx';
+// [NEW] Import MathRender nếu cần hiển thị đề thi trong tương lai (hiện tại Admin chỉ quản lý tiến độ)
+// import MathRender from '@/components/MathRender';
 
 export default function LightningArenaHost() {
   const router = useRouter();
@@ -141,11 +141,10 @@ export default function LightningArenaHost() {
       if(confirm("Rời khỏi phòng?")) router.push('/dashboard');
   };
 
-  // [MỚI] HÀM XUẤT EXCEL
+  // HÀM XUẤT EXCEL
   const handleExportExcel = () => {
       if (!roomData?.players) return alert("Chưa có dữ liệu người chơi!");
 
-      // 1. Chuẩn bị dữ liệu (Đã sort từ cao xuống thấp)
       const dataToExport = sortedPlayers.map((p, index) => ({
           "Xếp Hạng": index + 1,
           "Tên Chiến Binh": p.name,
@@ -154,12 +153,9 @@ export default function LightningArenaHost() {
           "Số Câu Sai": p.wrongCount || 0
       }));
 
-      // 2. Tạo Sheet
       const ws = XLSX.utils.json_to_sheet(dataToExport);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "KetQua");
-
-      // 3. Tải xuống
       XLSX.writeFile(wb, `KetQua_Arena_${pin}.xlsx`);
   };
 
@@ -173,6 +169,7 @@ export default function LightningArenaHost() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] flex flex-col">
+      {/* HEADER */}
       <header className="h-[90px] flex items-center justify-between px-6 bg-slate-900/90 border-b border-cyan-500/30 shadow-lg relative z-20 shrink-0">
           <div className="flex items-center gap-6">
               <button onClick={backToDashboard} className="bg-slate-800 p-3 rounded-xl border border-slate-600 hover:bg-slate-700 transition"><Home size={24}/></button>
@@ -203,14 +200,13 @@ export default function LightningArenaHost() {
 
       <main className="flex-1 p-6 flex gap-6 overflow-hidden relative z-10">
           
-          {/* CỘT TRÁI: BẢN ĐỒ TÀI NGUYÊN (KHÔNG CUỘN) */}
+          {/* CỘT TRÁI: BẢN ĐỒ TÀI NGUYÊN */}
           <div className="flex-1 bg-slate-900/60 rounded-[2.5rem] border border-white/10 p-6 shadow-2xl backdrop-blur-md flex flex-col relative overflow-hidden">
               <div className="flex justify-between items-center mb-4 shrink-0">
                   <h3 className="text-cyan-400 font-black uppercase flex items-center gap-2 text-lg"><Flag size={20}/> Bản đồ ({quizQuestions.length} ô)</h3>
                   <div className="flex gap-4 text-xs font-bold uppercase"><span className="flex items-center gap-1 text-slate-400"><div className="w-3 h-3 bg-slate-700 rounded border border-slate-600"></div> Chưa chiếm</span><span className="flex items-center gap-1 text-purple-400"><div className="w-3 h-3 bg-purple-900 rounded border border-purple-500"></div> Đã chiếm</span></div>
               </div>
               
-              {/* KHU VỰC GRID: AUTO-FIT */}
               <div className="flex-1 overflow-hidden relative">
                   <div className={`w-full h-full grid ${gridConfig.cols} gap-2 content-start`}>
                       {quizQuestions.map((_, idx) => { 
@@ -232,19 +228,21 @@ export default function LightningArenaHost() {
               </div>
           </div>
 
-          {/* CỘT PHẢI: TOP CHIẾN BINH + NÚT EXCEL */}
+          {/* CỘT PHẢI: TOP CHIẾN BINH + XUẤT EXCEL */}
           <div className="w-[400px] bg-black/40 rounded-[2.5rem] border-l-4 border-cyan-500 p-6 flex flex-col shadow-2xl backdrop-blur-md shrink-0">
               <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
-                  <h3 className="text-yellow-400 font-black uppercase flex items-center gap-2 text-xl"><Trophy size={24}/> Top Chiến Binh</h3>
+                  <div className="flex flex-col">
+                      <h3 className="text-yellow-400 font-black uppercase flex items-center gap-2 text-xl"><Trophy size={24}/> Top Chiến Binh</h3>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-1"><Users size={12}/> {sortedPlayers.length} người chơi</span>
+                  </div>
                   
-                  {/* [MỚI] NÚT XUẤT EXCEL */}
                   <button 
                     onClick={handleExportExcel} 
                     className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-lg shadow-lg hover:shadow-emerald-500/30 transition-all flex items-center gap-2 group"
                     title="Xuất kết quả ra Excel"
                   >
                       <FileSpreadsheet size={18} className="group-hover:scale-110 transition-transform"/> 
-                      <span className="text-xs font-bold uppercase">Xuất Excel</span>
+                      <span className="text-xs font-bold uppercase hidden md:inline">Excel</span>
                   </button>
               </div>
 
@@ -254,11 +252,18 @@ export default function LightningArenaHost() {
                           <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${idx === 0 ? 'bg-yellow-400' : 'bg-slate-600'}`}></div>
                           <div className="flex items-center gap-4 relative z-10 pl-2">
                               <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg border shadow-inner ${idx === 0 ? 'bg-yellow-500 text-black border-yellow-300' : 'bg-slate-700 text-slate-400 border-slate-600'}`}>{idx + 1}</div>
-                              <div><div className="font-bold text-white uppercase text-base truncate max-w-[140px]">{p.name}</div><div className="text-[10px] text-slate-400 flex items-center gap-1 mt-1 font-bold uppercase"><Shield size={10}/> Chiếm: <span className="text-cyan-400">{p.captured || 0}</span></div></div>
+                              <div>
+                                  <div className="font-bold text-white uppercase text-base truncate max-w-[140px]">{p.name}</div>
+                                  <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-1 font-bold uppercase">
+                                      <Shield size={10}/> Chiếm: <span className="text-cyan-400">{p.captured || 0}</span>
+                                      <span className="text-red-400 ml-2">Sai: {p.wrongCount || 0}</span>
+                                  </div>
+                              </div>
                           </div>
                           <div className="font-black text-cyan-400 text-2xl relative z-10 font-mono">{p.score}</div>
                       </div>
                   ))}
+                  {sortedPlayers.length === 0 && <div className="text-center text-slate-500 italic py-10">Chưa có dữ liệu...</div>}
               </div>
           </div>
       </main>

@@ -166,13 +166,28 @@ export default function InteractiveBoardHost() {
   const handleStopTimer = async () => { await updateDoc(doc(firestore, "interactive_boards", id), { timerEnd: null }); };
 
   const sortedNotes = useMemo(() => {
-      let sorted = [...notes];
-      if (sortMode === 'NEWEST') sorted.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      else if (sortMode === 'OLDEST') sorted.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
-      else if (sortMode === 'LIKES') sorted.sort((a, b) => (b.likes || 0) - (a.likes || 0));
-      else if (sortMode === 'MANUAL') sorted.sort((a, b) => (a.order || 0) - (b.order || 0));
-      return sorted;
-  }, [notes, sortMode]);
+    // 1. Lọc theo trạng thái trước khi sắp xếp
+    let result = [...notes];
+    
+    if (sortMode === 'PENDING') {
+        result = result.filter(n => !n.approved);
+    } else if (sortMode === 'APPROVED') {
+        result = result.filter(n => n.approved);
+    }
+
+    // 2. Sau đó mới thực hiện sắp xếp
+    if (sortMode === 'NEWEST' || sortMode === 'PENDING') {
+        result.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+    } else if (sortMode === 'OLDEST') {
+        result.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+    } else if (sortMode === 'LIKES') {
+        result.sort((a, b) => (b.likes || 0) - (a.likes || 0));
+    } else if (sortMode === 'MANUAL') {
+        result.sort((a, b) => (a.order || 0) - (b.order || 0));
+    }
+    
+    return result;
+}, [notes, sortMode]);
 
   const handleDragEnd = async (event) => {
       const { active, over } = event;
@@ -298,7 +313,13 @@ export default function InteractiveBoardHost() {
                   )}
               </div>
           </div>
-          
+          {/* Hiển thị tổng số bài viết */}
+<div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700 px-3 py-2 rounded-lg shadow-inner">
+    <FileText size={16} className="text-orange-400" />
+    <span className="text-xs font-black uppercase tracking-wider text-slate-300">
+        Tổng: <span className="text-orange-500 text-sm">{notes.length}</span> Duyệt: <span className="text-green-400 text-sm">{notes.filter(n => n.approved).length}</span> Chờ: <span className="text-yellow-400 text-sm">{notes.filter(n => !n.approved).length}</span>
+    </span>
+</div>
           <div className="flex items-center gap-3">
               {!timeLeft && (<button onClick={() => setShowTimerInput(!showTimerInput)} className="flex items-center gap-2 bg-slate-800 text-cyan-400 px-3 py-2 rounded-lg font-bold text-xs hover:bg-slate-700 border border-cyan-900 transition"><Timer size={16}/> Hẹn Giờ</button>)}
               {showTimerInput && (
@@ -310,13 +331,40 @@ export default function InteractiveBoardHost() {
                   </div>
               )}
               <div className="h-8 w-px bg-white/10 mx-1"></div>
-              <div className="bg-slate-900 p-1 rounded-lg border border-white/10 flex items-center">
-                  <button onClick={() => setSortMode('NEWEST')} className={`p-2 rounded hover:bg-white/10 ${sortMode==='NEWEST' ? 'bg-orange-600 text-white' : 'text-slate-400'}`} title="Mới nhất"><SortDesc size={16}/></button>
-                  <button onClick={() => setSortMode('OLDEST')} className={`p-2 rounded hover:bg-white/10 ${sortMode==='OLDEST' ? 'bg-orange-600 text-white' : 'text-slate-400'}`} title="Cũ nhất"><SortAsc size={16}/></button>
-                  <button onClick={() => setSortMode('LIKES')} className={`p-2 rounded hover:bg-white/10 ${sortMode==='LIKES' ? 'bg-orange-600 text-white' : 'text-slate-400'}`} title="Nổi bật"><Heart size={16}/></button>
-                  <button onClick={() => setSortMode('MANUAL')} className={`p-2 rounded hover:bg-white/10 ${sortMode==='MANUAL' ? 'bg-orange-600 text-white' : 'text-slate-400'}`} title="Kéo thả thủ công"><GripVertical size={16}/></button>
-              </div>
-              
+              <div className="bg-slate-900 p-1 rounded-lg border border-white/10 flex items-center gap-1">
+    {/* Các nút sắp xếp cơ bản */}
+    <button onClick={() => setSortMode('NEWEST')} className={`p-2 rounded hover:bg-white/10 ${sortMode==='NEWEST' ? 'bg-orange-600 text-white' : 'text-slate-400'}`} title="Mới nhất"><SortDesc size={16}/></button>
+    <button onClick={() => setSortMode('LIKES')} className={`p-2 rounded hover:bg-white/10 ${sortMode==='LIKES' ? 'bg-orange-600 text-white' : 'text-slate-400'}`} title="Nổi bật"><Heart size={16}/></button>
+    
+    {/* Vạch ngăn cách */}
+    <div className="w-px h-4 bg-white/10 mx-1"></div>
+
+    {/* NÚT LỌC TRẠNG THÁI MỚI */}
+    <button 
+        onClick={() => setSortMode(sortMode === 'PENDING' ? 'NEWEST' : 'PENDING')} 
+        className={`p-2 rounded flex items-center gap-1.5 transition-all ${sortMode === 'PENDING' ? 'bg-yellow-600 text-white' : 'text-slate-400 hover:bg-white/10'}`}
+        title="Xem bài chờ duyệt"
+    >
+        <Loader2 size={16} className={sortMode === 'PENDING' ? 'animate-spin' : ''}/>
+        {/* Hiển thị số lượng bài chờ duyệt nếu có */}
+        {notes.filter(n => !n.approved).length > 0 && (
+            <span className="text-[10px] font-black bg-red-500 text-white px-1.5 rounded-full">
+                {notes.filter(n => !n.approved).length}
+            </span>
+        )}
+    </button>
+
+    <button 
+        onClick={() => setSortMode(sortMode === 'APPROVED' ? 'NEWEST' : 'APPROVED')} 
+        className={`p-2 rounded transition-all ${sortMode === 'APPROVED' ? 'bg-green-600 text-white' : 'text-slate-400 hover:bg-white/10'}`}
+        title="Xem bài đã hiện"
+    >
+        <CheckCircle size={16}/>
+    </button>
+
+    <button onClick={() => setSortMode('MANUAL')} className={`p-2 rounded hover:bg-white/10 ${sortMode==='MANUAL' ? 'bg-orange-600 text-white' : 'text-slate-400'}`} title="Kéo thả thủ công"><GripVertical size={16}/></button>
+</div>
+
               <button onClick={handleApproveAll} className="bg-green-600/20 hover:bg-green-600 text-green-400 hover:text-white px-3 py-2 rounded-lg font-bold text-xs uppercase flex items-center gap-2 border border-green-600/50 transition-all shadow-lg" title="Duyệt tất cả bài chờ"><CheckSquare size={16}/> Duyệt Hết</button>
               <button onClick={handleDeleteAll} className="bg-red-900/50 hover:bg-red-600 text-red-400 hover:text-white px-3 py-2 rounded-lg font-bold text-xs uppercase flex items-center gap-2 border border-red-900 transition-all shadow-lg" title="Xóa toàn bộ bài viết"><Ban size={16}/> Clear</button>
               <button onClick={toggleLock} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs uppercase transition ${board.status === 'OPEN' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{board.status === 'OPEN' ? <Unlock size={14}/> : <Lock size={14}/>} {board.status === 'OPEN' ? 'MỞ' : 'KHOÁ'}</button>

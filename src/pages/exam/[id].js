@@ -4,6 +4,7 @@ import { firestore } from '@/lib/firebase';
 import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { Clock, CheckCircle, XCircle, AlertTriangle, User, Trophy, ArrowLeft, Home, Zap, Shield, Target, EyeOff, Lock, AlertOctagon, Flame } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import MathRender from '@/components/MathRender'; 
 
 export default function ExamRoom() {
   const router = useRouter();
@@ -26,6 +27,32 @@ export default function ExamRoom() {
   const isSubmittingRef = useRef(false);
   const lastViolationTimeRef = useRef(0);
 
+  // --- HÀM RENDER VĂN BẢN KÈM ẢNH INLINE ---
+  const renderWithInlineImage = (text, imgUrl) => {
+    if (!text) return null;
+    
+    if (text.includes('[img]') && imgUrl) {
+        const parts = text.split('[img]');
+        return (
+            <span>
+                {parts.map((part, index) => (
+                    <span key={index}>
+                        <MathRender content={part} />
+                        {index < parts.length - 1 && (
+                            <img 
+                                src={imgUrl} 
+                                className="inline-block align-middle mx-1 max-h-12 border rounded bg-white shadow-sm" 
+                                alt="minh-hoa"
+                            />
+                        )}
+                    </span>
+                ))}
+            </span>
+        );
+    }
+    return <MathRender content={text} />;
+  };
+
   // 1. LOAD ĐỀ
   useEffect(() => {
     if (!id) return;
@@ -44,9 +71,16 @@ export default function ExamRoom() {
           const durationMinutes = data.duration || 45;
           setTimeLeft(durationMinutes * 60);
 
-          const p1 = data.questions.filter(q => q.type === 'MCQ').sort(() => Math.random() - 0.5);
-          const p2 = data.questions.filter(q => q.type === 'TF').sort(() => Math.random() - 0.5);
-          const p3 = data.questions.filter(q => q.type === 'SA').sort(() => Math.random() - 0.5);
+          const formatQuestions = (qs) => qs.map(q => {
+             if(q.type === 'TF') {
+                 return { ...q, items: q.items.map(i => ({...i, img: i.img || ''})) }
+             }
+             return q;
+          });
+
+          const p1 = formatQuestions(data.questions.filter(q => q.type === 'MCQ')).sort(() => Math.random() - 0.5);
+          const p2 = formatQuestions(data.questions.filter(q => q.type === 'TF')).sort(() => Math.random() - 0.5);
+          const p3 = formatQuestions(data.questions.filter(q => q.type === 'SA')).sort(() => Math.random() - 0.5);
           
           setQuestions([...p1, ...p2, ...p3]);
         }
@@ -220,7 +254,6 @@ export default function ExamRoom() {
   return (
     <div className={`min-h-screen bg-[#0f172a] text-slate-200 font-sans selection:bg-orange-500 selection:text-white pb-24 transition-colors duration-300 ${isCheatDetected ? 'bg-red-900/50' : ''}`}>
       
-      {/* --- MÀN HÌNH CẢNH BÁO CHEAT --- */}
       {isCheatDetected && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-red-600/90 backdrop-blur-sm animate-pulse">
               <div className="text-center text-white">
@@ -231,10 +264,7 @@ export default function ExamRoom() {
           </div>
       )}
 
-      {/* --- HEADER STICKY --- */}
       <div className="fixed top-0 left-0 right-0 bg-[#1e293b]/95 backdrop-blur border-b border-white/10 z-50 px-3 md:px-4 py-2 shadow-2xl flex justify-between items-center h-16">
-        
-        {/* LEFT: LOGO */}
         <div className="flex items-center gap-2">
             <div className="bg-orange-600 p-1.5 rounded-lg shadow-[0_0_15px_#ea580c] animate-pulse">
                 <Flame size={20} className="text-yellow-300" fill="currentColor"/>
@@ -244,19 +274,16 @@ export default function ExamRoom() {
             </h1>
         </div>
 
-        {/* CENTER: THÔNG TIN HỌC SINH (NGÀY SINH LÊN ĐÂY) */}
         <div className="flex items-center gap-3 bg-slate-800/60 border border-white/10 px-3 py-1 rounded-full mx-2 flex-1 md:flex-none justify-center">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white border border-white/20 shrink-0">
                 <User size={16}/>
             </div>
             <div className="flex flex-col">
                 <span className="font-bold text-white uppercase text-xs md:text-sm leading-none truncate max-w-[120px] md:max-w-[200px]">{name}</span>
-                {/* [THAY ĐỔI] Hiển thị Ngày sinh ở đây */}
                 <span className="text-[10px] text-slate-400 font-mono leading-tight">{dob}</span>
             </div>
         </div>
 
-        {/* RIGHT: CÔNG CỤ */}
         <div className="flex items-center gap-2">
             <div className={`flex items-center px-2 py-1 rounded-lg border text-xs font-bold ${violationCount > 0 ? 'bg-red-500 text-white border-red-400' : 'bg-slate-800 text-slate-500 border-slate-700'}`}>
                 <EyeOff size={14} className="md:mr-1"/> 
@@ -275,10 +302,7 @@ export default function ExamRoom() {
         </div>
       </div>
 
-      {/* --- NỘI DUNG CHÍNH --- */}
-<main className="max-w-4xl mx-auto mt-20 px-3 md:px-4 space-y-6 md:space-y-8 select-none"> 
-        
-        {/* TIÊU ĐỀ ĐỀ THI */}
+      <main className="max-w-4xl mx-auto mt-20 px-3 md:px-4 space-y-6 md:space-y-8 select-none"> 
         <div className="text-center mb-6">
             <h1 className="text-xl md:text-3xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg mb-2">{quiz?.title}</h1>
             <div className="inline-flex gap-2 text-[10px] font-bold">
@@ -287,7 +311,6 @@ export default function ExamRoom() {
             </div>
         </div>
 
-        {/* RENDER CÂU HỎI */}
         {questions.map((q, index) => {
             const isQCorrect = submitted && scoreData.detail.find(d => d.qId === q.id)?.isCorrect;
             const earnedPoints = submitted ? scoreData.detail.find(d => d.qId === q.id)?.earned : 0;
@@ -312,12 +335,22 @@ export default function ExamRoom() {
 
                 <div className="p-3 md:p-5">
                     <div className="mb-4">
-                        {q.img && <img src={q.img} className="max-h-40 md:max-h-60 w-auto rounded-lg mb-3 border border-white/10 object-contain bg-black/30" />}
-                        {/* Câu hỏi giữ nguyên cỡ lớn */}
-                        <h3 
-                            className="text-base md:text-lg font-bold text-white leading-relaxed whitespace-pre-line"
-                            dangerouslySetInnerHTML={{ __html: q.q }}
-                        />
+                        {/* 1. HIỂN THỊ NỘI DUNG VĂN BẢN TRƯỚC */}
+                        <h3 className="text-base md:text-lg font-bold text-white leading-relaxed whitespace-pre-line mb-3">
+                            {renderWithInlineImage(q.q, q.img)}
+                        </h3>
+
+                        {/* 2. HIỂN THỊ ẢNH SAU (Nếu không dùng thẻ [img]) */}
+                        {/* CSS MỚI: Căn giữa, giới hạn chiều cao nhưng max-width 100% để hiển thị tốt ảnh lớn */}
+                        {q.img && !q.q.includes('[img]') && (
+                            <div className="w-full flex justify-center mb-3">
+                                <img 
+                                    src={q.img} 
+                                    className="max-w-full h-auto max-h-80 md:max-h-96 rounded-lg border border-white/10 object-contain bg-black/20" 
+                                    alt="Minh họa câu hỏi"
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {q.type === 'MCQ' && (
@@ -342,17 +375,21 @@ export default function ExamRoom() {
                                         disabled={submitted}
                                         className={`p-4 md:p-5 rounded-xl text-left font-bold transition-all flex flex-col gap-2 ${btnClass} active:scale-95 touch-manipulation`}
                                     >   
-                                        <div className="flex items-start gap-3">
+                                        <div className="flex items-start gap-3 w-full">
                                             <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs shrink-0 font-black uppercase mt-0.5">
                                                 {String.fromCharCode(65 + aIdx)}
                                             </div>
-                                            {/* [CẬP NHẬT] Tăng cỡ chữ đáp án MCQ lên (text-lg md:text-xl) */}
-                                            <span 
-                                                className="text-lg md:text-xl leading-snug"
-                                                dangerouslySetInnerHTML={{ __html: ans }}
-                                            />
+                                            <div className="text-lg md:text-xl leading-snug flex-1">
+                                                {renderWithInlineImage(ans, q.aImages?.[aIdx])}
+                                            </div>
                                         </div>
-                                        {q.aImages?.[aIdx] && <img src={q.aImages[aIdx]} className="h-24 md:h-32 w-auto rounded object-cover mt-1 self-start" />}
+                                        {/* CSS MỚI CHO ĐÁP ÁN: max-w-full để không bị tràn */}
+                                        {q.aImages?.[aIdx] && !ans.includes('[img]') && (
+                                            <img 
+                                                src={q.aImages[aIdx]} 
+                                                className="max-w-full h-auto max-h-48 rounded object-contain mt-2 self-start border border-white/10" 
+                                            />
+                                        )}
                                     </button>
                                 );
                             })}
@@ -379,15 +416,25 @@ export default function ExamRoom() {
 
                                         return (
                                             <tr key={idx} className={rowClass}>
-                                                {/* [CẬP NHẬT] Tăng cỡ chữ nội dung TF lên (text-base md:text-lg) */}
                                                 <td className="px-3 py-4 font-medium text-slate-200 text-base md:text-lg">
-                                                    <span className="font-bold text-slate-500 mr-2">{String.fromCharCode(97+idx)})</span>
-                                                    <span dangerouslySetInnerHTML={{ __html: item.text }} />
+                                                    <div className="flex flex-col gap-2">
+                                                        <div className="flex gap-2">
+                                                            <span className="font-bold text-slate-500 shrink-0">{String.fromCharCode(97+idx)})</span>
+                                                            <div>{renderWithInlineImage(item.text, item.img)}</div>
+                                                        </div>
+                                                        {/* CSS MỚI CHO TF: max-w-full */}
+                                                        {item.img && !item.text.includes('[img]') && (
+                                                            <img 
+                                                                src={item.img} 
+                                                                className="max-w-full h-auto max-h-48 mt-1 ml-6 rounded border border-slate-600 block" 
+                                                            />
+                                                        )}
+                                                    </div>
                                                 </td>
-                                                <td className="text-center px-1">
+                                                <td className="text-center px-1 align-top pt-4">
                                                     <button onClick={() => handleAnswer(q.id, "true", idx)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "true" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && item.isTrue === true ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "true" && <CheckCircle size={18} className="text-white"/>}</button>
                                                 </td>
-                                                <td className="text-center px-1">
+                                                <td className="text-center px-1 align-top pt-4">
                                                     <button onClick={() => handleAnswer(q.id, "false", idx)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "false" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && item.isTrue === false ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "false" && <CheckCircle size={18} className="text-white"/>}</button>
                                                 </td>
                                             </tr>
@@ -400,13 +447,14 @@ export default function ExamRoom() {
 
                     {q.type === 'SA' && (
                         <div>
-                            {/* [CẬP NHẬT] Tăng cỡ chữ input SA lên (text-xl md:text-2xl) */}
                             <input type="text" className={`w-full bg-[#0f172a] border-2 p-4 md:p-5 rounded-xl outline-none font-bold text-xl md:text-2xl placeholder-slate-600 uppercase ${submitted ? (isQCorrect ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400') : 'border-slate-700 focus:border-indigo-500 text-white'}`} placeholder="NHẬP ĐÁP ÁN..." value={answers[q.id] || ''} onChange={(e) => handleAnswer(q.id, e.target.value)} disabled={submitted} />
                             {submitted && !isQCorrect && (
                                 <div className="mt-3 text-base font-bold text-green-400 flex items-center gap-2 animate-pulse">
                                     <Target size={20}/> 
                                     <span>Đáp án đúng:</span> 
-                                    <span className="text-lg" dangerouslySetInnerHTML={{ __html: q.correct }} />
+                                    <span className="text-lg">
+                                        {renderWithInlineImage(q.correct)}
+                                    </span>
                                 </div>
                             )}
                         </div>
