@@ -175,7 +175,7 @@ export default function ArcadeMode() {
                     </div>
 
                     <GameCard title="Hộp Bí Mật" desc="Hồi hộp & Bất ngờ" icon={<Gift size={48}/>} color="from-violet-500 to-purple-600" onClick={() => setMode('BOX')} delay={400} />
-                    <GameCard title="Tìm Cặp" desc="Trí nhớ & Phản xạ" icon={<Grid3X3 size={48}/>} color="from-orange-400 to-amber-500" onClick={() => setMode('MATCH')} delay={500} />
+                  
                 </div>
             </div>
         </div>
@@ -778,74 +778,10 @@ function MysteryBoxGame({ questions, onAddXP, onExit }) {
     );
 }
 
-// ---------------- GAME: TÌM CẶP ----------------
-function MemoryMatchGame({ questions, onAddXP, onExit }) {
-    const [cards, setCards] = useState([]);
-    const [flipped, setFlipped] = useState([]);
-    const [solved, setSolved] = useState([]);
 
-    useEffect(() => {
-        const generatedCards = [];
-        questions.forEach((q, idx) => {
-            generatedCards.push({ id: `q-${idx}`, pairId: idx, type: 'QUESTION', content: q.q, img: q.img });
-            let ansContent = "???";
-            if (q.a && q.a.length > 0 && q.correct !== undefined) ansContent = q.a[q.correct];
-            else if (q.correct) ansContent = q.correct;
-            generatedCards.push({ id: `a-${idx}`, pairId: idx, type: 'ANSWER', content: ansContent, isImg: typeof ansContent === 'string' && ansContent.startsWith('http') });
-        });
-        setCards(generatedCards.sort(() => Math.random() - 0.5));
-    }, [questions]);
-
-    const handleCardClick = (card) => {
-        if (flipped.length >= 2 || flipped.includes(card) || solved.includes(card.id)) return;
-        const newFlipped = [...flipped, card];
-        setFlipped(newFlipped);
-        if (newFlipped.length === 2) {
-            const [c1, c2] = newFlipped;
-            if (c1.pairId === c2.pairId) {
-                setTimeout(() => { 
-                    setSolved(prev => [...prev, c1.id, c2.id]); 
-                    setFlipped([]); 
-                    confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } });
-                    onAddXP(30); 
-                }, 500);
-            } else setTimeout(() => setFlipped([]), 1000);
-        }
-    };
-
-    return (
-        <div className="p-4 md:p-8 h-full flex justify-center overflow-y-auto">
-            <div className="grid grid-cols-4 md:grid-cols-6 gap-2 md:gap-4 w-full max-w-7xl pb-20">
-                {cards.map((card) => {
-                    const isFlipped = flipped.includes(card) || solved.includes(card.id);
-                    const isSolved = solved.includes(card.id);
-                    return (
-                        <div key={card.id} onClick={() => handleCardClick(card)} className={`perspective-1000 aspect-[3/4] cursor-pointer ${isFlipped ? 'flipped' : ''}`}>
-                            <div className="flip-card-inner h-full w-full">
-                                <div className="flip-card-front bg-gradient-to-br from-orange-500 to-red-500 rounded-xl shadow-lg border-2 border-white/20 flex items-center justify-center"><Package size={32} className="text-white opacity-80" /></div>
-                                <div className={`flip-card-back h-full w-full bg-white text-slate-900 rounded-xl shadow-lg flex flex-col items-center justify-center p-2 border-4 ${isSolved ? 'border-green-500 bg-green-50' : 'border-blue-500'}`}>
-                                    <span className={`text-[10px] font-black uppercase mb-1 ${card.type === 'QUESTION' ? 'text-blue-500' : 'text-green-600'}`}>{card.type === 'QUESTION' ? 'CÂU HỎI' : 'ĐÁP ÁN'}</span>
-                                    <div className="flex-1 flex items-center justify-center overflow-hidden w-full">
-                                        {card.isImg ? (
-                                            <img src={card.content} className="w-full h-full object-contain" /> 
-                                        ) : (
-                                            // [UPDATE] Dùng MathRender cho nội dung thẻ
-                                            <div className="text-xs sm:text-sm font-bold line-clamp-4 leading-snug">
-                                                <MathRender content={card.content} />
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
-    );
-}
 
 // --- COMPONENT POPUP TRẢ LỜI CÂU HỎI (Dùng cho Wheel & Box) ---
+// --- COMPONENT POPUP TRẢ LỜI CÂU HỎI (ĐÃ FIX LỖI ẨN ĐÁP ÁN CHO BOX) ---
 function InteractiveQuestion({ data, onClose, gameType }) {
     const [selectedIdx, setSelectedIdx] = useState(null); 
     const [saInput, setSaInput] = useState("");
@@ -855,18 +791,20 @@ function InteractiveQuestion({ data, onClose, gameType }) {
     const [isCorrect, setIsCorrect] = useState(null); 
     const labels = ['A', 'B', 'C', 'D'];
 
+    // Kiểm tra xem game có phải loại cần giấu đáp án khi sai không
+    const isHiddenMode = gameType === 'WHEEL' || gameType === 'BOX';
+
     const handleLock = () => {
         setIsLocked(true);
         let correct = false;
 
-        // 1. Kiểm tra đáp án
         if (data.type === 'MCQ') {
             if (selectedIdx === null) return;
             correct = parseInt(data.correct) === selectedIdx;
         } 
         else if (data.type === 'SA') {
             const userAnswer = saInput.trim().toUpperCase();
-            const trueAnswer = data.correct.trim().toUpperCase();
+            const trueAnswer = String(data.correct).trim().toUpperCase();
             correct = userAnswer === trueAnswer;
         }
         else if (data.type === 'TF') {
@@ -880,15 +818,9 @@ function InteractiveQuestion({ data, onClose, gameType }) {
 
         setIsCorrect(correct);
 
-        // 2. Xử lý kết quả
         if (correct) {
             confetti({ particleCount: 200, spread: 120, origin: { y: 0.6 } });
-            // Tự động đóng sau 1.5 giây nếu đúng
-            setTimeout(() => {
-                onClose(true);
-            }, 1500);
-        } else {
-            // Nếu sai thì không tự đóng
+            setTimeout(() => onClose(true), 1500);
         }
     };
 
@@ -896,7 +828,7 @@ function InteractiveQuestion({ data, onClose, gameType }) {
 
     const getButtonLabel = () => {
         if (isCorrect) return "Đang xử lý..."; 
-        if (gameType === 'WHEEL') return "Đóng lại (Quay tiếp)";
+        if (isHiddenMode) return "Đóng lại (Thử lại sau)";
         return "Thử lại sau";
     };
 
@@ -910,13 +842,9 @@ function InteractiveQuestion({ data, onClose, gameType }) {
                         {data.type === 'MCQ' ? 'TRẮC NGHIỆM' : data.type === 'TF' ? 'ĐÚNG / SAI' : 'TRẢ LỜI NGẮN'}
                     </span>
                     
-                    {/* [UPDATE] Hiển thị câu hỏi (Text trước - Ảnh sau) */}
                     <div className="text-lg md:text-2xl font-bold mb-6 leading-snug whitespace-pre-wrap">
                         {renderWithInlineImage(data.q, data.img)}
                     </div>
-                    {data.img && !data.q.includes('[img]') && (
-                        <img src={data.img} className="h-32 md:h-40 mx-auto object-contain mb-4 rounded-xl border-2 border-white/10 shadow-lg bg-black/20" />
-                    )}
 
                     {/* --- HIỂN THỊ TRẮC NGHIỆM --- */}
                     {data.type === 'MCQ' && (
@@ -928,7 +856,8 @@ function InteractiveQuestion({ data, onClose, gameType }) {
                                 if (isLocked) {
                                     const correctIndex = parseInt(data.correct);
                                     if (idx === correctIndex) {
-                                        if (gameType === 'WHEEL' && !isCorrect) {
+                                        // NẾU SAI VÀ LÀ CHẾ ĐỘ GIẤU -> KHÔNG HIỆN MÀU XANH ĐÁP ÁN ĐÚNG
+                                        if (isHiddenMode && !isCorrect) {
                                             statusClass = "bg-slate-800 border-slate-700 opacity-30 grayscale"; 
                                         } else {
                                             statusClass = "bg-green-600 border-green-500 shadow-xl scale-105 z-10"; 
@@ -941,11 +870,7 @@ function InteractiveQuestion({ data, onClose, gameType }) {
                                     <div key={idx} onClick={() => !isLocked && setSelectedIdx(idx)} className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 flex items-center min-h-[60px] ${statusClass}`}>
                                         <div className="absolute left-4 w-8 h-8 rounded-full bg-black/20 flex items-center justify-center font-black text-sm">{labels[idx]}</div>
                                         <div className="pl-10 w-full flex justify-center text-base font-bold flex-col items-center">
-                                            {/* [UPDATE] Render đáp án inline + fallback block */}
                                             {renderWithInlineImage(ans, data.aImages?.[idx])}
-                                            {data.aImages?.[idx] && !ans.includes('[img]') && (
-                                                <img src={data.aImages[idx]} className="h-16 w-auto mt-2 rounded border bg-white p-1" />
-                                            )}
                                         </div>
                                     </div>
                                 )
@@ -958,31 +883,35 @@ function InteractiveQuestion({ data, onClose, gameType }) {
                         <div className="space-y-2 mb-4 text-left">
                             {data.items.map((item, idx) => (
                                 <div key={idx} className="flex justify-between items-center bg-slate-800 p-3 rounded-xl border border-slate-700">
-                                    {/* [UPDATE] Render nội dung TF */}
                                     <div className="flex-1 mr-4 font-bold text-sm md:text-base">
                                         {renderWithInlineImage(item.text, item.img)}
-                                        {item.img && !item.text.includes('[img]') && (
-                                            <img src={item.img} className="h-12 mt-2 rounded border border-white/20 block" />
-                                        )}
                                     </div>
                                     <div className="flex gap-2 shrink-0">
-                                        <button onClick={() => !isLocked && setTfSelection(p => ({...p, [idx]: "true"}))} className={`w-10 h-10 rounded-lg border-2 font-black transition-all ${tfSelection[idx] === "true" ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-900 border-slate-600 text-slate-500'} ${isLocked && (gameType !== 'WHEEL' || isCorrect) && item.isTrue === true ? 'ring-2 ring-green-500' : ''}`}>Đ</button>
-                                        <button onClick={() => !isLocked && setTfSelection(p => ({...p, [idx]: "false"}))} className={`w-10 h-10 rounded-lg border-2 font-black transition-all ${tfSelection[idx] === "false" ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-900 border-slate-600 text-slate-500'} ${isLocked && (gameType !== 'WHEEL' || isCorrect) && item.isTrue === false ? 'ring-2 ring-green-500' : ''}`}>S</button>
+                                        {/* ẨN VIỀN XANH KHI SAI TRONG CHẾ ĐỘ GIẤU */}
+                                        <button onClick={() => !isLocked && setTfSelection(p => ({...p, [idx]: "true"}))} className={`w-10 h-10 rounded-lg border-2 font-black transition-all ${tfSelection[idx] === "true" ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-900 border-slate-600 text-slate-500'} ${isLocked && (!isHiddenMode || isCorrect) && item.isTrue === true ? 'ring-2 ring-green-500' : ''}`}>Đ</button>
+                                        <button onClick={() => !isLocked && setTfSelection(p => ({...p, [idx]: "false"}))} className={`w-10 h-10 rounded-lg border-2 font-black transition-all ${tfSelection[idx] === "false" ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-900 border-slate-600 text-slate-500'} ${isLocked && (!isHiddenMode || isCorrect) && item.isTrue === false ? 'ring-2 ring-green-500' : ''}`}>S</button>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     )}
 
-                    {/* --- HIỂN THỊ ĐIỀN KHUYẾT (SA) --- */}
+                    {/* --- HIỂN THỊ TRẢ LỜI NGẮN (SA) --- */}
                     {data.type === 'SA' && (
                         <div className="mb-4">
                             <input value={saInput} onChange={(e) => setSaInput(e.target.value)} disabled={isLocked} className={`w-full bg-slate-900 border-4 p-4 rounded-2xl text-center font-black text-2xl uppercase outline-none placeholder-slate-600 ${isLocked ? (isCorrect ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400') : 'border-indigo-500 focus:shadow-[0_0_20px_#6366f1]'}`} placeholder="NHẬP ĐÁP ÁN..."/>
-                            {isLocked && !isCorrect && gameType !== 'BOX' && (
-                                <div className="mt-3 text-green-400 font-bold animate-pulse">
-                                    Đáp án chưa đúng <span className="uppercase text-xl">
-                                       
-                                    </span>
+                            
+                            {/* CHỈ HIỆN ĐÁP ÁN ĐÚNG NẾU KHÔNG PHẢI CHẾ ĐỘ GIẤU */}
+                            {isLocked && !isCorrect && !isHiddenMode && (
+                                <div className="mt-3 text-green-400 font-bold animate-pulse text-lg">
+                                    Đáp án đúng: {data.correct}
+                                </div>
+                            )}
+                            
+                            {/* THÔNG BÁO SAI NHƯNG KHÔNG HIỆN ĐÁP ÁN */}
+                            {isLocked && !isCorrect && isHiddenMode && (
+                                <div className="mt-3 text-orange-400 font-bold animate-pulse text-lg">
+                                    😢 Chưa chính xác, hãy suy nghĩ thêm nhé!
                                 </div>
                             )}
                         </div>
@@ -995,12 +924,12 @@ function InteractiveQuestion({ data, onClose, gameType }) {
                     ) : (
                         <div className="animate-in slide-in-from-bottom fade-in duration-300">
                             <div className={`py-2 text-xl font-black uppercase mb-2 ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>
-                                {isCorrect ? "🎉 CHÍNH XÁC!" : (gameType === 'WHEEL' ? "😢 CHƯA ĐÚNG - QUAY LẠI SAU NHÉ" : "😢 SAI RỒI!")}
+                                {isCorrect ? "🎉 CHÍNH XÁC!" : "😢 SAI RỒI!"}
                             </div>
                             {!isCorrect && (
                                 <button onClick={handleFinish} className="w-full bg-white text-slate-900 font-black py-3 rounded-xl shadow-xl hover:bg-gray-100 transition uppercase tracking-widest">{getButtonLabel()}</button>
                             )}
-                            {isCorrect && (<div className="text-slate-400 text-sm animate-pulse">Đang hoàn thành ô này...</div>)}
+                            {isCorrect && (<div className="text-slate-400 text-sm animate-pulse">Đang mở quà...</div>)}
                         </div>
                     )}
                 </div>

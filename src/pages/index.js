@@ -328,14 +328,13 @@ export default function HomePage() {
           <div className="h-3 w-px bg-white/10"></div>
             <div className="flex items-center gap-2 group cursor-help" title="Tổng lượt truy cập thực tế">
                 <Eye size={10} className="text-purple-500"/>
-                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-purple-400 transition-colors">
-                    Visits: <span className="text-white font-mono">{realVisitorCount.toLocaleString()}</span>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-purple-400 transition-colors text-center">
+                    Tổng lượt truy cập: <span className="text-white font-mono">{realVisitorCount.toLocaleString()}</span>
                 </p>
             </div>
         </div>
-        <p className="absolute left-1/2 -translate-x-1/2 text-slate-600 text-[8px] font-bold uppercase tracking-[0.3em] hover:text-cyan-600 transition-colors cursor-default whitespace-nowrap">
-            © 2026 Edu Arena Connect
-        </p>
+        <p className="absolute left-1/2 -translate-x-1/2 text-slate-600 text-[10px] font-bold uppercase tracking-[0.3em] hover:text-cyan-600 transition-colors cursor-default whitespace-nowrap">
+            <br />© 2026 Arena Edu Connect - 0383477162   </p>
       </footer>
 
       {/* MODAL PIN */}

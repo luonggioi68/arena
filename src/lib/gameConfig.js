@@ -52,16 +52,8 @@ export const GAME_MODES = [
     shadow: 'shadow-purple-900/40',
     icon: Gift,
     type: 'GAME'
-  },
-  {
-    id: 'MATCH',
-    title: 'Tìm Cặp',
-    subtitle: 'Trí nhớ & Phản xạ - Chỉ dùng cho câu trắc nghiệm',
-    gradient: 'from-[#f12711] to-[#f5af19]',
-    shadow: 'shadow-orange-900/40',
-    icon: Grid3X3,
-    type: 'GAME'
   }
+  
   
    
 ];

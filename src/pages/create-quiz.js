@@ -453,10 +453,10 @@ const parseDocxContent = (htmlContent) => {
         
         QUY TẮC ĐỊNH DẠNG:
         1. CHỈ dùng dấu $...$ cho công thức phức tạp:Đạo hàm, Lũy thừa, căn bậc 2, bậc 3, chỉ số, phân số, tích phân, giới hạn, hàm lượng giác, ma trận, v.v. ví dụ: $x^2$, $\\frac{a}{b}$, $\\int_a^b f(x)dx$, $sqrt(x-4)$....
-        2. KHÔNG dùng $...$ cho các biểu thức, toán tử đơn giản: cộng, trừ, nhân, chia, căn bậc hai, v.v. Ví dụ: 2 + 2 = 4, √5, a × b = ab.  
+        2. KHÔNG dùng $...$ cho các biểu thức, toán tử đơn giản: cộng, trừ, nhân, chia, v.v. Ví dụ: 2 + 2 = 4, 2x+3=0, a × b = ab.  
         3. Ký tự backslash (\\) trong LaTeX phải được escape thành (\\\\).
-        4. Đáp câu hỏi ngắn(SA) là số tối đa 4 từ kể nếu dấu chấm, dấu âm. ví dụ: 5, -3, 12.5, -10.2, 2006
-        5. Lời dẫn câu hỏi đúng/sai là 1 tình huống bám sát nội dung bài trong sgk và dài khoảng 3-4 dòng.
+        4. Đáp câu hỏi ngắn(SA) là số tối đa 4 từ kể cả nếu dấu chấm, dấu âm. ví dụ: 5, -3, 12.5, -10.2, 2006
+        5. Lời dẫn câu hỏi đúng/sai là 1 tình huống bám sát nội dung bài trong sgk và dài khoảng 2-4 dòng.
         
         OUTPUT JSON (Mảng duy nhất):
         [
@@ -586,6 +586,9 @@ const handleOpenPreview = () => {
       <header className="max-w-6xl mx-auto flex justify-between items-center mb-8 sticky top-0 bg-slate-50/95 backdrop-blur z-20 py-4 border-b border-slate-200">
         <button onClick={() => router.back()} className="flex items-center gap-2 text-gray-500 hover:text-slate-900 font-bold"><ArrowLeft /> Quay lại</button>
         <div className="flex gap-3">
+            <a href="/mauuploadde.docx" download>
+  📥 Tải file mẫu upload đề
+</a>
           <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow transition"><Upload size={18} /> Upload Word</button>
           <button onClick={() => setShowAiModal(true)} className="flex items-center gap-2 bg-[#15803d] hover:bg-emerald-800 text-white px-4 py-2 rounded-lg font-bold shadow transition animate-pulse"><Sparkles size={18} /> AI Soạn Đề</button>
             <button onClick={handleOpenPreview} className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold shadow transition"><Eye size={18} /> Xem trước đề</button>
