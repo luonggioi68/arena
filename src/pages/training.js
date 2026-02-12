@@ -9,7 +9,8 @@ import {
     updateProfile 
 } from 'firebase/auth'; 
 import { auth, googleProvider, firestore } from '@/lib/firebase';
-import { collection, query, where, getDocs, doc, onSnapshot, setDoc, serverTimestamp, orderBy, limit, addDoc } from 'firebase/firestore';
+// [MỚI] Thêm getDoc vào import để kiểm tra quyền GV
+import { collection, query, where, getDocs, doc, onSnapshot, setDoc, serverTimestamp, orderBy, limit, addDoc, getDoc } from 'firebase/firestore';
 import { 
     Flame, ChevronLeft, Trophy, Star, X, Gamepad2, Shield, Crown, Swords, PlayCircle, 
     LogIn, UserPlus, LogOut, Gift, LayoutGrid, CircleDashed, DollarSign, Grid3X3, 
@@ -29,11 +30,14 @@ export default function TrainingPage() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
   
+  // [MỚI] State kiểm tra giáo viên
+  const [isTeacher, setIsTeacher] = useState(false);
+
   // State mở rộng/thu gọn danh sách đề
   const [expandedSubjects, setExpandedSubjects] = useState({});
 
-  // STATE AUTH (QUẢN LÝ ĐĂNG NHẬP/ĐĂNG KÝ)
-  const [authMode, setAuthMode] = useState(null); // 'LOGIN', 'REGISTER', 'FORGOT'
+  // STATE AUTH
+  const [authMode, setAuthMode] = useState(null); 
   const [showPassword, setShowPassword] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [resetStep, setResetStep] = useState(1);
@@ -51,6 +55,15 @@ export default function TrainingPage() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
         setUser(currentUser);
         if (currentUser) {
+            // [MỚI] Kiểm tra xem có phải là Giáo viên không?
+            try {
+                const configRef = doc(firestore, "user_configs", currentUser.uid);
+                const configSnap = await getDoc(configRef);
+                if (configSnap.exists() && configSnap.data().role === 'TEACHER') {
+                    setIsTeacher(true);
+                }
+            } catch (e) { console.error("Lỗi check GV:", e); }
+
             const userRef = doc(firestore, "student_profiles", currentUser.uid);
             const unsubProfile = onSnapshot(userRef, async (docSnap) => {
                 if (docSnap.exists()) {
@@ -75,6 +88,7 @@ export default function TrainingPage() {
             return () => unsubProfile();
         } else {
             setStudentProfile(null);
+            setIsTeacher(false);
         }
     });
     return () => unsubscribe();
@@ -131,7 +145,6 @@ export default function TrainingPage() {
   const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   // --- XỬ LÝ AUTHENTICATION ---
-
   const handleRegister = async (e) => {
       e.preventDefault();
       const { fullName, phone, password, confirmPassword } = formData;
@@ -143,11 +156,9 @@ export default function TrainingPage() {
       setAuthLoading(true);
       try {
           const fakeEmail = createFakeEmail(phone);
-          // Tạo Auth User
           const userCredential = await createUserWithEmailAndPassword(auth, fakeEmail, password);
           await updateProfile(userCredential.user, { displayName: fullName });
           
-          // Tạo Profile Firestore ngay lập tức
           await setDoc(doc(firestore, "student_profiles", userCredential.user.uid), {
               uid: userCredential.user.uid,
               email: fakeEmail, phone, fullName, nickname: fullName,
@@ -230,14 +241,17 @@ export default function TrainingPage() {
 
   const handleQuizClick = (quiz) => {
       if (!user) { setAuthMode('LOGIN'); return; }
-      if (studentProfile) {
+      
+      // [MỚI] Logic kiểm tra lớp: Nếu là GV (isTeacher=true) thì BỎ QUA check lớp
+      if (studentProfile && !isTeacher) { 
           const userClass = parseInt(studentProfile.grade);
           const currentClass = parseInt(selectedGrade);
           if (userClass !== currentClass) {
-              alert(`⛔ BẠN KHÔNG THỂ LÀM BÀI NÀY!\n\nLý do: Tài khoản của bạn thuộc Lớp ${userClass}, nhưng đây là khu vực Lớp ${currentClass}.\n\nVui lòng quay lại sảnh và chọn đúng lớp của mình.`);
+              alert(`⛔ BẠN KHÔNG THỂ LÀM BÀI NÀY!\n\nLý do: Tài khoản học sinh của bạn thuộc Lớp ${userClass}, nhưng đây là khu vực Lớp ${currentClass}.\n\nVui lòng chọn đúng lớp hoặc cập nhật lại thông tin.`);
               return; 
           }
       }
+      
       if (!studentProfile && user) setShowNicknameModal(true);
       else router.push(`/arcade/lobby/${quiz.id}`);
   };
@@ -264,6 +278,7 @@ export default function TrainingPage() {
               <div>
                   {user ? (
                       <div className="flex items-center gap-2">
+                          {isTeacher && <div className="bg-yellow-600 text-black px-2 py-0.5 rounded text-[10px] font-black uppercase">GV</div>}
                           {studentProfile ? (
                               <div className="flex items-center gap-3 bg-red-950/40 border border-red-500/30 pl-4 pr-1 py-1 rounded-full cursor-pointer hover:bg-red-900/50 transition group" onClick={handleLogout}>
                                   <div className="text-right hidden md:block">
@@ -287,7 +302,7 @@ export default function TrainingPage() {
       <main className="flex-1 container mx-auto px-2 md:px-4 py-6 overflow-y-auto custom-scrollbar">
           {loading ? ( <div className="flex justify-center py-20"><Flame className="animate-bounce text-red-500" size={48}/></div> ) : (
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full">
-                {/* LEFT */}
+                {/* LEFT - DANH SÁCH GAME */}
                 <div className="lg:col-span-3 space-y-8 pb-20">
                     {Object.keys(subjectsData).length === 0 ? ( <div className="text-center py-20 border border-white/5 rounded-2xl bg-white/5"><Swords size={48} className="mx-auto text-slate-600 mb-4"/><p className="text-slate-500 italic">Chưa có nhiệm vụ nào trong KHO GAME cho cấp độ này.</p></div> ) : (
                         Object.entries(subjectsData).map(([subject, quizzes]) => {

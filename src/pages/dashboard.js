@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import useAuthStore from '@/store/useAuthStore';
 import { auth, firestore } from '@/lib/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signOut, updatePassword } from 'firebase/auth'; // [MỚI] Thêm updatePassword
 import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, orderBy, addDoc, serverTimestamp, setDoc, getDoc } from 'firebase/firestore';
 import { Flag, Plus, Trash2, LogOut, Edit, Loader2, Shield, Gamepad2, FileText, BarChart3, Download, Search, Swords, Lock, Unlock, RefreshCw, MessageSquare, ExternalLink, Settings, UserPlus, CheckCircle, Save, Key, Users, GraduationCap, Clock, Image, LayoutTemplate, Upload, X, Hash, Link as LinkIcon, FolderOpen, QrCode, CheckSquare, Zap, UserCog, Calendar, AlertTriangle, Layers, Database, Eye, EyeOff, Archive, ArrowRightCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -73,6 +73,10 @@ export default function Dashboard() {
   const [newEmail, setNewEmail] = useState('');
   const [uploading, setUploading] = useState(false);
   
+  // [MỚI] State đổi mật khẩu
+  const [newPassword, setNewPassword] = useState('');
+  const [isChangingPass, setIsChangingPass] = useState(false);
+  
   const topBannerInput = useRef(null);
   const leftBannerInput = useRef(null);
   const rightBannerInput = useRef(null);
@@ -99,48 +103,26 @@ export default function Dashboard() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) { router.push('/'); return; }
       
-      // --- LOGIC KIỂM TRA QUYỀN VÀ HẠN DÙNG ---
       let isMaster = MASTER_EMAILS.includes(currentUser.email);
       let myPermission = null;
       let allPermissions = [];
 
       try {
-          // Lấy toàn bộ danh sách cho phép (để dùng cho Admin tab)
           const snap = await getDocs(collection(firestore, "allowed_emails"));
           allPermissions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           setAllowedEmails(allPermissions);
-          
-          // Tìm quyền của user hiện tại
           myPermission = allPermissions.find(p => p.email === currentUser.email);
-      } catch (e) {
-          console.error("Lỗi lấy danh sách quyền:", e);
-      }
+      } catch (e) { console.error("Lỗi lấy danh sách quyền:", e); }
       
-      // Nếu không phải Master Admin thì phải kiểm tra chặt chẽ
       if (!isMaster) {
-          // 1. Kiểm tra có trong danh sách không
-          if (!myPermission) { 
-              alert(`Tài khoản chưa được cấp quyền truy cập hệ thống!`); 
-              await signOut(auth); 
-              router.push('/'); 
-              return; 
-          }
-
-          // 2. Kiểm tra hạn sử dụng (BLOCK NẾU HẾT HẠN)
+          if (!myPermission) { alert(`Tài khoản chưa được cấp quyền truy cập!`); await signOut(auth); router.push('/'); return; }
           if (myPermission.expiredAt) {
               const expireDate = new Date(myPermission.expiredAt.seconds * 1000);
               const now = new Date();
-              
-              if (now > expireDate) {
-                  alert(`⛔ TÀI KHOẢN HẾT HẠN!\n\nTài khoản của thầy/cô đã hết hạn vào ngày ${expireDate.toLocaleDateString('vi-VN')}.\nVui lòng liên hệ Admin phone/zalo: 0383477162 để gia hạn.`);
-                  await signOut(auth);
-                  router.push('/');
-                  return;
-              }
+              if (now > expireDate) { alert(`⛔ TÀI KHOẢN HẾT HẠN!`); await signOut(auth); router.push('/'); return; }
           }
       }
       
-      // Nếu qua được cửa kiểm tra thì mới Set User và tải dữ liệu
       setUser(currentUser);
       
       try {
@@ -150,12 +132,7 @@ export default function Dashboard() {
           if (homeSnap.exists()) setHomeConfig(homeSnap.data());
       } catch (e) {}
       
-      await Promise.all([ 
-          fetchQuizzes(currentUser.uid), 
-          fetchResults(currentUser.uid), 
-          fetchBoards(currentUser.uid), 
-          fetchAssignments(currentUser) 
-      ]);
+      await Promise.all([ fetchQuizzes(currentUser.uid), fetchResults(currentUser.uid), fetchBoards(currentUser.uid), fetchAssignments(currentUser) ]);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -168,11 +145,8 @@ export default function Dashboard() {
           const s = await getDocs(collection(firestore, "assignments"));
           let allData = s.docs.map(d => ({ id: d.id, ...d.data() }));
           allData.sort((a, b) => (b.submittedAt?.seconds || 0) - (a.submittedAt?.seconds || 0));
-
           if (!MASTER_EMAILS.includes(u.email)) {
-              allData = allData.filter(item => 
-                  item.teacherEmail && item.teacherEmail.toLowerCase() === u.email.toLowerCase()
-              );
+              allData = allData.filter(item => item.teacherEmail && item.teacherEmail.toLowerCase() === u.email.toLowerCase());
           }
           setAssignments(allData);
       } catch (e) { console.error("Lỗi tải bài nộp:", e); }
@@ -187,7 +161,26 @@ export default function Dashboard() {
   const saveUserConfig = async (e) => { e.preventDefault(); try { await setDoc(doc(firestore, "user_configs", user.uid), { ...userConfig, email: user.email }); alert("✅ Đã cập nhật Mã Nộp Bài và Cấu hình!"); } catch (e) { alert(e.message); } };
   const saveHomeConfig = async (e) => { e.preventDefault(); try { await setDoc(doc(firestore, "system_config", "homepage"), homeConfig); alert("✅ Đã lưu!"); } catch (e) { alert(e.message); } };
 
-  // --- LOGIC QUẢN LÝ USER (Cũ - Vẫn giữ để tương thích tab cũ nếu cần) ---
+  // --- [MỚI] ĐỔI MẬT KHẨU ---
+  const handleChangePassword = async (e) => {
+      e.preventDefault();
+      if(newPassword.length < 6) return alert("Mật khẩu phải từ 6 ký tự!");
+      setIsChangingPass(true);
+      try {
+          await updatePassword(user, newPassword);
+          alert("✅ Đổi mật khẩu thành công! Vui lòng đăng nhập lại.");
+          setNewPassword('');
+          await signOut(auth);
+          router.push('/');
+      } catch (err) {
+          if(err.code === 'auth/requires-recent-login') alert("⚠️ Cần đăng nhập lại mới được đổi mật khẩu!");
+          else alert("Lỗi: " + err.message);
+      } finally {
+          setIsChangingPass(false);
+      }
+  };
+
+  // --- LOGIC QUẢN LÝ USER ---
   const handleAddEmail = async (e) => {
       e.preventDefault();
       if (!newEmail.includes('@')) return alert("Email sai!");
@@ -213,7 +206,6 @@ export default function Dashboard() {
   const handleSelectOne = (id) => { if (selectedAssigns.includes(id)) { setSelectedAssigns(selectedAssigns.filter(item => item !== id)); } else { setSelectedAssigns([...selectedAssigns, id]); } };
   const handleDeleteBulk = async () => { if (selectedAssigns.length === 0) return; if (!confirm(`Bạn có chắc chắn muốn xóa ${selectedAssigns.length} bài nộp này không?`)) return; setLoading(true); try { await Promise.all(selectedAssigns.map(id => deleteDoc(doc(firestore, "assignments", id)))); setAssignments(prev => prev.filter(a => !selectedAssigns.includes(a.id))); setSelectedAssigns([]); } catch (e) { console.error(e); alert("Lỗi khi xóa bài: " + e.message); } finally { setLoading(false); } };
 
-  // --- LOGIC KHO GAME (REPO) ---
   const handleMoveToRepo = async (id) => {
       if(!confirm("Chuyển đề này sang Kho Game?\n- Đề sẽ biến mất khỏi Kho Vũ Khí.\n- Đề sẽ được CÔNG KHAI (Public) cho mọi người thấy.")) return;
       try {
@@ -229,18 +221,11 @@ export default function Dashboard() {
     if(selectedRepoItems.length === 0) return;
     if(!confirm(`Xóa vĩnh viễn ${selectedRepoItems.length} đề đã chọn?`)) return;
     setLoading(true);
-    try {
-        await Promise.all(selectedRepoItems.map(id => deleteDoc(doc(firestore, "quizzes", id))));
-        setQuizzes(prev => prev.filter(q => !selectedRepoItems.includes(q.id)));
-        setSelectedRepoItems([]);
-    } catch(e) { alert("Lỗi xóa: " + e.message); } finally { setLoading(false); }
+    try { await Promise.all(selectedRepoItems.map(id => deleteDoc(doc(firestore, "quizzes", id)))); setQuizzes(prev => prev.filter(q => !selectedRepoItems.includes(q.id))); setSelectedRepoItems([]); } catch(e) { alert("Lỗi xóa: " + e.message); } finally { setLoading(false); }
   };
   
-  const handleCreateQuizForSubject = () => {
-    router.push(`/create-quiz?grade=${repoGrade}&subject=${repoSubject !== 'ALL' ? repoSubject : ''}&from=GAME_REPO`);
-  };
+  const handleCreateQuizForSubject = () => { router.push(`/create-quiz?grade=${repoGrade}&subject=${repoSubject !== 'ALL' ? repoSubject : ''}&from=GAME_REPO`); };
 
-  // --- MEMO DATA ---
   const libraryQuizzes = useMemo(() => { return quizzes.filter(q => q.origin !== 'GAME_REPO'); }, [quizzes]);
   const myResults = useMemo(() => results.filter(r => quizzes.some(q => q.id === r.examId)), [results, quizzes]);
   const filteredResults = useMemo(() => myResults.filter(r => (filterExamId === 'ALL' || r.examId === filterExamId) && (filterClass === 'ALL' || r.studentClass === filterClass)), [myResults, filterExamId, filterClass]);
@@ -260,6 +245,9 @@ export default function Dashboard() {
         return matchGrade && matchSubject;
     });
   }, [quizzes, repoGrade, repoSubject]);
+
+  // Kiểm tra tài khoản là Google hay Password
+  const isPasswordUser = useMemo(() => user?.providerData?.some(p => p.providerId === 'password'), [user]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617] text-white"><Loader2 className="animate-spin" size={40}/></div>;
 
@@ -288,7 +276,9 @@ export default function Dashboard() {
 
       <main className="flex-1 ml-64 p-8 overflow-y-auto min-h-screen bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
         
-        {/* TAB LIBRARY */}
+        {/* CÁC TAB KHÁC GIỮ NGUYÊN (LIBRARY, REPO, INTERACTIVE, RESULTS, ASSIGNMENTS, USERS...) */}
+        {/* Để gọn code, tôi chỉ hiện phần thay đổi ở TAB SETTINGS */}
+        
         {activeTab === 'LIBRARY' && (<div className="animate-in fade-in slide-in-from-bottom-4 duration-500"><header className="flex justify-between items-center mb-10"><div><h1 className="text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg">Kho Vũ Khí</h1><p className="text-slate-400 mt-1 font-medium">Quản lý các bộ đề cá nhân</p></div><button onClick={() => router.push('/create-quiz')} className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-6 py-3 rounded-xl font-black shadow-lg hover:scale-105 transition"><Plus size={20}/> Chế tạo đề mới</button></header><div className="grid grid-cols-3 gap-6">{libraryQuizzes.map(q=><div key={q.id} className={`bg-[#1e293b]/80 backdrop-blur-md rounded-[2rem] border transition-all duration-300 group overflow-hidden shadow-xl hover:shadow-2xl ${q.isExamActive ? 'border-red-500/50 shadow-red-500/10' : 'border-white/10 hover:border-indigo-500/50'}`}><div className="h-32 bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center relative overflow-hidden"><FileText size={48} className="text-indigo-400 group-hover:scale-110 transition-transform duration-500"/><div className="absolute top-4 left-4"><span className="bg-yellow-400 text-black px-2 py-1 rounded font-black text-xs shadow-lg flex items-center gap-1"><Hash size={12}/> {q.code || '---'}</span></div><div className="absolute top-4 right-4 flex flex-col items-end gap-1"><span className={`text-[10px] font-black px-2 py-1 rounded uppercase shadow-lg ${q.status === 'OPEN' ? 'bg-green-500 text-black' : 'bg-slate-700 text-slate-400'}`}>{q.status === 'OPEN' ? 'Game: Mở' : 'Game: Đóng'}</span>{q.isExamActive && (<span className="text-[10px] font-black px-2 py-1 rounded uppercase shadow-lg bg-red-600 text-white animate-pulse">ĐANG THI</span>)}</div></div><div className="p-6"><h3 className="text-xl font-black mb-1 truncate text-white uppercase italic tracking-tight">{q.title}</h3><div className="flex justify-between items-center mb-6"><p className="text-slate-400 text-xs font-bold uppercase tracking-widest">{q.questions?.length || 0} Mật lệnh</p><span className="text-slate-500 text-xs">{new Date(q.createdAt?.seconds * 1000).toLocaleDateString()}</span></div><div className="grid grid-cols-5 gap-2"><button onClick={() => handleToggleExamMode(q.id, q.isExamActive)} className={`col-span-2 py-2.5 rounded-xl font-black uppercase italic text-xs shadow transition-all flex items-center justify-center gap-1 ${q.isExamActive ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-slate-700 text-slate-300 hover:bg-red-600 hover:text-white'}`}><GraduationCap size={16}/> {q.isExamActive ? 'Dừng Thi' : 'Mở Thi'}</button><button onClick={() => handleToggleStatus(q.id, q.status)} className={`col-span-1 flex items-center justify-center rounded-xl transition-all border ${q.status === 'OPEN' ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-slate-700/50 text-slate-400'}`}>{q.status === 'OPEN' ? <Unlock size={18} /> : <Lock size={18} />}</button><button onClick={() => router.push(`/create-quiz?id=${q.id}`)} className="col-span-1 bg-slate-700 hover:bg-indigo-600 text-white rounded-xl transition flex items-center justify-center"><Edit size={16} /></button><button onClick={() => handleDeleteQuiz(q.id)} className="col-span-1 bg-slate-700 hover:bg-red-600 text-white rounded-xl transition flex items-center justify-center"><Trash2 size={16} /></button>
         <button onClick={() => router.push(`/race/${q.id}`)} className="col-span-3 bg-gradient-to-r from-orange-600 to-red-600 text-white py-3 rounded-xl font-black shadow-lg hover:shadow-orange-500/30 transition-all flex items-center justify-center gap-2 uppercase italic text-xs group-hover:animate-pulse"><Flag size={16} fill="currentColor"/> Biệt Đội</button>
         <button onClick={() => router.push(`/host/${q.id}`)} className="col-span-2 bg-white text-slate-900 py-3 rounded-xl font-black uppercase italic text-xs shadow hover:bg-indigo-50 transition-all flex items-center justify-center gap-1"><Swords size={16}/> Chiến Binh</button>
@@ -576,9 +566,9 @@ export default function Dashboard() {
         {activeTab === 'SETTINGS' && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-500 max-w-5xl mx-auto pb-10">
                 <header className="mb-8"><h1 className="text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg mb-2">QUẢN TRỊ HỆ THỐNG</h1><p className="text-slate-400 font-medium">Cấu hình API và Quyền truy cập</p></header>
-                <div className="grid grid-cols-1 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {MASTER_EMAILS.includes(user?.email) && (
-                        <div className="bg-[#1e293b] p-8 rounded-[2rem] border border-yellow-500/30 shadow-xl relative overflow-hidden">
+                        <div className="bg-[#1e293b] p-8 rounded-[2rem] border border-yellow-500/30 shadow-xl relative overflow-hidden md:col-span-2">
                             <div className="absolute top-0 right-0 p-4 opacity-10"><LayoutTemplate size={120} /></div>
                             <div className="flex items-center gap-3 mb-6 relative z-10"><div className="bg-purple-600 p-2 rounded-lg"><Image size={24} className="text-white"/></div><h2 className="text-xl font-bold uppercase text-white">Giao Diện Trang Chủ</h2></div>
                             <form onSubmit={saveHomeConfig} className="space-y-6 relative z-10">
@@ -603,7 +593,7 @@ export default function Dashboard() {
                     
                     <div className="bg-[#1e293b] p-8 rounded-[2rem] border border-white/10 shadow-xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-10"><Key size={120} /></div>
-                        <div className="flex items-center gap-3 mb-6 relative z-10"><div className="bg-blue-600 p-2 rounded-lg"><Settings size={24} className="text-white"/></div><h2 className="text-xl font-bold uppercase text-white">Cấu Hình API & MÃ NỘP BÀI</h2></div>
+                        <div className="flex items-center gap-3 mb-6 relative z-10"><div className="bg-blue-600 p-2 rounded-lg"><Settings size={24} className="text-white"/></div><h2 className="text-xl font-bold uppercase text-white">Cấu Hình API</h2></div>
                         <form onSubmit={saveUserConfig} className="space-y-6 relative z-10">
                             <div className="bg-slate-900/50 p-6 rounded-2xl border border-blue-500/30">
                                 <h3 className="text-blue-400 font-bold uppercase text-sm mb-4 flex items-center gap-2"><QrCode size={18}/> Mã Nộp Bài Của Bạn</h3>
@@ -613,42 +603,73 @@ export default function Dashboard() {
                                     <p className="text-[10px] text-slate-500 italic text-center">Hãy cung cấp mã này cho học sinh khi nộp bài tập</p>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-4">
-                                    <h3 className="text-orange-400 font-bold uppercase text-sm border-b border-white/10 pb-2">Lưu trữ Ảnh (Cloudinary)</h3>
-                                    <div><label className="block text-xs font-bold text-slate-400 mb-1">Cloud Name</label><input value={userConfig.cloudinaryName} onChange={e=>setUserConfig({...userConfig, cloudinaryName: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500 font-mono"/></div>
-                                    <div><label className="block text-xs font-bold text-slate-400 mb-1">Upload Preset</label><input value={userConfig.cloudinaryPreset} onChange={e=>setUserConfig({...userConfig, cloudinaryPreset: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500 font-mono"/></div>
-                                </div>
-                                <div className="space-y-4">
-                                    <h3 className="text-purple-400 font-bold uppercase text-sm border-b border-white/10 pb-2">Trí tuệ nhân tạo (Gemini)</h3>
-                                    <div><label className="block text-xs font-bold text-slate-400 mb-1">Gemini API Key</label><input type="password" value={userConfig.geminiKey} onChange={e=>setUserConfig({...userConfig, geminiKey: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500 font-mono"/></div>
-                                    
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-400 mb-1">Phiên bản Model</label>
-                                        <select value={userConfig.geminiModel} onChange={e=>setUserConfig({...userConfig, geminiModel: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500">
-                                            <option value="gemini-3-flash-preview">gemini-3-flash-preview(free)</option>
-                                            <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
-                                            <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
-                                        </select>
-                                    </div>
-                                </div>
+                            <div className="space-y-4">
+                                <h3 className="text-orange-400 font-bold uppercase text-sm border-b border-white/10 pb-2">Lưu trữ Ảnh (Cloudinary)</h3>
+                                <div><label className="block text-xs font-bold text-slate-400 mb-1">Cloud Name</label><input value={userConfig.cloudinaryName} onChange={e=>setUserConfig({...userConfig, cloudinaryName: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500 font-mono"/></div>
+                                <div><label className="block text-xs font-bold text-slate-400 mb-1">Upload Preset</label><input value={userConfig.cloudinaryPreset} onChange={e=>setUserConfig({...userConfig, cloudinaryPreset: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500 font-mono"/></div>
                             </div>
-                            <div className="pt-4 border-t border-white/10">
-                                <h3 className="text-green-400 font-bold uppercase text-sm mb-4 flex items-center gap-2"><Clock size={16}/> Thời Gian Game Chiến Binh (Giây)</h3>
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div><label className="block text-xs font-bold text-slate-400 mb-1">Trắc nghiệm</label><input type="number" value={userConfig.timeMCQ} onChange={e=>setUserConfig({...userConfig, timeMCQ: parseInt(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white font-bold text-center focus:border-green-500"/></div>
-                                    <div><label className="block text-xs font-bold text-slate-400 mb-1">Đúng/Sai</label><input type="number" value={userConfig.timeTF} onChange={e=>setUserConfig({...userConfig, timeTF: parseInt(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white font-bold text-center focus:border-green-500"/></div>
-                                    <div><label className="block text-xs font-bold text-slate-400 mb-1">Điền từ</label><input type="number" value={userConfig.timeSA} onChange={e=>setUserConfig({...userConfig, timeSA: parseInt(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white font-bold text-center focus:border-green-500"/></div>
+                            <div className="space-y-4">
+                                <h3 className="text-purple-400 font-bold uppercase text-sm border-b border-white/10 pb-2">Trí tuệ nhân tạo (Gemini)</h3>
+                                <div><label className="block text-xs font-bold text-slate-400 mb-1">Gemini API Key</label><input type="password" value={userConfig.geminiKey} onChange={e=>setUserConfig({...userConfig, geminiKey: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500 font-mono"/></div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 mb-1">Phiên bản Model</label>
+                                    <select value={userConfig.geminiModel} onChange={e=>setUserConfig({...userConfig, geminiModel: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500">
+                                        <option value="gemini-3-flash-preview">gemini-3-flash-preview(free)</option>
+                                        <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+                                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
+                                    </select>
                                 </div>
                             </div>
                             <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition active:scale-95"><Save size={20}/> Lưu Cấu Hình</button>
                         </form>
                     </div>
+
+                    {/* [MỚI] KHUNG ĐỔI MẬT KHẨU - CHỈ HIỆN CHO TÀI KHOẢN PASSWORD */}
+                 {/* --- BẮT ĐẦU ĐOẠN CODE THAY THẾ --- */}
+<div className="bg-[#1e293b] p-8 rounded-[2rem] border border-white/10 shadow-xl relative overflow-hidden h-fit">
+    <div className="absolute top-0 right-0 p-4 opacity-10"><Lock size={120} /></div>
+    <div className="flex items-center gap-3 mb-6 relative z-10">
+        <div className="bg-red-600 p-2 rounded-lg"><Key size={24} className="text-white"/></div>
+        <h2 className="text-xl font-bold uppercase text-white">Bảo Mật Tài Khoản</h2>
+    </div>
+    
+    {/* Kiểm tra: Nếu là User Mật khẩu thì hiện Form, không thì hiện Cảnh báo */}
+    {isPasswordUser ? (
+        <form onSubmit={handleChangePassword} className="space-y-6 relative z-10">
+            <div className="bg-slate-900/50 p-6 rounded-2xl border border-red-500/30">
+                <label className="block text-xs font-bold text-red-400 mb-2 uppercase">Mật khẩu mới</label>
+                <input 
+                    type="password" 
+                    value={newPassword} 
+                    onChange={(e) => setNewPassword(e.target.value)} 
+                    placeholder="Nhập mật khẩu mới..."
+                    className="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-white font-bold outline-none focus:border-red-500 transition-colors"
+                    required
+                    minLength={6}
+                />
+                <p className="text-[10px] text-slate-500 mt-2 italic">* Sau khi đổi mật khẩu thành công, bạn sẽ cần đăng nhập lại.</p>
+            </div>
+            <button type="submit" disabled={isChangingPass} className="w-full bg-red-600 hover:bg-red-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50">
+                {isChangingPass ? <Loader2 className="animate-spin"/> : <RefreshCw size={20}/>} Đổi Mật Khẩu
+            </button>
+        </form>
+    ) : (
+        <div className="relative z-10 bg-yellow-500/10 p-6 rounded-2xl border border-yellow-500/30 flex items-start gap-4">
+            <div className="bg-yellow-500/20 p-3 rounded-xl"><AlertTriangle size={24} className="text-yellow-400"/></div>
+            <div>
+                <h3 className="text-yellow-400 font-bold uppercase text-sm mb-1">Tính năng không khả dụng</h3>
+                <p className="text-slate-400 text-xs leading-relaxed">
+                    Tài khoản này được đăng ký qua Google hoặc chưa thiết lập mật khẩu lớp bảo mật. Bạn không cần đổi mật khẩu tại đây.
+                </p>
+            </div>
+        </div>
+    )}
+</div>
+{/* --- KẾT THÚC ĐOẠN CODE THAY THẾ --- */}
                 </div>
             </div>
         )}
       </main>
-      {/* 3. Vẫn giữ component cảnh báo để nhắc nhở khi sắp hết hạn */}
       <ExpiryAlert />
     </div>
   );
