@@ -44,10 +44,10 @@ export default function VoteArena() {
   const [hasVoted, setHasVoted] = useState(false);
   const timerRef = useRef(null);
 
-  // [MỚI] TÍNH TỔNG SỐ PHIẾU
+  // TÍNH TỔNG SỐ PHIẾU
   const totalVotes = options.reduce((acc, curr) => acc + curr.votes, 0);
 
-  // [MỚI] XỬ LÝ SẮP XẾP KHI KẾT THÚC (SORT DESCENDING)
+  // XỬ LÝ SẮP XẾP KHI KẾT THÚC (SORT DESCENDING)
   const displayOptions = status === 'ENDED' 
       ? [...options].sort((a, b) => b.votes - a.votes) 
       : options;
@@ -89,7 +89,7 @@ export default function VoteArena() {
     return () => unsub();
   }, [isTeacher]);
 
-  // --- LOGIC TIME (ĐÃ SỬA LỖI TỰ CHẠY) ---
+  // --- LOGIC TIME ---
   useEffect(() => {
       if(isTeacher && (startTime || endTime)) {
           const checkInterval = setInterval(() => {
@@ -97,13 +97,10 @@ export default function VoteArena() {
               const start = startTime ? new Date(startTime).getTime() : 0;
               const end = endTime ? new Date(endTime).getTime() : 0;
               
-              // [FIX] Chỉ tự động kích hoạt nếu trạng thái là SCHEDULED (Đã bấm nút Lên lịch)
-              // Bỏ điều kiện 'status === SETUP' để tránh kích hoạt khi đang nhập liệu
               if(status === 'SCHEDULED' && start > 0 && now >= start && (!end || now < end)) {
                   updateSession({ status: 'ACTIVE' });
               }
               
-              // Tự động kết thúc khi hết giờ
               if(status === 'ACTIVE' && end > 0 && now >= end) {
                   updateSession({ status: 'ENDED' });
                   clearInterval(checkInterval);
@@ -145,11 +142,8 @@ export default function VoteArena() {
     const resetOptions = options.map(o => ({...o, votes: 0, percent: 0}));
     const updateData = { options: resetOptions, status: 'ACTIVE' };
     
-    // Logic xác định trạng thái khi bấm nút
     if(useSchedule && startTime && endTime) {
         updateData.startTime = startTime; updateData.endTime = endTime;
-        // Nếu thời gian bắt đầu ở tương lai -> SCHEDULED
-        // Nếu thời gian bắt đầu đã qua -> ACTIVE luôn
         updateData.status = (new Date(startTime) > new Date()) ? 'SCHEDULED' : 'ACTIVE';
     } else {
         updateData.startTime = null; updateData.endTime = null; updateData.timeLeft = 300; 
@@ -272,7 +266,6 @@ export default function VoteArena() {
                 )}
                 {status === 'ENDED' && <span className="text-red-500 font-black uppercase text-xs tracking-widest drop-shadow-[0_0_8px_rgba(220,38,38,0.8)] flex items-center justify-center gap-1"><Lock size={12}/> KẾT THÚC</span>}
                 
-                {/* [MỚI] HIỂN THỊ TỔNG SỐ PHIẾU */}
                 {(status === 'ACTIVE' || status === 'ENDED') && (
                     <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1 flex items-center gap-1 animate-in slide-in-from-top-1">
                         <Users size={10} className="text-orange-500"/> Tổng phiếu: <span className="text-white">{totalVotes}</span>
@@ -288,20 +281,22 @@ export default function VoteArena() {
         {/* TOPIC */}
         <div className="mb-4 text-center shrink-0 relative">
             {isTeacher && status === 'SETUP' ? (
+                // [FIX] Bỏ class 'uppercase' để nhập gì hiển thị nấy
                 <input 
                     value={topic}
                     onChange={(e) => { setTopic(e.target.value); updateSession({ topic: e.target.value }); }}
-                    className="w-full bg-slate-900/80 text-center text-lg font-black text-white uppercase border-2 border-orange-500/50 focus:border-orange-400 outline-none py-3 px-4 rounded-xl placeholder:text-slate-500 transition-all shadow-lg"
-                    placeholder="NHẬP CHỦ ĐỀ TRẬN ĐẤU..."
+                    className="w-full bg-slate-900/80 text-center text-lg font-black text-white border-2 border-orange-500/50 focus:border-orange-400 outline-none py-3 px-4 rounded-xl placeholder:text-slate-500 transition-all shadow-lg"
+                    placeholder="Nhập chủ đề bình chọn..."
                 />
             ) : (
                 <div className="bg-gradient-to-r from-transparent via-orange-900/40 to-transparent border-y border-orange-500/30 py-2">
-                    <h2 className="text-lg md:text-xl font-black text-white uppercase leading-tight drop-shadow-lg break-words">{topic}</h2>
+                    {/* [FIX] Bỏ 'uppercase', thêm 'break-words' để xuống dòng khi dài */}
+                    <h2 className="text-lg md:text-xl font-black text-white leading-tight drop-shadow-lg break-words">{topic}</h2>
                 </div>
             )}
         </div>
 
-        {/* OPTIONS LIST - SỬ DỤNG 'displayOptions' ĐỂ SORT */}
+        {/* OPTIONS LIST */}
         <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1 p-1">
           {displayOptions.map((opt, index) => {
             const isSelected = selectedId === opt.id;
@@ -351,11 +346,13 @@ export default function VoteArena() {
                                 setOptions(newOpts);
                             }}
                             onBlur={() => updateSession({ options })} 
+                            // [FIX] Bỏ 'uppercase' để giữ nguyên kiểu chữ
                             className="w-full bg-transparent font-bold text-white outline-none text-base placeholder:text-slate-600 border-b border-orange-500/30 focus:border-orange-500 pb-1"
                             placeholder="Nhập nội dung..."
                         />
                     ) : (
-                        <h3 className={`font-bold text-base uppercase truncate ${isSelected ? 'text-orange-300 drop-shadow-[0_0_5px_orange]' : 'text-slate-200'}`}>{opt.label}</h3>
+                        // [FIX] Thay 'truncate' bằng 'break-words whitespace-pre-wrap' để xuống dòng, bỏ 'uppercase'
+                        <h3 className={`font-bold text-base break-words whitespace-pre-wrap ${isSelected ? 'text-orange-300 drop-shadow-[0_0_5px_orange]' : 'text-slate-200'}`}>{opt.label}</h3>
                     )}
                     {showResult && <div className="text-[10px] text-slate-300 font-bold mt-0.5 flex items-center gap-1"><Users size={10}/> {opt.votes} phiếu</div>}
                   </div>
