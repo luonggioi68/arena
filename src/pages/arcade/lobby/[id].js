@@ -1,6 +1,6 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
-import { GAME_MODES } from '../../../lib/gameConfig'; // Đảm bảo đường dẫn này đúng
+import { GAME_MODES } from '../../../lib/gameConfig'; // Đảm bảo đường dẫn này đúng với dự án của thầy
 import { ChevronLeft, Flame, Swords } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore'; 
 import { firestore } from '@/lib/firebase';
@@ -20,6 +20,7 @@ const customStyles = `
 
 export default function LobbyPage() {
   const router = useRouter();
+  // Lấy tham số 'from' từ URL (ví dụ: ?from=dashboard)
   const { id, from } = router.query;
   const [quizTitle, setQuizTitle] = useState("Đang nạp đạn...");
   const [backGrade, setBackGrade] = useState(null);
@@ -41,19 +42,24 @@ export default function LobbyPage() {
     }
   }, [id]);
 
+  // [QUAN TRỌNG] Hàm chọn game đã được sửa để truyền 'from' đi tiếp
   const handleSelectGame = (mode) => {
-    const queryParams = from ? { source: from } : {};
+    // Nếu có 'from' (ví dụ: dashboard), ta đóng gói nó vào để gửi sang trang Game
+    const queryParams = from ? { from: from } : {}; // Dành cho các game Arcade (Triệu phú, Vòng xoay...)
+    const examParams = from ? { source: from } : {}; // Dành riêng cho Exam (dùng biến 'source')
 
     if (mode.type === 'EXAM') {
+      // Chuyển đến trang Thi (Exam)
       router.push({
         pathname: `/arcade/exam/${id}`, 
-        query: queryParams 
+        query: examParams // Truyền ?source=dashboard
       });
     } else {
+      // Chuyển đến các Game khác (Arcade)
       router.push({
         pathname: `/arcade/${id}`,
         query: { 
-            ...queryParams, 
+            ...queryParams, // Truyền ?from=dashboard
             game: mode.id 
         }
       });
@@ -61,7 +67,9 @@ export default function LobbyPage() {
   };
 
   const handleBack = () => {
+      // Nếu đến từ Dashboard thì về Dashboard
       if (from === 'dashboard') router.push('/dashboard');
+      // Nếu không, về trang Luyện tập theo lớp tương ứng
       else router.push(backGrade ? `/training?grade=${backGrade}` : '/training');
   };
 
@@ -90,7 +98,6 @@ export default function LobbyPage() {
       </header>
 
       {/* MAIN CONTENT */}
-      {/* Thay đổi: justify-start (đẩy lên trên) + pt-8 (cách header) + overflow-y-auto (cho phép cuộn nếu danh sách dài) */}
       <main className="flex-1 flex flex-col items-center justify-start pt-8 pb-10 px-4 overflow-y-auto no-scrollbar w-full">
         
         <div className="text-center mb-5 shrink-0">
@@ -99,13 +106,11 @@ export default function LobbyPage() {
             </p>
         </div>
 
-        {/* THAY ĐỔI: Dùng Flexbox để căn giữa hoàn hảo */}
         <div className="flex flex-wrap justify-center gap-4 w-full max-w-7xl">
             {GAME_MODES.map((mode, index) => (
                 <div 
                     key={mode.id}
                     onClick={() => handleSelectGame(mode)}
-                    // THIẾT LẬP KÍCH THƯỚC CỐ ĐỊNH (w-44 mobile, w-52 desktop) ĐỂ ĐỒNG BỘ
                     className="card-battle group relative w-44 md:w-52 h-48 cursor-pointer overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-900/80 transition-all duration-300 hover:scale-105 hover:-translate-y-1"
                 >
                     <div className={`absolute inset-0 bg-gradient-to-br ${mode.gradient} opacity-5 group-hover:opacity-15`}></div>

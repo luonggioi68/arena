@@ -9,7 +9,6 @@ import {
     updateProfile 
 } from 'firebase/auth'; 
 import { auth, googleProvider, firestore } from '@/lib/firebase';
-// [MỚI] Thêm getDoc vào import để kiểm tra quyền GV
 import { collection, query, where, getDocs, doc, onSnapshot, setDoc, serverTimestamp, orderBy, limit, addDoc, getDoc } from 'firebase/firestore';
 import { 
     Flame, ChevronLeft, Trophy, Star, X, Gamepad2, Shield, Crown, Swords, PlayCircle, 
@@ -17,6 +16,9 @@ import {
     User, Phone, Lock, Eye, EyeOff, AlertCircle, KeyRound, Check, FileText, ChevronDown, ChevronUp 
 } from 'lucide-react';
 import useAuthStore from '@/store/useAuthStore';
+
+// [MỚI] KHAI BÁO SUPER ADMIN
+const MASTER_EMAILS = ["luonggioi68@gmail.com"];
 
 // Hàm "đánh lừa" Firebase Auth để dùng SĐT như Email
 const createFakeEmail = (phone) => `${phone}@eduarena.vn`;
@@ -30,7 +32,7 @@ export default function TrainingPage() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // [MỚI] State kiểm tra giáo viên
+  // State kiểm tra giáo viên / Admin
   const [isTeacher, setIsTeacher] = useState(false);
 
   // State mở rộng/thu gọn danh sách đề
@@ -55,21 +57,32 @@ export default function TrainingPage() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
         setUser(currentUser);
         if (currentUser) {
-            // [MỚI] Kiểm tra xem có phải là Giáo viên không?
-            try {
-                const configRef = doc(firestore, "user_configs", currentUser.uid);
-                const configSnap = await getDoc(configRef);
-                if (configSnap.exists() && configSnap.data().role === 'TEACHER') {
-                    setIsTeacher(true);
-                }
-            } catch (e) { console.error("Lỗi check GV:", e); }
+            // [CẬP NHẬT LOGIC CHECK QUYỀN]
+            let isTeacherRole = false;
+            
+            // 1. Check xem có phải Super Admin không
+            if (MASTER_EMAILS.includes(currentUser.email)) {
+                isTeacherRole = true;
+            } else {
+                // 2. Nếu không phải Admin, check trong DB xem có phải GV không
+                try {
+                    const configRef = doc(firestore, "user_configs", currentUser.uid);
+                    const configSnap = await getDoc(configRef);
+                    if (configSnap.exists() && configSnap.data().role === 'TEACHER') {
+                        isTeacherRole = true;
+                    }
+                } catch (e) { console.error("Lỗi check GV:", e); }
+            }
+            
+            setIsTeacher(isTeacherRole);
 
+            // Load Student Profile
             const userRef = doc(firestore, "student_profiles", currentUser.uid);
             const unsubProfile = onSnapshot(userRef, async (docSnap) => {
                 if (docSnap.exists()) {
                     setStudentProfile(docSnap.data());
                 } else {
-                    // Cơ chế Self-healing: Tự tạo hồ sơ nếu chưa có
+                    // Cơ chế Self-healing
                     const defaultProfile = {
                         uid: currentUser.uid,
                         email: currentUser.email,
@@ -242,7 +255,7 @@ export default function TrainingPage() {
   const handleQuizClick = (quiz) => {
       if (!user) { setAuthMode('LOGIN'); return; }
       
-      // [MỚI] Logic kiểm tra lớp: Nếu là GV (isTeacher=true) thì BỎ QUA check lớp
+      // Logic kiểm tra lớp: Nếu là GV (isTeacher=true) thì BỎ QUA check lớp
       if (studentProfile && !isTeacher) { 
           const userClass = parseInt(studentProfile.grade);
           const currentClass = parseInt(selectedGrade);
@@ -278,7 +291,7 @@ export default function TrainingPage() {
               <div>
                   {user ? (
                       <div className="flex items-center gap-2">
-                          {isTeacher && <div className="bg-yellow-600 text-black px-2 py-0.5 rounded text-[10px] font-black uppercase">GV</div>}
+                          {isTeacher && <div className="bg-yellow-600 text-black px-2 py-0.5 rounded text-[10px] font-black uppercase">MASTER</div>}
                           {studentProfile ? (
                               <div className="flex items-center gap-3 bg-red-950/40 border border-red-500/30 pl-4 pr-1 py-1 rounded-full cursor-pointer hover:bg-red-900/50 transition group" onClick={handleLogout}>
                                   <div className="text-right hidden md:block">

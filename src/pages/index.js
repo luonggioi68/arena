@@ -377,9 +377,9 @@ export default function HomePage() {
                 
                 <div className="text-center mb-6">
                     <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter">
-                        {authMode === 'LOGIN' ? 'Đăng Nhập' : authMode === 'REGISTER' ? 'Đăng Ký GV' : 'Quên Mật Khẩu'}
+                        {authMode === 'LOGIN' ? 'Đăng Nhập Giáo Viên' : authMode === 'REGISTER' ? 'Đăng Ký Dành Cho Giáo viên' : 'Quên Mật Khẩu'}
                     </h2>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Hệ thống quản lý giáo dục</p>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Học sinh đăng nhập/đăng ký trong Luyện Tập</p>
                 </div>
 
                 <form onSubmit={handleAuthSubmit} className="space-y-4">
