@@ -1,27 +1,28 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
-import { GAME_MODES } from '../../../lib/gameConfig'; // Đảm bảo đường dẫn này đúng với dự án của thầy
-import { ChevronLeft, Flame, Swords } from 'lucide-react';
+import { GAME_MODES } from '../../../lib/gameConfig'; 
+import { ChevronLeft, Flame, Swords, Info } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore'; 
 import { firestore } from '@/lib/firebase';
+import useAuthStore from '@/store/useAuthStore'; // [MỚI] Import để check user
 
 const customStyles = `
   @keyframes fire-pulse {
-    0% { text-shadow: 0 0 4px #fefcc9, 10px -10px 6px #feec85, -20px -20px 15px #ffae34, 20px -40px 20px #ec760c, -20px -60px 20px #cd4606, 0 -80px 30px #973716, 10px -90px 40px #451b0e; }
-    50% { text-shadow: 0 0 4px #fefcc9, 10px -12px 8px #feec85, -22px -22px 17px #ffae34, 22px -42px 22px #ec760c, -22px -62px 22px #cd4606, 0 -82px 32px #973716, 10px -92px 42px #451b0e; }
-    100% { text-shadow: 0 0 4px #fefcc9, 10px -10px 6px #feec85, -20px -20px 15px #ffae34, 20px -40px 20px #ec760c, -20px -60px 20px #cd4606, 0 -80px 30px #973716, 10px -90px 40px #451b0e; }
+    0% { text-shadow: 0 0 4px #fefcc9, 10px -10px 6px #feec85, -20px -20px 15px #ffae34, 20px -40px 20px #ec760c; }
+    50% { text-shadow: 0 0 4px #fefcc9, 10px -12px 8px #feec85, -22px -22px 17px #ffae34, 22px -42px 22px #ec760c; }
+    100% { text-shadow: 0 0 4px #fefcc9, 10px -10px 6px #feec85, -20px -20px 15px #ffae34, 20px -40px 20px #ec760c; }
   }
   .bg-magma { background: radial-gradient(circle at center, #450a0a 0%, #000000 100%); }
   .card-battle:hover { box-shadow: 0 0 25px rgba(239, 68, 68, 0.5); border-color: #fca5a5; }
-  /* Ẩn thanh cuộn nhưng vẫn cuộn được */
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 `;
 
 export default function LobbyPage() {
   const router = useRouter();
-  // Lấy tham số 'from' từ URL (ví dụ: ?from=dashboard)
   const { id, from } = router.query;
+  const { user } = useAuthStore(); // [MỚI] Lấy thông tin user
+  
   const [quizTitle, setQuizTitle] = useState("Đang nạp đạn...");
   const [backGrade, setBackGrade] = useState(null);
 
@@ -42,34 +43,19 @@ export default function LobbyPage() {
     }
   }, [id]);
 
-  // [QUAN TRỌNG] Hàm chọn game đã được sửa để truyền 'from' đi tiếp
   const handleSelectGame = (mode) => {
-    // Nếu có 'from' (ví dụ: dashboard), ta đóng gói nó vào để gửi sang trang Game
-    const queryParams = from ? { from: from } : {}; // Dành cho các game Arcade (Triệu phú, Vòng xoay...)
-    const examParams = from ? { source: from } : {}; // Dành riêng cho Exam (dùng biến 'source')
+    const queryParams = from ? { from: from } : {};
+    const examParams = from ? { source: from } : {};
 
     if (mode.type === 'EXAM') {
-      // Chuyển đến trang Thi (Exam)
-      router.push({
-        pathname: `/arcade/exam/${id}`, 
-        query: examParams // Truyền ?source=dashboard
-      });
+      router.push({ pathname: `/arcade/exam/${id}`, query: examParams });
     } else {
-      // Chuyển đến các Game khác (Arcade)
-      router.push({
-        pathname: `/arcade/${id}`,
-        query: { 
-            ...queryParams, // Truyền ?from=dashboard
-            game: mode.id 
-        }
-      });
+      router.push({ pathname: `/arcade/${id}`, query: { ...queryParams, game: mode.id } });
     }
   };
 
   const handleBack = () => {
-      // Nếu đến từ Dashboard thì về Dashboard
       if (from === 'dashboard') router.push('/dashboard');
-      // Nếu không, về trang Luyện tập theo lớp tương ứng
       else router.push(backGrade ? `/training?grade=${backGrade}` : '/training');
   };
 
@@ -96,6 +82,16 @@ export default function LobbyPage() {
             <span className="text-[8px] text-red-400 font-bold uppercase flex items-center justify-end gap-1"><div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>Sẵn sàng</span>
         </div>
       </header>
+
+      {/* [MỚI] THÔNG BÁO CHẾ ĐỘ KHÁCH */}
+      {!user && (
+          <div className="bg-gradient-to-r from-blue-900/40 via-indigo-900/40 to-blue-900/40 border-b border-blue-500/30 py-2 px-4 animate-in fade-in slide-in-from-top-4 duration-700 flex items-center justify-center gap-3 shadow-lg">
+              <div className="bg-blue-500/20 p-1.5 rounded-full text-blue-400 shrink-0"><Info size={16} /></div>
+              <p className="text-[10px] md:text-xs font-bold text-blue-200 uppercase tracking-widest">
+                  🎮 Chế độ <span className="text-yellow-400">Khách</span>: <button onClick={() => router.push('/training')} className="underline hover:text-white transition-colors">Đăng nhập</button> để có tên trên <span className="text-yellow-400">Bảng Vàng</span> & lưu điểm XP!
+              </p>
+          </div>
+      )}
 
       {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col items-center justify-start pt-8 pb-10 px-4 overflow-y-auto no-scrollbar w-full">
@@ -141,7 +137,7 @@ export default function LobbyPage() {
       </main>
 
       <div className="p-2 text-center opacity-20 shrink-0">
-          <p className="text-[8px] font-mono text-red-500 uppercase tracking-[0.5em]">SYSTEM ONLINE</p>
+          <p className="text-[8px] font-mono text-red-500 uppercase tracking-[0.5em]">SYSTEM ONLINE // GUEST MODE SUPPORTED</p>
       </div>
     </div>
   );

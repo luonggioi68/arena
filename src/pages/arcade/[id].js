@@ -14,6 +14,20 @@ import JourneyGame from './journey';
 import MathRender from '@/components/MathRender'; 
 
 const styles = `
+  @keyframes fire-pulse {
+    0% { text-shadow: 0 0 4px #fefcc9, 10px -10px 6px #feec85, -20px -20px 15px #ffae34, 20px -40px 20px #ec760c; }
+    50% { text-shadow: 0 0 4px #fefcc9, 12px -12px 8px #feec85, -22px -22px 17px #ffae34, 22px -42px 22px #ec760c; }
+    100% { text-shadow: 0 0 4px #fefcc9, 10px -10px 6px #feec85, -20px -20px 15px #ffae34, 20px -40px 20px #ec760c; }
+  }
+  .text-fire-mini {
+    animation: fire-pulse 2s infinite alternate;
+    background: linear-gradient(to bottom, #fde047, #f97316, #dc2626);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .bg-magma-dark {
+    background: radial-gradient(circle at center, #2d0606 0%, #000000 100%);
+  }
   .perspective-1000 { perspective: 1000px; }
   .transform-style-3d { transform-style: preserve-3d; }
   .backface-hidden { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
@@ -70,7 +84,7 @@ const renderWithInlineImage = (text, imgUrl) => {
 export default function ArcadeMode() {
   const router = useRouter();
   
-  // [ĐÃ SỬA LỖI] Gộp khai báo biến tại đây (id, game, from)
+  // Gộp khai báo biến tại đây (id, game, from)
   const { id, game, from } = router.query;
 
   const [quiz, setQuiz] = useState(null);
@@ -123,66 +137,51 @@ export default function ArcadeMode() {
       }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617] text-white font-bold text-xl"><div className="animate-spin mr-2">⏳</div> Đang tải dữ liệu...</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center bg-black text-white font-bold">ĐANG NẠP ĐẠN...</div>;
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-white font-sans overflow-hidden flex flex-col">
+    <div className="h-screen bg-black text-white font-sans overflow-hidden flex flex-col relative bg-magma-dark">
       <style>{styles}</style>
+      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10 pointer-events-none"></div>
       
-      {/* HEADER */}
+      {/* HEADER RỰC LỬA - THIẾT KẾ GỌN CHO TRANG GAME */}
       {mode !== 'MILLIONAIRE' && (
-          <div className="p-4 flex justify-between items-center bg-slate-900 border-b border-slate-700 shadow-md z-50 relative shrink-0">
-            <button onClick={handleBack} className="flex items-center gap-2 hover:text-yellow-400 font-bold transition uppercase text-sm">
-                <ArrowLeft size={20} /> {from === 'dashboard' ? 'Về Kho Vũ Khí' : (mode === 'MENU' ? 'Quay lại Lớp' : 'Chọn game khác')}
+          <header className="flex justify-between items-center px-4 py-2 border-b border-red-900/50 bg-black/60 backdrop-blur-md z-50 shadow-[0_4px_15px_rgba(220,38,38,0.2)] shrink-0">
+            <button 
+                onClick={handleBack} 
+                className="group flex items-center gap-2 bg-slate-900 border border-slate-700 hover:border-red-500 px-3 py-1 rounded-lg transition-all"
+            >
+                <ArrowLeft size={16} className="text-slate-400 group-hover:text-red-500"/> 
+                <span className="font-black text-[10px] uppercase tracking-widest text-slate-400 group-hover:text-white">Rút lui</span>
             </button>
-            <h1 className="text-lg md:text-xl font-black truncate max-w-md uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
-                {quiz?.title} <span className="text-slate-500 mx-2">|</span> KHO GAME - VUI HỌC 
-            </h1>
-          </div>
-      )}
 
-      {/* MENU CHỌN GAME */}
-      {mode === 'MENU' && (
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 flex items-center justify-center custom-scrollbar">
-            <div className="max-w-6xl w-full">
-                <div className="text-center mb-10">
-                    <Gamepad2 size={60} className="mx-auto mb-4 text-purple-500"/>
-                    <h1 className="text-3xl md:text-5xl font-black mb-2 text-white uppercase italic tracking-tighter">CHỌN THỬ THÁCH</h1>
-                    <p className="text-slate-400 text-sm md:text-base">Vừa học vừa chơi - Sảng khoái tinh thần</p>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 px-4 pb-10">
-                    <GameCard title="Arena Thi Online" desc="Mô phỏng thi thật" icon={<FileText size={48}/>} color="from-red-600 to-rose-900" onClick={() => router.push(`/arcade/exam/${id}`)} delay={0} special={true} />
-                    <GameCard title="Triệu Phú" desc="Trí tuệ & Kịch tính" icon={<DollarSign size={48}/>} color="from-blue-600 to-indigo-900" onClick={() => setMode('MILLIONAIRE')} delay={100} special={true} />
-                    <GameCard title="Vòng Quay" desc="Ngẫu nhiên & May mắn" icon={<CircleDashed size={48}/>} color="from-pink-500 to-rose-600" onClick={() => setMode('WHEEL')} delay={200} />
-                    
-                    {/* Game 4: Hành Trình Vượt Ải */}
-                    <div className="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-2xl overflow-hidden border-2 border-indigo-500/30 group hover:border-indigo-400 transition-all shadow-2xl animate-card h-64 flex flex-col relative" style={{ animationDelay: '300ms' }}>
-                        <div className="h-32 bg-slate-800 relative overflow-hidden">
-                             <div className="absolute inset-0 bg-gradient-to-br from-purple-600 to-indigo-600 opacity-80"></div>
-                             <Map className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white/20 rotate-12" size={80} />
-                             <span className="absolute top-3 right-3 bg-yellow-500 text-black text-[10px] font-black px-2 py-1 rounded uppercase shadow-lg animate-bounce">Mới</span>
-                        </div>
-                        <div className="p-4 flex-1 flex flex-col justify-between bg-[#0f172a]">
-                            <div>
-                                <h3 className="text-lg font-black text-white uppercase leading-tight mb-1">Hành Trình Vượt Ải</h3>
-                                <p className="text-slate-400 text-[10px] uppercase font-bold">Phiêu lưu & Chinh phục</p>
-                            </div>
-                            <button onClick={() => setMode('JOURNEY')} className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold uppercase text-xs shadow-lg shadow-indigo-600/20 transition-all flex items-center justify-center gap-2">
-                                <Gamepad2 size={16}/> Chơi Ngay
-                            </button>
-                        </div>
-                    </div>
-
-                    <GameCard title="Hộp Bí Mật" desc="Hồi hộp & Bất ngờ" icon={<Gift size={48}/>} color="from-violet-500 to-purple-600" onClick={() => setMode('BOX')} delay={400} />
-                  
-                </div>
+            <div className="text-center">
+                <h1 className="text-xl md:text-2xl font-black uppercase italic tracking-tighter text-fire-mini leading-none">KHO GAME</h1>
+                <p className="text-[7px] font-bold text-yellow-600 uppercase tracking-[0.4em] leading-none mt-1">CHIẾN TRƯỜNG TRI THỨC</p>
             </div>
-        </div>
+
+            <div className="flex items-center gap-3">
+                <div className="hidden md:block text-right border-r border-red-900/50 pr-3">
+                    <span className="block text-red-400 font-bold text-[10px] uppercase leading-none mb-1">Chiến dịch:</span>
+                    <span className="block text-white font-black text-xs uppercase tracking-tight truncate max-w-[120px]">{quiz?.title}</span>
+                </div>
+                <button onClick={() => router.push('/')} className="p-2 bg-red-950/20 border border-red-900/50 rounded-full hover:bg-red-600 transition-colors text-red-500"><X size={16} /></button>
+            </div>
+          </header>
       )}
 
       {/* KHU VỰC RENDER GAME */}
-      <div className="flex-1 relative bg-slate-900 overflow-hidden">
+      <div className="flex-1 relative overflow-hidden">
+        
+        {/* [MỚI] THÔNG BÁO CHẾ ĐỘ KHÁCH (HIỆN TRÊN ĐẦU VÙNG CHƠI GAME) */}
+        {!user && mode !== 'MENU' && (
+            <div className="absolute top-1 left-1/2 -translate-x-1/2 z-[60] bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-yellow-500/50 flex items-center gap-2 shadow-lg animate-in slide-in-from-top fade-in">
+                <span className="text-[9px] font-black text-yellow-500 uppercase tracking-tighter">Chế độ Khách</span>
+                <div className="w-1 h-1 bg-slate-500 rounded-full"></div>
+                <span className="text-[8px] text-slate-300 font-bold uppercase">Đăng nhập để lưu điểm Bảng Vàng</span>
+            </div>
+        )}
+
         {mode === 'WHEEL' && <LuckyWheelGame questions={quiz.questions} onAddXP={handleAddXP} onExit={handleBack}/>}
         {mode === 'BOX' && <MysteryBoxGame questions={quiz.questions} onAddXP={handleAddXP} onExit={handleBack}/>}
         {mode === 'MATCH' && <MemoryMatchGame questions={quiz.questions} onAddXP={handleAddXP} onExit={handleBack} />}
@@ -193,17 +192,8 @@ export default function ArcadeMode() {
   );
 }
 
-const GameCard = ({ title, desc, icon, color, onClick, delay, special }) => (
-    <button onClick={onClick} className={`group relative h-64 bg-gradient-to-br ${color} rounded-3xl p-6 flex flex-col items-center justify-center hover:scale-105 transition-all duration-300 shadow-2xl border-4 ${special ? 'border-yellow-400 animate-pulse' : 'border-white/10'} hover:border-white/40 animate-card`} style={{ animationDelay: `${delay}ms` }}>
-        {special && <div className="absolute -top-3 -right-3 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase shadow-lg animate-bounce">Hot</div>}
-        <div className="mb-4 p-4 bg-black/20 rounded-full group-hover:rotate-12 transition duration-500 shadow-inner text-white">{icon}</div>
-        <h2 className="text-xl md:text-2xl font-black uppercase text-center mb-2 drop-shadow-md text-white tracking-tight">{title}</h2>
-        <p className="text-white/90 text-[10px] font-bold uppercase tracking-widest bg-black/20 px-3 py-1 rounded-full">{desc}</p>
-    </button>
-);
-
 // ====================================================================================
-// GAME COMPONENTS
+// CÁC GAME CON
 // ====================================================================================
 
 // GAME: AI LÀ TRIỆU PHÚ
@@ -778,10 +768,73 @@ function MysteryBoxGame({ questions, onAddXP, onExit }) {
     );
 }
 
+// ---------------- GAME: TÌM CẶP ----------------
+function MemoryMatchGame({ questions, onAddXP, onExit }) {
+    const [cards, setCards] = useState([]);
+    const [flipped, setFlipped] = useState([]);
+    const [solved, setSolved] = useState([]);
 
+    useEffect(() => {
+        const generatedCards = [];
+        questions.forEach((q, idx) => {
+            generatedCards.push({ id: `q-${idx}`, pairId: idx, type: 'QUESTION', content: q.q, img: q.img });
+            let ansContent = "???";
+            if (q.a && q.a.length > 0 && q.correct !== undefined) ansContent = q.a[q.correct];
+            else if (q.correct) ansContent = q.correct;
+            generatedCards.push({ id: `a-${idx}`, pairId: idx, type: 'ANSWER', content: ansContent, isImg: typeof ansContent === 'string' && ansContent.startsWith('http') });
+        });
+        setCards(generatedCards.sort(() => Math.random() - 0.5));
+    }, [questions]);
 
-// --- COMPONENT POPUP TRẢ LỜI CÂU HỎI (Dùng cho Wheel & Box) ---
-// --- COMPONENT POPUP TRẢ LỜI CÂU HỎI (ĐÃ FIX LỖI ẨN ĐÁP ÁN CHO BOX) ---
+    const handleCardClick = (card) => {
+        if (flipped.length >= 2 || flipped.includes(card) || solved.includes(card.id)) return;
+        const newFlipped = [...flipped, card];
+        setFlipped(newFlipped);
+        if (newFlipped.length === 2) {
+            const [c1, c2] = newFlipped;
+            if (c1.pairId === c2.pairId) {
+                setTimeout(() => { 
+                    setSolved(prev => [...prev, c1.id, c2.id]); 
+                    setFlipped([]); 
+                    confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } });
+                    onAddXP(30); 
+                }, 500);
+            } else setTimeout(() => setFlipped([]), 1000);
+        }
+    };
+
+    return (
+        <div className="p-4 md:p-8 h-full flex justify-center overflow-y-auto">
+            <div className="grid grid-cols-4 md:grid-cols-6 gap-2 md:gap-4 w-full max-w-7xl pb-20">
+                {cards.map((card) => {
+                    const isFlipped = flipped.includes(card) || solved.includes(card.id);
+                    const isSolved = solved.includes(card.id);
+                    return (
+                        <div key={card.id} onClick={() => handleCardClick(card)} className={`perspective-1000 aspect-[3/4] cursor-pointer ${isFlipped ? 'flipped' : ''}`}>
+                            <div className="flip-card-inner h-full w-full">
+                                <div className="flip-card-front bg-gradient-to-br from-orange-500 to-red-500 rounded-xl shadow-lg border-2 border-white/20 flex items-center justify-center"><Package size={32} className="text-white opacity-80" /></div>
+                                <div className={`flip-card-back h-full w-full bg-white text-slate-900 rounded-xl shadow-lg flex flex-col items-center justify-center p-2 border-4 ${isSolved ? 'border-green-500 bg-green-50' : 'border-blue-500'}`}>
+                                    <span className={`text-[10px] font-black uppercase mb-1 ${card.type === 'QUESTION' ? 'text-blue-500' : 'text-green-600'}`}>{card.type === 'QUESTION' ? 'CÂU HỎI' : 'ĐÁP ÁN'}</span>
+                                    <div className="flex-1 flex items-center justify-center overflow-hidden w-full">
+                                        {card.isImg ? (
+                                            <img src={card.content} className="w-full h-full object-contain" /> 
+                                        ) : (
+                                            <div className="text-xs sm:text-sm font-bold line-clamp-4 leading-snug">
+                                                <MathRender content={card.content} />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+// --- COMPONENT POPUP TRẢ LỜI CÂU HỎI (ĐÃ FIX LỖI ẨN ĐÁP ÁN CHO BOX/WHEEL) ---
 function InteractiveQuestion({ data, onClose, gameType }) {
     const [selectedIdx, setSelectedIdx] = useState(null); 
     const [saInput, setSaInput] = useState("");

@@ -13,7 +13,7 @@ import { collection, query, where, getDocs, doc, onSnapshot, setDoc, serverTimes
 import { 
     Flame, ChevronLeft, Trophy, Star, X, Gamepad2, Shield, Crown, Swords, PlayCircle, 
     LogIn, UserPlus, LogOut, Gift, LayoutGrid, CircleDashed, DollarSign, Grid3X3, 
-    User, Phone, Lock, Eye, EyeOff, AlertCircle, KeyRound, Check, FileText, ChevronDown, ChevronUp 
+    User, Phone, Lock, Eye, EyeOff, AlertCircle, KeyRound, Check, FileText, ChevronDown, ChevronUp, Info 
 } from 'lucide-react';
 import useAuthStore from '@/store/useAuthStore';
 
@@ -57,14 +57,11 @@ export default function TrainingPage() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
         setUser(currentUser);
         if (currentUser) {
-            // [CẬP NHẬT LOGIC CHECK QUYỀN]
             let isTeacherRole = false;
             
-            // 1. Check xem có phải Super Admin không
             if (MASTER_EMAILS.includes(currentUser.email)) {
                 isTeacherRole = true;
             } else {
-                // 2. Nếu không phải Admin, check trong DB xem có phải GV không
                 try {
                     const configRef = doc(firestore, "user_configs", currentUser.uid);
                     const configSnap = await getDoc(configRef);
@@ -76,13 +73,11 @@ export default function TrainingPage() {
             
             setIsTeacher(isTeacherRole);
 
-            // Load Student Profile
             const userRef = doc(firestore, "student_profiles", currentUser.uid);
             const unsubProfile = onSnapshot(userRef, async (docSnap) => {
                 if (docSnap.exists()) {
                     setStudentProfile(docSnap.data());
                 } else {
-                    // Cơ chế Self-healing
                     const defaultProfile = {
                         uid: currentUser.uid,
                         email: currentUser.email,
@@ -252,10 +247,15 @@ export default function TrainingPage() {
     } catch (e) { alert("Lỗi tạo tên: " + e.message); }
   };
 
+  // [ĐÃ FIX] Cho phép vào chơi không cần đăng nhập
   const handleQuizClick = (quiz) => {
-      if (!user) { setAuthMode('LOGIN'); return; }
+      // 1. Trường hợp chưa đăng nhập: Cho phép vào chơi bình thường
+      if (!user) {
+          router.push(`/arcade/lobby/${quiz.id}`);
+          return;
+      }
       
-      // Logic kiểm tra lớp: Nếu là GV (isTeacher=true) thì BỎ QUA check lớp
+      // 2. Trường hợp đã đăng nhập: Kiểm tra lớp (Bỏ qua nếu là Master/Teacher)
       if (studentProfile && !isTeacher) { 
           const userClass = parseInt(studentProfile.grade);
           const currentClass = parseInt(selectedGrade);
@@ -317,6 +317,23 @@ export default function TrainingPage() {
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full">
                 {/* LEFT - DANH SÁCH GAME */}
                 <div className="lg:col-span-3 space-y-8 pb-20">
+                    
+                    {/* [MỚI] THÔNG BÁO CHO HỌC SINH CHƯA ĐĂNG NHẬP */}
+                    {!user && (
+                        <div className="bg-gradient-to-r from-blue-900/40 via-indigo-900/40 to-blue-900/40 border-2 border-blue-500/30 p-4 rounded-2xl animate-in fade-in slide-in-from-top-4 duration-700 flex flex-col md:flex-row items-center gap-4 shadow-[0_0_30px_rgba(59,130,246,0.15)]">
+                            <div className="p-3 bg-blue-500/20 rounded-full text-blue-400 shrink-0 shadow-inner">
+                                <Info size={28} />
+                            </div>
+                            <div className="flex-1 text-center md:text-left">
+                                <h4 className="text-blue-300 font-black uppercase text-sm mb-1 tracking-wider">🌟 Chế độ chơi thử đang bật</h4>
+                                <p className="text-slate-300 text-xs font-bold uppercase leading-relaxed">
+                                    Bạn có thể chơi nhiệm vụ ngay, nhưng nếu <button onClick={() => setAuthMode('LOGIN')} className="text-yellow-400 underline hover:text-white transition-colors">Đăng nhập</button>, bạn sẽ có tên trong <span className="text-yellow-400">BẢNG VÀNG</span> danh giá và tích lũy XP!
+                                </p>
+                            </div>
+                            <button onClick={() => setAuthMode('LOGIN')} className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 shrink-0">Đăng nhập ngay</button>
+                        </div>
+                    )}
+
                     {Object.keys(subjectsData).length === 0 ? ( <div className="text-center py-20 border border-white/5 rounded-2xl bg-white/5"><Swords size={48} className="mx-auto text-slate-600 mb-4"/><p className="text-slate-500 italic">Chưa có nhiệm vụ nào trong KHO GAME cho cấp độ này.</p></div> ) : (
                         Object.entries(subjectsData).map(([subject, quizzes]) => {
                             const isExpanded = expandedSubjects[subject] || false;
