@@ -48,7 +48,6 @@ export default function VoteArena() {
   const totalVotes = options.reduce((acc, curr) => acc + curr.votes, 0);
 
   // [MỚI] XỬ LÝ SẮP XẾP KHI KẾT THÚC (SORT DESCENDING)
-  // Nếu đã kết thúc thì sort theo votes giảm dần, ngược lại giữ nguyên thứ tự nhập
   const displayOptions = status === 'ENDED' 
       ? [...options].sort((a, b) => b.votes - a.votes) 
       : options;
@@ -90,14 +89,21 @@ export default function VoteArena() {
     return () => unsub();
   }, [isTeacher]);
 
-  // --- LOGIC TIME ---
+  // --- LOGIC TIME (ĐÃ SỬA LỖI TỰ CHẠY) ---
   useEffect(() => {
       if(isTeacher && (startTime || endTime)) {
           const checkInterval = setInterval(() => {
               const now = new Date().getTime();
               const start = startTime ? new Date(startTime).getTime() : 0;
               const end = endTime ? new Date(endTime).getTime() : 0;
-              if(status === 'SETUP' && start > 0 && now >= start && (!end || now < end)) updateSession({ status: 'ACTIVE' });
+              
+              // [FIX] Chỉ tự động kích hoạt nếu trạng thái là SCHEDULED (Đã bấm nút Lên lịch)
+              // Bỏ điều kiện 'status === SETUP' để tránh kích hoạt khi đang nhập liệu
+              if(status === 'SCHEDULED' && start > 0 && now >= start && (!end || now < end)) {
+                  updateSession({ status: 'ACTIVE' });
+              }
+              
+              // Tự động kết thúc khi hết giờ
               if(status === 'ACTIVE' && end > 0 && now >= end) {
                   updateSession({ status: 'ENDED' });
                   clearInterval(checkInterval);
@@ -138,8 +144,12 @@ export default function VoteArena() {
     if (!topic.trim()) return alert("Vui lòng nhập chủ đề!");
     const resetOptions = options.map(o => ({...o, votes: 0, percent: 0}));
     const updateData = { options: resetOptions, status: 'ACTIVE' };
+    
+    // Logic xác định trạng thái khi bấm nút
     if(useSchedule && startTime && endTime) {
         updateData.startTime = startTime; updateData.endTime = endTime;
+        // Nếu thời gian bắt đầu ở tương lai -> SCHEDULED
+        // Nếu thời gian bắt đầu đã qua -> ACTIVE luôn
         updateData.status = (new Date(startTime) > new Date()) ? 'SCHEDULED' : 'ACTIVE';
     } else {
         updateData.startTime = null; updateData.endTime = null; updateData.timeLeft = 300; 
