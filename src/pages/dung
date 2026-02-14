@@ -6,7 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { 
     Plus, Trash2, Save, ArrowLeft, CheckCircle, Sparkles, X, Loader2, List, 
     CheckSquare, Type, BrainCircuit, Upload, BookOpen, Image as ImageIcon, 
-    Users, Calculator, Info, Clock, Hash, GraduationCap, Book, RefreshCcw, Eye, Atom, FileText
+    Users, Calculator, Info, Clock, Hash, GraduationCap, Book, RefreshCcw, Eye 
 } from 'lucide-react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import mammoth from "mammoth";
@@ -82,8 +82,8 @@ export default function CreateQuiz() {
   const router = useRouter();
   const { id, grade: queryGrade, subject: querySubject, from } = router.query;
   
-  const fileInputRef = useRef(null);     // Ref cho upload Cơ bản
-  const fileInputSTEMRef = useRef(null); // Ref cho upload AI (Mới)
+  const fileInputRef = useRef(null);
+  const fileInputSTEMRef = useRef(null); // [MỚI] Ref cho nút Upload AI
   const qImgRef = useRef(null);
   const aImgRef = useRef(null);
   
@@ -191,34 +191,6 @@ export default function CreateQuiz() {
     }
   }, [id, user, queryGrade, querySubject, from]);
 
-  // --- HÀM UPLOAD ẢNH CHO MAMMOTH (Sửa lỗi is not defined) ---
-  const processMammothImage = async (image) => {
-    try {
-        const base64 = await image.read("base64");
-        const type = image.contentType;
-        const dataUri = `data:${type};base64,${base64}`;
-
-        const formData = new FormData();
-        formData.append("file", dataUri);
-        formData.append("upload_preset", UPLOAD_PRESET);
-
-        const res = await fetch(CLOUDINARY_URL, { method: "POST", body: formData });
-        
-        if (!res.ok) {
-            const errorData = await res.json();
-            console.error("Cloudinary Error:", errorData);
-            // Không throw error để tránh dừng luồng đọc file, chỉ log lỗi
-            return null;
-        }
-        
-        const data = await res.json();
-        return { src: data.secure_url, class: "mammoth-uploaded-img" };
-    } catch (error) {
-        console.error("Lỗi upload ảnh:", error);
-        return null; 
-    }
-  };
-
   const handleImageUpload = async (file) => {
     if (!file) return null;
     setImgUploading(true);
@@ -283,8 +255,103 @@ export default function CreateQuiz() {
     else aImgRef.current.click();
   };
 
-  // --- LOGIC GỐC CỦA BẠN (KHÔNG CHỈNH SỬA) ---
-  const sanitizeMathText = (text) => {
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const result = await mammoth.convertToHtml({ arrayBuffer: e.target.result });
+        const parsedQuestions = parseDocxContent(result.value);
+        if (parsedQuestions.length > 0) {
+            setQuestions(prev => [...prev, ...parsedQuestions]);
+            alert(`✅ Đã nhập ${parsedQuestions.length} câu hỏi!`);
+        } else alert("⚠️ Không tìm thấy câu hỏi.");
+      } catch (error) { console.error(error); alert("Lỗi đọc file Word!"); }
+    };
+    reader.readAsArrayBuffer(file);
+    event.target.value = null; 
+  };
+// --- [MỚI] HÀM UPLOAD AI CHO TOÁN/LÝ/HOÁ (STEM) ---
+  const handleFileUploadSTEM = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    setLoading(true);
+    try {
+        // 1. Dùng Mammoth đọc file + Upload ảnh
+        const arrayBuffer = await file.arrayBuffer();
+        const options = {
+            convertImage: mammoth.images.imgElement(uploadImageHandler)
+        };
+        const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer }, options);
+        let rawHtml = result.value; 
+
+        // 2. Cấu hình Gemini AI
+        const userConfigDoc = await getDoc(doc(firestore, "user_configs", user.uid));
+        if (!userConfigDoc.exists()) throw new Error("Chưa nhập API Key Gemini trong Cấu hình!");
+        
+        const config = userConfigDoc.data();
+        const genAI = new GoogleGenerativeAI(config.geminiKey);
+        const model = genAI.getGenerativeModel({ model: config.geminiModel || "gemini-1.5-flash" });
+
+        // 3. Prompt chuyên dụng cho Toán/Lý/Hoá
+        const prompt = `
+        Bạn là trợ lý nhập liệu đề thi Toán, Lý, Hóa. Hãy chuyển đổi HTML thô sau đây thành JSON.
+        
+        HTML ĐẦU VÀO:
+        """${rawHtml}"""
+
+        YÊU CẦU XỬ LÝ QUAN TRỌNG:
+        1. **Toán học:** Nhận diện tất cả công thức toán (dạng text hoặc ảnh) và chuyển về định dạng LaTeX kẹp trong dấu $...$. Ví dụ: $x^2$.
+        2. **Hình ảnh:** - Giữ nguyên thẻ <img src="..."> và thay thế vị trí của nó bằng chữ " [img] ".
+           - Trích xuất URL ảnh đó để đưa vào trường dữ liệu.
+        3. **Cấu trúc Output (JSON Array):**
+           [
+             { 
+               "type": "MCQ", "part": 1, 
+               "q": "Nội dung câu hỏi... [img]", 
+               "img": "URL_anh_cau_hoi_neu_co", 
+               "a": ["Đáp án A", "B", "C", "D"], 
+               "aImages": ["URL_anh_A", "", "", ""], 
+               "correct": 0
+             },
+             { "type": "TF", "part": 2, "q": "...", "items": [{"text": "...", "isTrue": true}, ...] },
+             { "type": "SA", "part": 3, "q": "...", "correct": "..." }
+           ]
+        Chỉ trả về JSON thuần, không Markdown.
+        `;
+
+        const aiResponse = await model.generateContent(prompt);
+        const aiText = aiResponse.response.text();
+        const cleanJson = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsedQuestions = JSON.parse(cleanJson);
+
+        // 4. Map dữ liệu vào State
+        const finalQuestions = parsedQuestions.map(q => ({
+            id: Date.now() + Math.random(),
+            type: q.type || 'MCQ',
+            part: q.part || 1,
+            q: (q.q || '').replace(/^(Câu|Bài)\s+\d+[:.]?\s*/i, '').trim(), // Xóa chữ Câu 1:
+            img: q.img || '',
+            a: Array.isArray(q.a) ? q.a : ['', '', '', ''],
+            aImages: Array.isArray(q.aImages) ? q.aImages : ['', '', '', ''], 
+            correct: q.correct !== undefined ? q.correct : 0,
+            items: q.type === 'TF' ? (q.items || []).map(i => ({...i, img: i.img || ''})) : null
+        }));
+
+        setQuestions(prev => [...prev, ...finalQuestions]);
+        alert(`✅ AI Đã xử lý xong ${finalQuestions.length} câu hỏi Toán/Lý/Hoá!`);
+
+    } catch (error) {
+        console.error("Lỗi AI:", error);
+        alert(`❌ Lỗi xử lý AI: ${error.message}`);
+    } finally {
+        setLoading(false);
+        event.target.value = null; 
+    }
+  };
+const sanitizeMathText = (text) => {
     if (!text) return "";
     return text
         .replace(/√/g, '\\sqrt').replace(/π/g, '\\pi').replace(/≤/g, '\\le')
@@ -303,9 +370,10 @@ export default function CreateQuiz() {
         .replace(/≈/g, '\\approx').replace(/≡/g, '\\equiv').replace(/∧/g, '\\land')
         .replace(/∨/g, '\\lor').replace(/¬/g, '\\neg').replace(/⇒/g, '\\Rightarrow')
         .replace(/⇔/g, '\\Leftrightarrow').replace(/∠/g, '\\angle');
-  };
+};
 
-  const parseDocxContent = (htmlContent) => {
+// [UPDATED] Hàm parseDocxContent đã được sửa để bắt đáp án có *
+const parseDocxContent = (htmlContent) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlContent, 'text/html');
     const elements = Array.from(doc.body.querySelectorAll('p, li, tr'));
@@ -316,7 +384,14 @@ export default function CreateQuiz() {
 
     const partRegex = /\[P([1-3])\]|PHẦN ([1-3])/i;
     const questionRegex = /^(Câu|Bài)\s+\d+[:.]?\s*(.*)/i; 
+    
+    // [FIX] Regex cho MCQ (A. B. C. D.) - Có thể có * ở đầu, dấu chấm hoặc ngoặc
+    // Group 1: Dấu * (nếu có)
+    // Group 2: Ký tự A-D
+    // Group 3: Nội dung đáp án
     const answerRegex = /^\s*(\*?)\s*([A-D])\s*[:.)]\s*(.*)/i;
+    
+    // [FIX] Regex cho TF (a. b. c. d.) - Có thể có * ở đầu
     const tfItemRegex = /^\s*(\*?)\s*([a-d])\s*[:.)]\s*(.*)/i;
 
     const pushCurrentQ = () => {
@@ -347,40 +422,44 @@ export default function CreateQuiz() {
             pushCurrentQ(); 
             let qContent = qMatch[2];
             
-            // Xử lý ảnh trong câu hỏi nếu có
-            const imgEl = el.querySelector('img');
-            let imgSrc = '';
-            if (imgEl) imgSrc = imgEl.src;
-
             if (currentPart === 1) {
-                currentQ = { id: Date.now() + Math.random(), type: 'MCQ', part: 1, q: qContent, img: imgSrc, a: [], aImages: [], correct: 0 };
+                currentQ = { id: Date.now() + Math.random(), type: 'MCQ', part: 1, q: qContent, a: [], aImages: [], correct: 0 };
             } else if (currentPart === 2) {
-                currentQ = { id: Date.now() + Math.random(), type: 'TF', part: 2, q: qContent, img: imgSrc, items: [] };
+                currentQ = { id: Date.now() + Math.random(), type: 'TF', part: 2, q: qContent, items: [] };
             } else if (currentPart === 3) {
-                currentQ = { id: Date.now() + Math.random(), type: 'SA', part: 3, q: qContent, img: imgSrc, correct: '' };
+                currentQ = { id: Date.now() + Math.random(), type: 'SA', part: 3, q: qContent, correct: '' };
             }
             return;
         }
 
         if (currentQ) {
             if (currentQ.type === 'MCQ') {
+                // Xử lý MCQ - Tách nhiều đáp án trên 1 dòng nếu có (VD: A. Táo  B. Cam)
+                // Regex tìm [Dấu * tùy chọn] [A-D] [Dấu chấm/ngoặc]
                 const parts = text.split(/(?:^|\s+)(\*?[A-D])\s*[:.)]\s+/i).filter(Boolean);
                 
                 if (parts.length >= 2 && /^\*?[A-D]$/i.test(parts[0])) {
+                     // Nếu dòng có nhiều đáp án ngang
                      for (let i = 0; i < parts.length; i += 2) {
-                         const label = parts[i]; 
+                         const label = parts[i]; // Ví dụ: "A" hoặc "*A"
                          const content = parts[i+1].trim();
+                         
                          const hasStar = label.includes('*');
                          currentQ.a.push(content);
+                         
+                         // Check đúng: Có dấu * HOẶC in đậm/gạch chân HOẶC ký hiệu * trong text gốc
                          if (hasStar || el.innerHTML.includes('<b>') || el.innerHTML.includes('<u>') || text.includes('*')) {
                              currentQ.correct = currentQ.a.length - 1; 
                          }
                      }
                 } else {
+                    // Xử lý dòng đơn lẻ
                     const ansMatch = text.match(answerRegex);
                     if (ansMatch) {
-                        const hasStar = !!ansMatch[1]; 
+                        const hasStar = !!ansMatch[1]; // Group 1 là dấu *
+                        // const label = ansMatch[2];
                         const content = ansMatch[3];
+                        
                         currentQ.a.push(content);
                         if (hasStar || el.innerHTML.includes('<b>') || el.innerHTML.includes('<u>') || text.includes('*')) {
                             currentQ.correct = currentQ.a.length - 1;
@@ -392,12 +471,19 @@ export default function CreateQuiz() {
             } else if (currentQ.type === 'TF') {
                 const itemMatch = text.match(tfItemRegex);
                 if (itemMatch) {
-                    const hasStar = !!itemMatch[1]; 
+                    const hasStar = !!itemMatch[1]; // Group 1 là dấu *
+                    // const label = itemMatch[2];
                     const content = itemMatch[3];
+                    
                     const html = el.innerHTML.toLowerCase();
+                    // Đúng nếu: Có dấu * ở đầu HOẶC in đậm/gạch chân HOẶC có chữ "đúng"
                     const isTrue = hasStar || html.includes('<b>') || html.includes('<strong>') || html.includes('<u>') || text.toLowerCase().includes('đúng');
                     
-                    currentQ.items.push({ text: content, isTrue: isTrue, img: '' });
+                    currentQ.items.push({
+                        text: content,
+                        isTrue: isTrue,
+                        img: ''
+                    });
                 } else if (currentQ.items.length === 0) {
                      currentQ.q += " " + text;
                 }
@@ -414,118 +500,7 @@ export default function CreateQuiz() {
 
     pushCurrentQ();
     return newQuestions;
-  };
-
-  // --- HÀM 1: UPLOAD CƠ BẢN (XÃ HỘI) ---
-  const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    
-    setLoading(true);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        // Sử dụng processMammothImage để upload ảnh
-        const options = {
-            convertImage: mammoth.images.imgElement(processMammothImage)
-        };
-        const result = await mammoth.convertToHtml({ arrayBuffer: e.target.result }, options);
-        
-        const parsedQuestions = parseDocxContent(result.value);
-        
-        if (parsedQuestions.length > 0) {
-            setQuestions(prev => [...prev, ...parsedQuestions]);
-            alert(`✅ Đã nhập thành công ${parsedQuestions.length} câu hỏi (Cơ bản)!`);
-        } else {
-            alert("⚠️ Không tìm thấy câu hỏi.");
-        }
-      } catch (error) { 
-          console.error(error); 
-          alert("Lỗi đọc file Word: " + error.message); 
-      } finally {
-          setLoading(false);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-    event.target.value = null; 
-  };
-
-  // --- HÀM 2: UPLOAD AI (STEM - TOÁN/LÝ/HOÁ) ---
-  const handleFileUploadSTEM = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    setLoading(true);
-    
-    try {
-        const arrayBuffer = await file.arrayBuffer();
-        const options = {
-            convertImage: mammoth.images.imgElement(processMammothImage)
-        };
-        const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer }, options);
-        let rawHtml = result.value; 
-
-        const userConfigDoc = await getDoc(doc(firestore, "user_configs", user.uid));
-        if (!userConfigDoc.exists()) throw new Error("Chưa nhập API Key Gemini trong Cấu hình!");
-        
-        const config = userConfigDoc.data();
-        const genAI = new GoogleGenerativeAI(config.geminiKey);
-        const model = genAI.getGenerativeModel({ model: config.geminiModel || "gemini-1.5-flash" });
-
-        const prompt = `
-        Bạn là chuyên gia xử lý dữ liệu đề thi Toán, Lý, Hóa. Hãy chuyển đổi HTML thô sau đây thành JSON.
-        
-        HTML ĐẦU VÀO: """${rawHtml}"""
-
-        YÊU CẦU:
-        1. **Toán:** Chuyển công thức thành LaTeX $...$.
-        2. **Ảnh:** Giữ thẻ <img src="..."> và thay bằng " [img] ". Lấy link ảnh vào trường dữ liệu.
-        3. **Phân loại:** [P1] MCQ (4 đáp án A-D), [P2] TF (4 ý a-d), [P3] SA (Key).
-
-        OUTPUT JSON:
-        [ 
-          { "type": "MCQ", "part": 1, "q": "...", "img": "...", "a": ["A", "B", "C", "D"], "aImages": [], "correct": 0 },
-          { "type": "TF", "part": 2, "q": "...", "items": [{"text": "...", "isTrue": true}, ...] },
-          { "type": "SA", "part": 3, "q": "...", "correct": "..." }
-        ]
-        `;
-
-        const aiResponse = await model.generateContent(prompt);
-        const text = aiResponse.response.text();
-        let cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        
-        // --- BẮT ĐẦU SỬA LỖI BAD ESCAPED CHARACTER ---
-        // Bước 1: Đưa tất cả backslash kép (nếu có) về dạng đơn để chuẩn hóa
-        cleanJson = cleanJson.replace(/\\\\/g, '\\');
-        // Bước 2: Nhân đôi TẤT CẢ các dấu backslash đơn để JSON.parse đọc được an toàn
-        cleanJson = cleanJson.replace(/\\/g, '\\\\');
-        // Bước 3: Khôi phục lại dấu nháy kép \" (vì bước 2 đã vô tình biến nó thành \\")
-        cleanJson = cleanJson.replace(/\\\\"/g, '\\"');
-        // --- KẾT THÚC SỬA LỖI ---
-
-        const parsedQuestions = JSON.parse(cleanJson);
-        const finalQuestions = parsedQuestions.map(q => ({
-            id: Date.now() + Math.random(),
-            type: q.type || 'MCQ',
-            part: q.part || 1,
-            q: (q.q || '').replace(/^(Câu|Bài)\s+\d+[:.]?\s*/i, '').trim(),
-            img: q.img || '',
-            a: Array.isArray(q.a) ? q.a : ['', '', '', ''],
-            aImages: Array.isArray(q.aImages) ? q.aImages : ['', '', '', ''], 
-            correct: q.correct !== undefined ? q.correct : 0,
-            items: q.type === 'TF' ? (q.items || []).map(i => ({...i, img: i.img || ''})) : null
-        }));
-
-        setQuestions(prev => [...prev, ...finalQuestions]);
-        alert(`✅ AI Đã nhập thành công ${finalQuestions.length} câu hỏi (STEM)!`);
-
-    } catch (error) {
-        console.error("Lỗi AI:", error);
-        alert(`❌ Lỗi xử lý AI: ${error.message}`);
-    } finally {
-        setLoading(false);
-        event.target.value = null; 
-    }
-  };
+};
 
   const handleGenerateAI = async () => {
     if (!aiTopic) return alert("Thầy chưa nhập chủ đề!");
@@ -547,11 +522,31 @@ export default function CreateQuiz() {
       const prompt = `
         Đóng vai giáo viên môn ${aiSubject} lớp ${aiLevel}. Soạn đề thi chủ đề: "${aiTopic}".
         Tài liệu tham khảo: ${aiSource}
-        CẤU TRÚC: P1 (TN): ${countTN} câu. P2 (ĐS): ${matrix.ds_count} câu lớn. P3 (TL): ${countTL} câu.
-        OUTPUT JSON: [ { "type": "MCQ", "part": 1, "q": "...", "a": ["A", "B", "C", "D"], "correct": 0 }, ... ]`;
+        - Câu trả lời không được chứa thông tin ngoài lề, chỉ tập trung vào việc tạo câu hỏi. Không chứa các đáp án dạng tất cả đều đúng/sai, A,B,C,D đều đúng/sai.
+        - Lời dẫn không chứa các thông tin như theo sách, theo tài liệu, theo chương trình học, theo bộ giáo dục...
+        - Bám sát giáo khoa và chuẩn kiến thức kỹ năng hiện hành của Việt Nam.
+        CẤU TRÚC ĐỀ THI:
+        - PHẦN 1 (Trắc nghiệm): Tổng ${countTN} câu (${matrix.tn_biet} Biết, ${matrix.tn_hieu} Hiểu, ${matrix.tn_vd} Vận dụng).
+        - PHẦN 2 (Đúng/Sai): Tổng ${matrix.ds_count} câu lớn. Mỗi câu 4 ý (${matrix.ds_biet} Biết, ${matrix.ds_hieu} Hiểu, ${matrix.ds_vd} Vận dụng).
+        - PHẦN 3 (Trả lời ngắn): Tổng ${countTL} câu (${matrix.tl_biet} Biết, ${matrix.tl_hieu} Hiểu, ${matrix.tl_vd} Vận dụng).
+        
+        QUY TẮC ĐỊNH DẠNG:
+        1. CHỈ dùng dấu $...$ cho công thức phức tạp:Đạo hàm, Lũy thừa, căn bậc 2, bậc 3, chỉ số, phân số, tích phân, giới hạn, hàm lượng giác, ma trận, v.v. ví dụ: $x^2$, $\\frac{a}{b}$, $\\int_a^b f(x)dx$, $sqrt(x-4)$....
+        2. KHÔNG dùng $...$ cho các biểu thức, toán tử đơn giản: cộng, trừ, nhân, chia, v.v. Ví dụ: 2 + 2 = 4, 2x+3=0, a × b = ab.  
+        3. Ký tự backslash (\\) trong LaTeX phải được escape thành (\\\\).
+        4. Đáp câu hỏi ngắn(SA) là số tối đa 4 từ kể cả nếu dấu chấm, dấu âm. ví dụ: 5, -3, 12.5, -10.2, 2006
+        5. Lời dẫn câu hỏi đúng/sai là 1 tình huống bám sát nội dung bài trong sgk và dài khoảng 2-4 dòng.
+        
+        OUTPUT JSON (Mảng duy nhất):
+        [
+            { "type": "MCQ", "part": 1, "q": "...", "a": ["A", "B", "C", "D"], "correct": 0 },
+            { "type": "TF", "part": 2, "q": "...", "items": [ { "text": "...", "isTrue": true }, ... ] },
+            { "type": "SA", "part": 3, "q": "...", "correct": "..." }
+        ]`;
       
       const result = await model.generateContent(prompt);
-      const cleanText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+      const text = result.response.text();
+      const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
       const aiQuestions = JSON.parse(cleanText).map(q => ({
           ...q, id: Date.now() + Math.random(), aImages: [], a: q.a || ['', '', '', ''], correct: q.correct ?? '',
           items: q.type==='TF' ? q.items.map(i => ({...i, img: ''})) : null
@@ -636,19 +631,19 @@ const handleOpenPreview = () => {
   return (
     <div className="min-h-screen bg-slate-50 p-6 pb-32 font-sans text-slate-900">
       <input type="file" accept=".docx" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-      {/* INPUT MỚI CHO AI */}
-      <input type="file" accept=".docx" ref={fileInputSTEMRef} onChange={handleFileUploadSTEM} className="hidden" />
-      
       <input type="file" accept="image/*" ref={qImgRef} onChange={onFileChange} className="hidden" />
       <input type="file" accept="image/*" ref={aImgRef} onChange={onFileChange} className="hidden" />
 
       {/* MODAL AI */}
       {showAiModal && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl p-6 space-y-6">
-             <div className="flex justify-between items-center"><h2 className="text-xl font-bold">AI SOẠN ĐỀ</h2><button onClick={()=>setShowAiModal(false)}><X/></button></div>
-             {/* Form AI (giữ nguyên) */}
-             <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-in zoom-in duration-200">
+            <div className="bg-[#15803d] p-5 text-white flex justify-between items-center sticky top-0 z-10">
+              <h2 className="text-xl font-bold flex items-center gap-2"><BrainCircuit /> AI SOẠN ĐỀ (MA TRẬN MỚI)</h2>
+              <button onClick={() => setShowAiModal(false)}><X size={24}/></button>
+            </div>
+            <div className="p-6 space-y-6">
+                <div className="grid grid-cols-2 gap-4">
                     <div><label className="block text-sm font-bold text-emerald-700 mb-1">Khối lớp:</label><select value={aiLevel} onChange={(e) => setAiLevel(e.target.value)} className="w-full border p-2.5 rounded-lg">{GRADE_OPTIONS.map(g => <option key={g} value={g}>Khối {g}</option>)}</select></div>
                     <div><label className="block text-sm font-bold text-emerald-700 mb-1">Môn học:</label><select value={aiSubject} onChange={(e) => setAiSubject(e.target.value)} className="w-full border p-2.5 rounded-lg">{SUBJECT_OPTIONS.map((sub, i) => <option key={i} value={sub}>{sub}</option>)}</select></div>
                 </div>
@@ -660,7 +655,8 @@ const handleOpenPreview = () => {
                     <div className="bg-white p-3 rounded-lg border border-red-500"><div className="flex items-center justify-between mb-2"><span className="text-red-600 font-bold text-sm">P2: Đúng / Sai</span><div className="flex items-center gap-2"><span className="text-xs font-bold text-gray-700">Số câu lớn:</span><input type="number" min="0" className="w-16 border-2 border-red-200 p-1 rounded text-center font-black text-red-600" value={matrix.ds_count} onChange={(e)=>setMatrix({...matrix, ds_count: e.target.value})} /></div></div><div className="bg-red-50 p-2 rounded border border-red-100"><div className="text-[10px] text-red-500 font-bold mb-1 uppercase">Phân bổ ý con:</div><div className="grid grid-cols-3 gap-4"><div className="flex items-center gap-2"><span className="text-xs font-bold w-12">Ý Biết</span><input type="number" min="0" className="w-full border p-2 rounded text-center" value={matrix.ds_biet} onChange={(e)=>setMatrix({...matrix, ds_biet: e.target.value})} /></div><div className="flex items-center gap-2"><span className="text-xs font-bold w-12">Ý Hiểu</span><input type="number" min="0" className="w-full border p-2 rounded text-center" value={matrix.ds_hieu} onChange={(e)=>setMatrix({...matrix, ds_hieu: e.target.value})} /></div><div className="flex items-center gap-2"><span className="text-xs font-bold w-12">V.Dụng</span><input type="number" min="0" className="w-full border p-2 rounded text-center" value={matrix.ds_vd} onChange={(e)=>setMatrix({...matrix, ds_vd: e.target.value})} /></div></div></div></div>
                     <div className="bg-white p-3 rounded-lg border border-green-500"><div className="text-green-700 font-bold text-sm mb-2">P3: Trả lời ngắn</div><div className="grid grid-cols-3 gap-4"><div className="flex items-center gap-2"><span className="text-xs font-bold w-12">Biết</span><input type="number" min="0" className="w-full border p-2 rounded text-center text-green-700 font-bold" value={matrix.tl_biet} onChange={(e)=>setMatrix({...matrix, tl_biet: e.target.value})} /></div><div className="flex items-center gap-2"><span className="text-xs font-bold w-12">Hiểu</span><input type="number" min="0" className="w-full border p-2 rounded text-center text-green-700 font-bold" value={matrix.tl_hieu} onChange={(e)=>setMatrix({...matrix, tl_hieu: e.target.value})} /></div><div className="flex items-center gap-2"><span className="text-xs font-bold w-12">V.Dụng</span><input type="number" min="0" className="w-full border p-2 rounded text-center text-green-700 font-bold" value={matrix.tl_vd} onChange={(e)=>setMatrix({...matrix, tl_vd: e.target.value})} /></div></div></div>
                 </div>
-             <button onClick={handleGenerateAI} disabled={aiLoading} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold">{aiLoading?<Loader2 className="animate-spin mx-auto"/>:"BẮT ĐẦU"}</button>
+                <button onClick={handleGenerateAI} disabled={aiLoading} className="w-full bg-[#15803d] py-3 text-white font-bold rounded-xl shadow-lg">{aiLoading ? <Loader2 className="animate-spin mx-auto"/> : "BẮT ĐẦU TẠO ĐỀ"}</button>
+            </div>
           </div>
         </div>
       )}
@@ -669,22 +665,20 @@ const handleOpenPreview = () => {
       <header className="max-w-6xl mx-auto flex justify-between items-center mb-8 sticky top-0 bg-slate-50/95 backdrop-blur z-20 py-4 border-b border-slate-200">
         <button onClick={() => router.back()} className="flex items-center gap-2 text-gray-500 hover:text-slate-900 font-bold"><ArrowLeft /> Quay lại</button>
         <div className="flex gap-3">
-            <a href="/mauuploadde.docx" download>📥 Tải mẫu</a>
-          
-          {/* NÚT UPLOAD WORD (CƠ BẢN/XÃ HỘI) */}
-          <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow transition"><Upload size={18} /> Upload Word (Cơ Bản)</button>
-          
-          {/* NÚT UPLOAD WORD (AI/TOÁN LÝ HOÁ) */}
-          <button onClick={() => fileInputSTEMRef.current.click()} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold shadow transition animate-pulse"><Atom size={18} /> Upload AI (STEM)</button>
-
+            <a href="/mauuploadde.docx" download> 📥 Tải mẫu đề</a>
+{/* --- [MỚI] NÚT UPLOAD AI TOÁN/LÝ/HOÁ --- */}
+          <input type="file" accept=".docx" ref={fileInputSTEMRef} onChange={handleFileUploadSTEM} className="hidden" />
+          <button onClick={() => fileInputSTEMRef.current.click()} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold shadow transition animate-pulse">
+              <BrainCircuit size={18} /> Upload AI (Toán/Lý)
+          </button>
+          <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow transition"><Upload size={18} /> Upload Word</button>
           <button onClick={() => setShowAiModal(true)} className="flex items-center gap-2 bg-[#15803d] hover:bg-emerald-800 text-white px-4 py-2 rounded-lg font-bold shadow transition animate-pulse"><Sparkles size={18} /> AI Soạn Đề</button>
-          <button onClick={handleOpenPreview} className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold shadow transition"><Eye size={18} /> Xem trước</button>
-          <button onClick={handleSave} disabled={loading || imgUploading} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition">{loading || imgUploading ? <Loader2 className="animate-spin"/> : <><Save size={18} /> Lưu</>}</button>
+            <button onClick={handleOpenPreview} className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold shadow transition"><Eye size={18} /> Xem trước đề</button>
+          <button onClick={handleSave} disabled={loading || imgUploading} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition">{loading || imgUploading ? <Loader2 className="animate-spin"/> : <><Save size={18} /> Lưu Đề Thi</>}</button>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto space-y-6">
-        {/* ... (Giữ nguyên các phần UI: Thông tin chung, Cấu trúc điểm...) */}
         {/* KHUNG THÔNG TIN CHUNG */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <div className="flex justify-between items-center mb-4">
@@ -878,7 +872,7 @@ const handleOpenPreview = () => {
                             {/* [NEW] Render Inline Image cho đáp án */}
                             {renderWithInlineImage(ans, q.aImages?.[aIdx])}
                             {/* Fallback ảnh block cũ */}
-                            {q.aImages && q.aImages[aIdx] && !ans.includes('[img') && (
+                            {q.aImages && q.aImages[aIdx] && !ans.includes('[img]') && (
                                 <img src={q.aImages[aIdx]} className="max-h-32 mt-1 rounded border object-contain"/>
                             )}
                         </div>

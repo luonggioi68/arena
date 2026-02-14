@@ -616,7 +616,8 @@ export default function Dashboard() {
                                     <select value={userConfig.geminiModel} onChange={e=>setUserConfig({...userConfig, geminiModel: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500">
                                         <option value="gemini-3-flash-preview">gemini-3-flash-preview(free)</option>
                                         <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
-                                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
+                                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Nhanh free)</option>                                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
+                                        <option value="gemini-1.5-pro">Gemini-1.5-pro</option>
                                     </select>
                                 </div>
                             </div>
