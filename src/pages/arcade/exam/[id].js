@@ -301,8 +301,8 @@ export default function ArcadeExamMode() {
                 
                 <div className="p-6 relative z-10">
                     {/* Nội dung câu hỏi */}
-                    <div className="text-lg md:text-xl text-slate-200 leading-relaxed font-bold mb-6">
-                         {renderWithInlineImage(q.q, q.img)}
+                    <div className="text-lg md:text-xl text-slate-200 leading-relaxed font-bold mb-6 overflow-x-auto break-words pb-2">
+                          {renderWithInlineImage(q.q, q.img)}
                     </div>
 
                     {q.img && !q.q.includes('[img]') && (
@@ -328,10 +328,10 @@ export default function ArcadeExamMode() {
                                         <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-black text-sm shrink-0 ${isSelected ? 'border-orange-500 bg-orange-500 text-black' : 'border-slate-600 text-slate-500'}`}>
                                             {String.fromCharCode(65 + aIdx)}
                                         </div>
-                                        <div className="flex-1 text-[16px] font-medium pt-1">
-                                            {renderWithInlineImage(ans, q.aImages?.[aIdx])}
-                                            {q.aImages?.[aIdx] && !ans.includes('[img]') && <img src={q.aImages[aIdx]} className="h-20 w-auto mt-2 rounded border border-slate-600 block object-contain"/>}
-                                        </div>
+                                       <div className="flex-1 text-[16px] font-medium pt-1 overflow-x-auto break-words">
+    {renderWithInlineImage(ans, q.aImages?.[aIdx])}
+    {q.aImages?.[aIdx] && !ans.includes('[img]') && <img src={q.aImages[aIdx]} className="h-20 w-auto mt-2 rounded border border-slate-600 block object-contain"/>}
+</div>
                                     </button>
                                 ); 
                             })}
@@ -357,10 +357,10 @@ export default function ArcadeExamMode() {
                                                 <td className="px-4 py-3 text-[16px] text-slate-300 font-bold">
                                                     <div className="flex gap-2">
                                                         <span className="font-bold text-orange-600/70">{String.fromCharCode(97 + idx)})</span>
-                                                        <div className="flex-1">
-                                                            {renderWithInlineImage(item.text, item.img)}
-                                                            {item.img && !item.text.includes('[img]') && <img src={item.img} className="h-16 mt-2 rounded border border-slate-600 block object-contain"/>}
-                                                        </div>
+                                                      <div className="flex-1 overflow-x-auto break-words w-full">
+    {renderWithInlineImage(item.text, item.img)}
+    {item.img && !item.text.includes('[img]') && <img src={item.img} className="h-16 mt-2 rounded border border-slate-600 block object-contain"/>}
+</div>
                                                     </div>
                                                 </td>
                                                 <td className="text-center align-middle border-l border-slate-700">

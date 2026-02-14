@@ -527,7 +527,7 @@ export default function CreateQuiz() {
     }
   };
 
- const handleGenerateAI = async () => {
+const handleGenerateAI = async () => {
     if (!aiTopic) return alert("Thầy chưa nhập chủ đề!");
     const countTN = parseInt(matrix.tn_biet) + parseInt(matrix.tn_hieu) + parseInt(matrix.tn_vd);
     const countDS = parseInt(matrix.ds_count);
@@ -538,54 +538,65 @@ export default function CreateQuiz() {
     try {
        const userConfigDoc = await getDoc(doc(firestore, "user_configs", user.uid));
        if (!userConfigDoc.exists()) throw new Error("Chưa tìm thấy cấu hình API Key.");
-       const config = userConfigDoc.data(); 
-       const apiKey = config.geminiKey; 
+       const config = userConfigDoc.data();
+       const apiKey = config.geminiKey;
        const modelName = config.geminiModel || "gemini-1.5-flash"; 
        if (!apiKey) throw new Error("Chưa nhập API Key trong phần Cấu hình!");
        
-       const dynamicGenAI = new GoogleGenerativeAI(apiKey); 
+       const dynamicGenAI = new GoogleGenerativeAI(apiKey);
        const model = dynamicGenAI.getGenerativeModel({ model: modelName });
-       
-       // [FIX 1] ÉP AI KHÔNG ĐƯỢC CHÀO HỎI
-       const prompt = `
+
+      // [SỬA LẠI PROMPT LÀM RÕ CẤU TRÚC ĐỂ AI KHÔNG QUÊN]
+      const prompt = `
         Đóng vai giáo viên môn ${aiSubject} lớp ${aiLevel}. Soạn đề thi chủ đề: "${aiTopic}".
         Tài liệu tham khảo: ${aiSource}
-        CẤU TRÚC: P1 (TN): ${countTN} câu. P2 (ĐS): ${matrix.ds_count} câu lớn. P3 (TL): ${countTL} câu.
+        TUYỆT ĐỐI ĐÁP ÁN KHÔNG ĐƯỢC XUẤT RA CÂU TRẢ LỜI DẠNG TẤT CẢ ĐỀU ĐÚNG, A VÀ B ĐỀU ĐÚNG, HOẶC A VÀ B ĐỀU SAI. Mỗi câu hỏi phải có một đáp án đúng duy nhất.
+        CẤU TRÚC ĐỀ THI:
+        - PHẦN 1 (Trắc nghiệm): Tổng ${countTN} câu (${matrix.tn_biet} Biết, ${matrix.tn_hieu} Hiểu, ${matrix.tn_vd} Vận dụng).
+        - PHẦN 2 (Đúng/Sai): Tổng ${matrix.ds_count} câu lớn. Mỗi câu BẮT BUỘC CÓ 4 ý con (${matrix.ds_biet} Biết, ${matrix.ds_hieu} Hiểu, ${matrix.ds_vd} Vận dụng).
+        - PHẦN 3 (Trả lời ngắn): Tổng ${countTL} câu (${matrix.tl_biet} Biết, ${matrix.tl_hieu} Hiểu, ${matrix.tl_vd} Vận dụng).
         
         YÊU CẦU BẮT BUỘC:
-        1. KHÔNG trả lời dư thừa, KHÔNG chào hỏi, KHÔNG giải thích.
-        2. Nếu có công thức Toán, phải viết dưới dạng LaTeX $...$ và NHỚ ESCAPE dấu backslash (ví dụ \\frac thay vì \frac).
+        1. Tuyệt đối KHÔNG chào hỏi, KHÔNG giải thích thêm. Chỉ in ra chuỗi JSON.
+        2. Công thức Toán phải dùng LaTeX kẹp trong $...$.
         3. CHỈ dùng dấu $...$ cho công thức phức tạp như: mũ, căn bậc hai,logaric, công thức hoá học, vật lý (ví dụ: $\\frac{1}{2}$, $\\sqrt{x}$,). Công thức đơn giản như số, biến, biểu thức đơn giản,... (ví dụ: x > 0, 2x+2=0,..) KHÔNG cần dấu $.
-        4. CHỈ TRẢ VỀ DUY NHẤT 1 MẢNG JSON có cấu trúc sau:
-        [ { "type": "MCQ", "part": 1, "q": "...", "a": ["A", "B", "C", "D"], "correct": 0 }, ... ]`;
+        4. Ký tự backslash (\\) trong LaTeX phải được escape thành (\\\\). (Ví dụ: "\\\\frac" thay vì "\\frac").
+        5. ĐỐI VỚI CÂU ĐÚNG/SAI (TF), BẮT BUỘC PHẢI CÓ MẢNG "items" chứa 4 ý.
+        
+        OUTPUT CHỈ LÀ 1 MẢNG JSON CÓ CẤU TRÚC NHƯ SAU:
+        [
+            { "type": "MCQ", "part": 1, "q": "...", "a": ["A", "B", "C", "D"], "correct": 0 },
+            { "type": "TF", "part": 2, "q": "...", "items": [ { "text": "...", "isTrue": true }, { "text": "...", "isTrue": false }, { "text": "...", "isTrue": true }, { "text": "...", "isTrue": false } ] },
+            { "type": "SA", "part": 3, "q": "...", "correct": "..." }
+        ]`;
       
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      
-      // [FIX 2] TÌM VÀ CẮT CHÍNH XÁC MẢNG JSON (Bỏ qua câu chào hỏi nếu AI vẫn lỡ lờ)
+
+      // [FIX 1: BẮT CHÍNH XÁC MẢNG JSON, BỎ QUA CÂU CHÀO HỎI THỪA]
       const jsonMatch = text.match(/\[[\s\S]*\]/);
       if (!jsonMatch) throw new Error("AI không trả về đúng định dạng JSON.");
-      
-      let cleanJson = jsonMatch[0];
+      let cleanText = jsonMatch[0];
 
-      // [FIX 3] LỌC LỖI CÔNG THỨC TOÁN (Giống hệt phần Upload STEM)
-      cleanJson = cleanJson.replace(/\\\\/g, '\\');
-      cleanJson = cleanJson.replace(/\\/g, '\\\\');
-      cleanJson = cleanJson.replace(/\\\\"/g, '\\"');
+      // [FIX 2: SỬA LỖI CÔNG THỨC TOÁN BỊ SAI ESCAPE NHƯ BÊN UPLOAD]
+      cleanText = cleanText.replace(/\\\\/g, '\\');
+      cleanText = cleanText.replace(/\\/g, '\\\\');
+      cleanText = cleanText.replace(/\\\\"/g, '\\"');
 
-      const aiQuestions = JSON.parse(cleanJson).map(q => ({ 
+      // [FIX 3: BỌC (q.items || []) ĐỂ CHỐNG LỖI UNDEFINED KHI .MAP()]
+      const aiQuestions = JSON.parse(cleanText).map(q => ({
           ...q, 
           id: Date.now() + Math.random(), 
           aImages: [], 
-          a: q.a || ['', '', '', ''], 
-          correct: q.correct ?? '', 
-          items: q.type === 'TF' ? q.items.map(i => ({...i, img: ''})) : null 
+          a: Array.isArray(q.a) ? q.a : ['', '', '', ''], 
+          correct: q.correct ?? '',
+          items: q.type === 'TF' ? (q.items || []).map(i => ({...i, img: ''})) : null
       }));
-      
-      setQuestions([...questions, ...aiQuestions]); 
+
+      setQuestions([...questions, ...aiQuestions]);
       setShowAiModal(false);
       setMatrix({ tn_biet: 0, tn_hieu: 0, tn_vd: 0, ds_count: 0, ds_biet: 0, ds_hieu: 0, ds_vd: 0, tl_biet: 0, tl_hieu: 0, tl_vd: 0 });
-      alert(`🎉 Đã tạo ${aiQuestions.length} câu hỏi!`);
+      alert(`🎉 Đã tạo thành công ${aiQuestions.length} câu hỏi!`);
       
     } catch (error) { 
         console.error(error); 
@@ -675,11 +686,18 @@ const handleOpenPreview = () => {
       <input type="file" accept="image/*" ref={aImgRef} onChange={onFileChange} className="hidden" />
 
       {/* MODAL AI */}
-      {showAiModal && (
+    {showAiModal && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl p-6 space-y-6">
-             <div className="flex justify-between items-center"><h2 className="text-xl font-bold">AI SOẠN ĐỀ</h2><button onClick={()=>setShowAiModal(false)}><X/></button></div>
-             {/* Form AI (giữ nguyên) */}
+          
+          {/* THÊM max-h-[90vh] và overflow-y-auto Ở ĐÂY ĐỂ BẢNG TỰ THU VỪA MÀN HÌNH VÀ CÓ THANH CUỘN */}
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 space-y-6 relative">
+             
+             {/* Đã thêm sticky top-0 để Tiêu đề và nút Tắt luôn đứng im khi cuộn */}
+             <div className="flex justify-between items-center sticky top-0 bg-white z-10 pb-2 border-b">
+                 <h2 className="text-xl font-bold">AI SOẠN ĐỀ</h2>
+                 <button onClick={()=>setShowAiModal(false)} className="hover:bg-slate-100 p-1 rounded-full transition"><X/></button>
+             </div>
+             
              <div className="grid grid-cols-2 gap-4">
                     <div><label className="block text-sm font-bold text-emerald-700 mb-1">Khối lớp:</label><select value={aiLevel} onChange={(e) => setAiLevel(e.target.value)} className="w-full border p-2.5 rounded-lg">{GRADE_OPTIONS.map(g => <option key={g} value={g}>Khối {g}</option>)}</select></div>
                     <div><label className="block text-sm font-bold text-emerald-700 mb-1">Môn học:</label><select value={aiSubject} onChange={(e) => setAiSubject(e.target.value)} className="w-full border p-2.5 rounded-lg">{SUBJECT_OPTIONS.map((sub, i) => <option key={i} value={sub}>{sub}</option>)}</select></div>
@@ -692,7 +710,12 @@ const handleOpenPreview = () => {
                     <div className="bg-white p-3 rounded-lg border border-red-500"><div className="flex items-center justify-between mb-2"><span className="text-red-600 font-bold text-sm">P2: Đúng / Sai</span><div className="flex items-center gap-2"><span className="text-xs font-bold text-gray-700">Số câu lớn:</span><input type="number" min="0" className="w-16 border-2 border-red-200 p-1 rounded text-center font-black text-red-600" value={matrix.ds_count} onChange={(e)=>setMatrix({...matrix, ds_count: e.target.value})} /></div></div><div className="bg-red-50 p-2 rounded border border-red-100"><div className="text-[10px] text-red-500 font-bold mb-1 uppercase">Phân bổ ý con:</div><div className="grid grid-cols-3 gap-4"><div className="flex items-center gap-2"><span className="text-xs font-bold w-12">Ý Biết</span><input type="number" min="0" className="w-full border p-2 rounded text-center" value={matrix.ds_biet} onChange={(e)=>setMatrix({...matrix, ds_biet: e.target.value})} /></div><div className="flex items-center gap-2"><span className="text-xs font-bold w-12">Ý Hiểu</span><input type="number" min="0" className="w-full border p-2 rounded text-center" value={matrix.ds_hieu} onChange={(e)=>setMatrix({...matrix, ds_hieu: e.target.value})} /></div><div className="flex items-center gap-2"><span className="text-xs font-bold w-12">V.Dụng</span><input type="number" min="0" className="w-full border p-2 rounded text-center" value={matrix.ds_vd} onChange={(e)=>setMatrix({...matrix, ds_vd: e.target.value})} /></div></div></div></div>
                     <div className="bg-white p-3 rounded-lg border border-green-500"><div className="text-green-700 font-bold text-sm mb-2">P3: Trả lời ngắn</div><div className="grid grid-cols-3 gap-4"><div className="flex items-center gap-2"><span className="text-xs font-bold w-12">Biết</span><input type="number" min="0" className="w-full border p-2 rounded text-center text-green-700 font-bold" value={matrix.tl_biet} onChange={(e)=>setMatrix({...matrix, tl_biet: e.target.value})} /></div><div className="flex items-center gap-2"><span className="text-xs font-bold w-12">Hiểu</span><input type="number" min="0" className="w-full border p-2 rounded text-center text-green-700 font-bold" value={matrix.tl_hieu} onChange={(e)=>setMatrix({...matrix, tl_hieu: e.target.value})} /></div><div className="flex items-center gap-2"><span className="text-xs font-bold w-12">V.Dụng</span><input type="number" min="0" className="w-full border p-2 rounded text-center text-green-700 font-bold" value={matrix.tl_vd} onChange={(e)=>setMatrix({...matrix, tl_vd: e.target.value})} /></div></div></div>
                 </div>
-             <button onClick={handleGenerateAI} disabled={aiLoading} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold">{aiLoading?<Loader2 className="animate-spin mx-auto"/>:"BẮT ĐẦU"}</button>
+                
+             {/* Đã thêm sticky bottom-0 để Nút luôn nằm dưới cùng khi cuộn */}
+             <div className="sticky bottom-0 bg-white pt-2">
+                 <button onClick={handleGenerateAI} disabled={aiLoading} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 transition">{aiLoading?<Loader2 className="animate-spin mx-auto"/>:"BẮT ĐẦU"}</button>
+             </div>
+             
           </div>
         </div>
       )}
