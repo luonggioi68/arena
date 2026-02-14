@@ -527,40 +527,72 @@ export default function CreateQuiz() {
     }
   };
 
-  const handleGenerateAI = async () => {
+ const handleGenerateAI = async () => {
     if (!aiTopic) return alert("Thầy chưa nhập chủ đề!");
     const countTN = parseInt(matrix.tn_biet) + parseInt(matrix.tn_hieu) + parseInt(matrix.tn_vd);
     const countDS = parseInt(matrix.ds_count);
     const countTL = parseInt(matrix.tl_biet) + parseInt(matrix.tl_hieu) + parseInt(matrix.tl_vd);
     if (countTN + countDS + countTL === 0) return alert("Vui lòng nhập số lượng câu hỏi!");
+    
     setAiLoading(true);
     try {
        const userConfigDoc = await getDoc(doc(firestore, "user_configs", user.uid));
        if (!userConfigDoc.exists()) throw new Error("Chưa tìm thấy cấu hình API Key.");
-       const config = userConfigDoc.data();
-       const apiKey = config.geminiKey;
+       const config = userConfigDoc.data(); 
+       const apiKey = config.geminiKey; 
        const modelName = config.geminiModel || "gemini-1.5-flash"; 
        if (!apiKey) throw new Error("Chưa nhập API Key trong phần Cấu hình!");
-       const dynamicGenAI = new GoogleGenerativeAI(apiKey);
+       
+       const dynamicGenAI = new GoogleGenerativeAI(apiKey); 
        const model = dynamicGenAI.getGenerativeModel({ model: modelName });
-
-      const prompt = `
+       
+       // [FIX 1] ÉP AI KHÔNG ĐƯỢC CHÀO HỎI
+       const prompt = `
         Đóng vai giáo viên môn ${aiSubject} lớp ${aiLevel}. Soạn đề thi chủ đề: "${aiTopic}".
         Tài liệu tham khảo: ${aiSource}
         CẤU TRÚC: P1 (TN): ${countTN} câu. P2 (ĐS): ${matrix.ds_count} câu lớn. P3 (TL): ${countTL} câu.
-        OUTPUT JSON: [ { "type": "MCQ", "part": 1, "q": "...", "a": ["A", "B", "C", "D"], "correct": 0 }, ... ]`;
+        
+        YÊU CẦU BẮT BUỘC:
+        1. KHÔNG trả lời dư thừa, KHÔNG chào hỏi, KHÔNG giải thích.
+        2. Nếu có công thức Toán, phải viết dưới dạng LaTeX $...$ và NHỚ ESCAPE dấu backslash (ví dụ \\frac thay vì \frac).
+        3. CHỈ dùng dấu $...$ cho công thức phức tạp như: mũ, căn bậc hai,logaric, công thức hoá học, vật lý (ví dụ: $\\frac{1}{2}$, $\\sqrt{x}$,). Công thức đơn giản như số, biến, biểu thức đơn giản,... (ví dụ: x > 0, 2x+2=0,..) KHÔNG cần dấu $.
+        4. CHỈ TRẢ VỀ DUY NHẤT 1 MẢNG JSON có cấu trúc sau:
+        [ { "type": "MCQ", "part": 1, "q": "...", "a": ["A", "B", "C", "D"], "correct": 0 }, ... ]`;
       
       const result = await model.generateContent(prompt);
-      const cleanText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-      const aiQuestions = JSON.parse(cleanText).map(q => ({
-          ...q, id: Date.now() + Math.random(), aImages: [], a: q.a || ['', '', '', ''], correct: q.correct ?? '',
-          items: q.type==='TF' ? q.items.map(i => ({...i, img: ''})) : null
+      const text = result.response.text();
+      
+      // [FIX 2] TÌM VÀ CẮT CHÍNH XÁC MẢNG JSON (Bỏ qua câu chào hỏi nếu AI vẫn lỡ lờ)
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) throw new Error("AI không trả về đúng định dạng JSON.");
+      
+      let cleanJson = jsonMatch[0];
+
+      // [FIX 3] LỌC LỖI CÔNG THỨC TOÁN (Giống hệt phần Upload STEM)
+      cleanJson = cleanJson.replace(/\\\\/g, '\\');
+      cleanJson = cleanJson.replace(/\\/g, '\\\\');
+      cleanJson = cleanJson.replace(/\\\\"/g, '\\"');
+
+      const aiQuestions = JSON.parse(cleanJson).map(q => ({ 
+          ...q, 
+          id: Date.now() + Math.random(), 
+          aImages: [], 
+          a: q.a || ['', '', '', ''], 
+          correct: q.correct ?? '', 
+          items: q.type === 'TF' ? q.items.map(i => ({...i, img: ''})) : null 
       }));
-      setQuestions([...questions, ...aiQuestions]);
+      
+      setQuestions([...questions, ...aiQuestions]); 
       setShowAiModal(false);
       setMatrix({ tn_biet: 0, tn_hieu: 0, tn_vd: 0, ds_count: 0, ds_biet: 0, ds_hieu: 0, ds_vd: 0, tl_biet: 0, tl_hieu: 0, tl_vd: 0 });
-      alert(`🎉 Đã tạo thành công ${aiQuestions.length} câu hỏi!`);
-    } catch (error) { console.error(error); alert("Lỗi AI: " + error.message); } finally { setAiLoading(false); }
+      alert(`🎉 Đã tạo ${aiQuestions.length} câu hỏi!`);
+      
+    } catch (error) { 
+        console.error(error); 
+        alert("Lỗi AI: " + error.message); 
+    } finally { 
+        setAiLoading(false); 
+    }
   };
 
   const addQuestion = (type) => {
