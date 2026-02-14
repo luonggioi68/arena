@@ -285,19 +285,67 @@ export default function LightningArenaPlayer() {
       </div>
   );
 
+  // --- [MỚI] MÀN HÌNH VINH DANH HOÀNH TRÁNG ---
   if (roomData.status === 'FINISHED') {
+      // Tính toán thứ hạng của học sinh
+      const sortedPlayers = Object.values(roomData.players || {}).sort((a, b) => b.score - a.score);
+      const myRankIndex = sortedPlayers.findIndex(p => p.id === playerId);
+      const myRank = myRankIndex !== -1 ? myRankIndex + 1 : '-';
+      
+      let rankDisplay = `HẠNG ${myRank}`;
+      let rankColor = 'text-white';
+      let bgGlow = 'bg-blue-500';
+      let icon = <Crown size={80} className="text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.5)] animate-bounce"/>;
+
+      if (myRank === 1) { 
+          rankDisplay = '🥇 QUÁN QUÂN'; 
+          rankColor = 'text-yellow-400'; 
+          bgGlow = 'bg-yellow-500'; 
+          icon = <Trophy size={100} className="text-yellow-400 drop-shadow-[0_0_20px_rgba(250,204,21,0.8)] animate-bounce"/>;
+      }
+      else if (myRank === 2) { 
+          rankDisplay = '🥈 Á QUÂN'; 
+          rankColor = 'text-slate-300'; 
+          bgGlow = 'bg-slate-400'; 
+          icon = <Trophy size={90} className="text-slate-300 drop-shadow-[0_0_20px_rgba(203,213,225,0.8)] animate-bounce"/>;
+      }
+      else if (myRank === 3) { 
+          rankDisplay = '🥉 QUÝ QUÂN'; 
+          rankColor = 'text-orange-400'; 
+          bgGlow = 'bg-orange-500'; 
+          icon = <Trophy size={80} className="text-orange-400 drop-shadow-[0_0_20px_rgba(251,146,60,0.8)] animate-bounce"/>;
+      }
+
       return (
-          <div className="h-screen bg-[#020617] flex flex-col items-center justify-center text-center text-white p-4 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
-              <div className="relative mb-6">
-                  <div className="absolute inset-0 bg-yellow-500 blur-[60px] opacity-30"></div>
-                  <Trophy size={120} className="text-yellow-400 relative z-10 drop-shadow-[0_10px_20px_rgba(250,204,21,0.5)] animate-bounce"/>
+          <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center text-center text-white p-4 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
+              <div className="relative mb-6 mt-8">
+                  <div className={`absolute inset-0 ${bgGlow} blur-[60px] opacity-30`}></div>
+                  <div className="relative z-10">{icon}</div>
               </div>
-              <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white via-yellow-200 to-orange-500 italic uppercase mb-2 tracking-tighter drop-shadow-md">TỔNG KẾT</h1>
-              <div className="bg-slate-900/80 border border-white/10 p-8 rounded-[2rem] shadow-2xl mt-6 w-full max-w-sm backdrop-blur-md">
-                  <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-[10px] mb-2">Điểm số đạt được</p>
-                  <p className="text-6xl font-black text-white font-mono leading-none">{localScore}</p>
+              <h1 className="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white via-yellow-200 to-orange-500 italic uppercase mb-2 tracking-tighter drop-shadow-md">VINH DANH</h1>
+              
+              <div className="bg-slate-900/80 border border-white/10 p-6 md:p-8 rounded-[2rem] shadow-2xl mt-6 w-full max-w-sm backdrop-blur-md relative overflow-hidden animate-in zoom-in duration-500">
+                  <div className={`absolute top-0 left-0 w-full h-2 ${bgGlow}`}></div>
+                  
+                  <div className="flex flex-col items-center mb-6">
+                      <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${name}`} className="w-16 h-16 rounded-full bg-slate-800 border-2 border-slate-600 mb-3" />
+                      <h2 className="text-xl font-bold text-slate-300 uppercase">{name}</h2>
+                  </div>
+
+                  <div className={`text-3xl md:text-4xl font-black ${rankColor} mb-6 uppercase tracking-widest drop-shadow-md`}>{rankDisplay}</div>
+                  
+                  <div className="space-y-3">
+                      <div className="flex justify-between items-center bg-black/40 p-4 rounded-xl border border-white/5">
+                          <span className="text-slate-400 font-bold uppercase text-xs">Điểm số</span>
+                          <span className="text-3xl font-black text-yellow-400 font-mono">{localScore}</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-black/40 p-4 rounded-xl border border-white/5">
+                          <span className="text-slate-400 font-bold uppercase text-xs">Ô đã chiếm</span>
+                          <span className="text-xl font-bold text-cyan-400 font-mono">{roomData.players?.[playerId]?.captured || 0}</span>
+                      </div>
+                  </div>
               </div>
-              <button onClick={() => router.push('/')} className="mt-10 text-slate-400 hover:text-white border-b border-slate-700 hover:border-white pb-1 font-bold uppercase text-xs tracking-widest transition">Về Trang Chủ</button>
+              <button onClick={handleLeave} className="mt-10 text-slate-400 hover:text-white border-b border-slate-700 hover:border-white pb-1 font-bold uppercase text-xs tracking-widest transition">Về Trang Chủ</button>
           </div>
       );
   }
@@ -388,12 +436,10 @@ export default function LightningArenaPlayer() {
                     )}
 
                     <div className="flex-1 overflow-y-auto p-6">
-                        {/* HIỂN THỊ CÂU HỎI (ĐÃ SỬA LỖI) */}
                         <div className="text-center mb-6">
                             <h2 className="text-xl md:text-2xl font-bold text-white leading-relaxed">
                                 {renderWithInlineImage(activeQ.q, activeQ.img)}
                             </h2>
-                            {/* Hiển thị ảnh khối nếu không có thẻ [img] trong text */}
                             {activeQ.img && !activeQ.q.includes('[img]') && (
                                 <img src={activeQ.img} className="mx-auto mt-4 max-h-48 w-auto object-contain rounded-xl border-2 border-slate-700 bg-black shadow-lg"/>
                             )}
