@@ -704,10 +704,10 @@ const handleOpenPreview = () => {
             <a href="/mauuploadde.docx" download>📥 Tải mẫu</a>
           
           {/* NÚT UPLOAD WORD (CƠ BẢN/XÃ HỘI) */}
-          <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow transition"><Upload size={18} /> Upload Word (Cơ Bản)</button>
+          <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow transition"><Upload size={18} /> Up Word(Xã hội)</button>
           
           {/* NÚT UPLOAD WORD (AI/TOÁN LÝ HOÁ) */}
-          <button onClick={() => fileInputSTEMRef.current.click()} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold shadow transition animate-pulse"><Atom size={18} /> Upload AI (STEM)</button>
+          <button onClick={() => fileInputSTEMRef.current.click()} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold shadow transition animate-pulse"><Atom size={18} /> Up AI(Toán,lí,hoá)</button>
 
           <button onClick={() => setShowAiModal(true)} className="flex items-center gap-2 bg-[#15803d] hover:bg-emerald-800 text-white px-4 py-2 rounded-lg font-bold shadow transition animate-pulse"><Sparkles size={18} /> AI Soạn Đề</button>
           <button onClick={handleOpenPreview} className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold shadow transition"><Eye size={18} /> Xem trước</button>
