@@ -149,7 +149,42 @@ export default function ExamRoom() {
   }, [loading, submitted, timeLeft]);
 
   const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+// 3.5 BẢO VỆ NÚT BACK VÀ F5 (CHỐNG MẤT BÀI)
+  useEffect(() => {
+    if (loading || submitted) return;
 
+    // A. Chặn học sinh bấm F5 (Tải lại trang) hoặc Tắt hẳn tab
+    const handleBeforeUnload = (e) => {
+        e.preventDefault();
+        e.returnValue = 'Bạn đang làm bài thi! Nếu tải lại trang, toàn bộ kết quả sẽ bị mất.';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // B. Chặn học sinh bấm nút Back/Forward của trình duyệt (Cơ chế của Next.js)
+    const handleRouteChangeStart = (url) => {
+        // Nếu không phải đang trong quá trình nộp bài hợp lệ
+        if (!isSubmittingRef.current) {
+            const confirmLeave = window.confirm("⛔ CẢNH BÁO: Bạn đang trong thời gian làm bài!\n\nNếu bạn rời khỏi trang này, bài làm của bạn sẽ TỰ ĐỘNG ĐƯỢC NỘP với số điểm hiện tại. Bạn có chắc chắn muốn thoát?");
+            
+            if (confirmLeave) {
+                // Nếu học sinh chọn "OK" -> Ép hệ thống tự động nộp bài luôn
+                handleSubmit(true, "Thoát trang đột ngột");
+            } else {
+                // Nếu học sinh chọn "Cancel" -> Hủy lệnh Back, giữ học sinh ở lại trang thi
+                router.events.emit('routeChangeError');
+                throw 'Hủy chuyển trang để bảo vệ bài thi.';
+            }
+        }
+    };
+
+    router.events.on('routeChangeStart', handleRouteChangeStart);
+
+    // Dọn dẹp sự kiện khi component unmount
+    return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+        router.events.off('routeChangeStart', handleRouteChangeStart);
+    };
+  }, [loading, submitted, answers]); // Thêm 'answers' vào đây để khi ép nộp bài, nó lấy được đáp án mới nhất
   // 4. LOGIC
   const handleAnswer = (qId, value, subIndex = null) => {
     if (submitted) return;
