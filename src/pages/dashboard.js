@@ -2,9 +2,9 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import useAuthStore from '@/store/useAuthStore';
 import { auth, firestore } from '@/lib/firebase';
-import { onAuthStateChanged, signOut, updatePassword } from 'firebase/auth'; // [MỚI] Thêm updatePassword
+import { onAuthStateChanged, signOut, updatePassword } from 'firebase/auth'; 
 import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, orderBy, addDoc, serverTimestamp, setDoc, getDoc } from 'firebase/firestore';
-import { Flag, Plus, Trash2, LogOut, Edit, Loader2, Shield, Gamepad2, FileText, BarChart3, Download, Search, Swords, Lock, Unlock, RefreshCw, MessageSquare, ExternalLink, Settings, UserPlus, CheckCircle, Save, Key, Users, GraduationCap, Clock, Image, LayoutTemplate, Upload, X, Hash, Link as LinkIcon, FolderOpen, QrCode, CheckSquare, Zap, UserCog, Calendar, AlertTriangle, Layers, Database, Eye, EyeOff, Archive, ArrowRightCircle } from 'lucide-react';
+import { Flag, Plus, Trash2, LogOut, Edit, Loader2, Shield, Gamepad2, FileText, BarChart3, Download, Search, Swords, Lock, Unlock, RefreshCw, MessageSquare, ExternalLink, Settings, UserPlus, CheckCircle, Save, Key, Users, GraduationCap, Clock, Image, LayoutTemplate, Upload, X, Hash, Link as LinkIcon, FolderOpen, QrCode, CheckSquare, Zap, UserCog, Calendar, AlertTriangle, Layers, Database, Eye, EyeOff, Archive, ArrowRightCircle, Menu } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ExpiryAlert from '@/components/ExpiryAlert';
 
@@ -58,6 +58,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
+  // [MỚI] State điều khiển Menu trên Mobile
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
   const [quizzes, setQuizzes] = useState([]);
   const [results, setResults] = useState([]);
   const [boards, setBoards] = useState([]);
@@ -73,7 +76,6 @@ export default function Dashboard() {
   const [newEmail, setNewEmail] = useState('');
   const [uploading, setUploading] = useState(false);
   
-  // [MỚI] State đổi mật khẩu
   const [newPassword, setNewPassword] = useState('');
   const [isChangingPass, setIsChangingPass] = useState(false);
   
@@ -161,7 +163,7 @@ export default function Dashboard() {
   const saveUserConfig = async (e) => { e.preventDefault(); try { await setDoc(doc(firestore, "user_configs", user.uid), { ...userConfig, email: user.email }); alert("✅ Đã cập nhật Mã Nộp Bài và Cấu hình!"); } catch (e) { alert(e.message); } };
   const saveHomeConfig = async (e) => { e.preventDefault(); try { await setDoc(doc(firestore, "system_config", "homepage"), homeConfig); alert("✅ Đã lưu!"); } catch (e) { alert(e.message); } };
 
-  // --- [MỚI] ĐỔI MẬT KHẨU ---
+  // --- ĐỔI MẬT KHẨU ---
   const handleChangePassword = async (e) => {
       e.preventDefault();
       if(newPassword.length < 6) return alert("Mật khẩu phải từ 6 ký tự!");
@@ -246,40 +248,69 @@ export default function Dashboard() {
     });
   }, [quizzes, repoGrade, repoSubject]);
 
-  // Kiểm tra tài khoản là Google hay Password
   const isPasswordUser = useMemo(() => user?.providerData?.some(p => p.providerId === 'password'), [user]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617] text-white"><Loader2 className="animate-spin" size={40}/></div>;
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-slate-200 font-sans selection:bg-orange-500 selection:text-white flex">
-      <aside className="fixed left-0 top-0 h-full w-64 bg-[#020617] text-white flex flex-col border-r border-white/10 shadow-2xl z-50">
-        <div className="p-6 border-b border-white/10"><div className="flex items-center gap-3 text-2xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600 uppercase tracking-tighter"><Shield fill="currentColor" className="text-orange-500" size={32}/> <span> Arena Edu<br/><span className="text-sm text-white not-italic tracking-widest font-normal">CONNECT</span></span></div></div>
-        <nav className="flex-1 p-4 space-y-2">
-            <button onClick={() => setActiveTab('LIBRARY')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'LIBRARY' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}><Gamepad2 size={20}/> ARENA KHO VŨ KHÍ</button>
-            <button onClick={() => setActiveTab('GAME_REPO')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'GAME_REPO' ? 'bg-rose-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}><Database size={20}/> ARENA KHO GAME</button>
+        
+      {/* NÚT MỞ MENU TRÊN MOBILE (Nút Hamburger) */}
+      <button 
+          onClick={() => setIsMobileMenuOpen(true)} 
+          className="lg:hidden fixed top-4 left-4 z-40 bg-[#1e293b] p-2 rounded-lg border border-white/10 text-white shadow-lg"
+      >
+          <Menu size={24} />
+      </button>
+
+      {/* LỚP PHỦ ĐEN TRÊN MOBILE KHI MỞ MENU */}
+      {isMobileMenuOpen && (
+          <div 
+              className="lg:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm transition-opacity"
+              onClick={() => setIsMobileMenuOpen(false)}
+          ></div>
+      )}
+
+      {/* SIDEBAR BÊN TRÁI - Giao diện chuẩn Responsive */}
+      <aside className={`fixed lg:static inset-y-0 left-0 w-64 bg-[#020617] text-white flex flex-col border-r border-white/10 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+        
+        <div className="p-6 border-b border-white/10 flex justify-between items-center">
+            <div className="flex items-center gap-3 text-xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600 uppercase tracking-tighter">
+                <Shield fill="currentColor" className="text-orange-500" size={28}/> 
+                <span> Arena Edu<br/><span className="text-xs text-white not-italic tracking-widest font-normal">CONNECT</span></span>
+            </div>
+            <button onClick={() => setIsMobileMenuOpen(false)} className="lg:hidden text-slate-400 hover:text-white p-1">
+                <X size={24}/>
+            </button>
+        </div>
+
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+            <button onClick={() => {setActiveTab('LIBRARY'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'LIBRARY' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:bg-white/5'}`}><Gamepad2 size={18}/> ARENA KHO VŨ KHÍ</button>
+            <button onClick={() => {setActiveTab('GAME_REPO'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'GAME_REPO' ? 'bg-rose-600 text-white shadow-lg shadow-rose-500/20' : 'text-slate-400 hover:bg-white/5'}`}><Database size={18}/> ARENA KHO GAME</button>
+            <button onClick={() => {setActiveTab('INTERACTIVE'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'INTERACTIVE' ? 'bg-orange-600 text-white shadow-lg shadow-orange-500/20' : 'text-slate-400 hover:bg-white/5'}`}><MessageSquare size={18}/> ARENA TƯƠNG TÁC</button>
+            <button onClick={() => {setActiveTab('RESULTS'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'RESULTS' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' : 'text-slate-400 hover:bg-white/5'}`}><BarChart3 size={18}/>ARENA QUẢN LÝ THI</button>
+            <button onClick={() => {setActiveTab('ASSIGNMENTS'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'ASSIGNMENTS' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:bg-white/5'}`}><FolderOpen size={18}/>ARENA CHẤM BÀI</button>
+            <button onClick={() => {setActiveTab('SETTINGS'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'SETTINGS' ? 'bg-slate-700 text-white border border-white/20 shadow-lg' : 'text-slate-400 hover:bg-white/5'}`}><Settings size={18}/>ARENA CẤU HÌNH</button>
             
-            <button onClick={() => setActiveTab('INTERACTIVE')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'INTERACTIVE' ? 'bg-orange-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}><MessageSquare size={20}/> ARENA TƯƠNG TÁC</button>
-            <button onClick={() => setActiveTab('RESULTS')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'RESULTS' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}><BarChart3 size={20}/>ARENA QUẢN LÝ THI</button>
-            <button onClick={() => setActiveTab('ASSIGNMENTS')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'ASSIGNMENTS' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}><FolderOpen size={20}/>ARENA CHẤM BÀI</button>
-            <button onClick={() => setActiveTab('SETTINGS')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'SETTINGS' ? 'bg-slate-700 text-white border border-white/20' : 'text-slate-400 hover:bg-white/5'}`}><Settings size={20}/>ARENA CẤU HÌNH</button>
-            
-            {/* TAB DÀNH RIÊNG CHO MASTER ADMIN */}
             {MASTER_EMAILS.includes(user?.email) && (
-                <button onClick={() => setActiveTab('USERS')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'USERS' ? 'bg-pink-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}>
-                    <UserCog size={20}/> QUẢN LÝ NGƯỜI DÙNG
+                <button onClick={() => {setActiveTab('USERS'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm mt-4 border-t border-white/10 pt-4 ${activeTab === 'USERS' ? 'bg-pink-600 text-white shadow-lg shadow-pink-500/20' : 'text-pink-500/70 hover:bg-white/5'}`}>
+                    <UserCog size={18}/> QUẢN LÝ NGƯỜI DÙNG
                 </button>
             )}
         </nav>
-        <div className="p-4 border-t border-white/10"><button onClick={() => {signOut(auth); router.push('/')}} className="w-full flex items-center justify-center gap-2 text-red-400 hover:bg-red-500/10 py-3 rounded-xl font-bold uppercase text-sm"><LogOut size={18}/> Đăng xuất</button></div>
+        
+        <div className="p-4 border-t border-white/10">
+            <button onClick={() => {signOut(auth); router.push('/')}} className="w-full flex items-center justify-center gap-2 text-red-400 hover:bg-red-500/10 py-3 rounded-xl font-bold uppercase text-xs transition-colors">
+                <LogOut size={16}/> Đăng xuất
+            </button>
+        </div>
       </aside>
 
-      <main className="flex-1 ml-64 p-8 overflow-y-auto min-h-screen bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
+      {/* KHUNG NỘI DUNG CHÍNH (MAIN) - Đã tối ưu padding cho Mobile */}
+      <main className="flex-1 w-full lg:w-auto h-screen overflow-y-auto p-4 pt-16 lg:p-8 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative">
         
-        {/* CÁC TAB KHÁC GIỮ NGUYÊN (LIBRARY, REPO, INTERACTIVE, RESULTS, ASSIGNMENTS, USERS...) */}
-        {/* Để gọn code, tôi chỉ hiện phần thay đổi ở TAB SETTINGS */}
-        
-        {activeTab === 'LIBRARY' && (<div className="animate-in fade-in slide-in-from-bottom-4 duration-500"><header className="flex justify-between items-center mb-10"><div><h1 className="text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg">Kho Vũ Khí</h1><p className="text-slate-400 mt-1 font-medium">Quản lý các bộ đề cá nhân</p></div><button onClick={() => router.push('/create-quiz')} className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-6 py-3 rounded-xl font-black shadow-lg hover:scale-105 transition"><Plus size={20}/> Chế tạo đề mới</button></header><div className="grid grid-cols-3 gap-6">{libraryQuizzes.map(q=><div key={q.id} className={`bg-[#1e293b]/80 backdrop-blur-md rounded-[2rem] border transition-all duration-300 group overflow-hidden shadow-xl hover:shadow-2xl ${q.isExamActive ? 'border-red-500/50 shadow-red-500/10' : 'border-white/10 hover:border-indigo-500/50'}`}><div className="h-32 bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center relative overflow-hidden"><FileText size={48} className="text-indigo-400 group-hover:scale-110 transition-transform duration-500"/><div className="absolute top-4 left-4"><span className="bg-yellow-400 text-black px-2 py-1 rounded font-black text-xs shadow-lg flex items-center gap-1"><Hash size={12}/> {q.code || '---'}</span></div><div className="absolute top-4 right-4 flex flex-col items-end gap-1"><span className={`text-[10px] font-black px-2 py-1 rounded uppercase shadow-lg ${q.status === 'OPEN' ? 'bg-green-500 text-black' : 'bg-slate-700 text-slate-400'}`}>{q.status === 'OPEN' ? 'Game: Mở' : 'Game: Đóng'}</span>{q.isExamActive && (<span className="text-[10px] font-black px-2 py-1 rounded uppercase shadow-lg bg-red-600 text-white animate-pulse">ĐANG THI</span>)}</div></div><div className="p-6"><h3 className="text-xl font-black mb-1 truncate text-white uppercase italic tracking-tight">{q.title}</h3><div className="flex justify-between items-center mb-6"><p className="text-slate-400 text-xs font-bold uppercase tracking-widest">{q.questions?.length || 0} Mật lệnh</p><span className="text-slate-500 text-xs">{new Date(q.createdAt?.seconds * 1000).toLocaleDateString()}</span></div><div className="grid grid-cols-5 gap-2"><button onClick={() => handleToggleExamMode(q.id, q.isExamActive)} className={`col-span-2 py-2.5 rounded-xl font-black uppercase italic text-xs shadow transition-all flex items-center justify-center gap-1 ${q.isExamActive ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-slate-700 text-slate-300 hover:bg-red-600 hover:text-white'}`}><GraduationCap size={16}/> {q.isExamActive ? 'Dừng Thi' : 'Mở Thi'}</button><button onClick={() => handleToggleStatus(q.id, q.status)} className={`col-span-1 flex items-center justify-center rounded-xl transition-all border ${q.status === 'OPEN' ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-slate-700/50 text-slate-400'}`}>{q.status === 'OPEN' ? <Unlock size={18} /> : <Lock size={18} />}</button><button onClick={() => router.push(`/create-quiz?id=${q.id}`)} className="col-span-1 bg-slate-700 hover:bg-indigo-600 text-white rounded-xl transition flex items-center justify-center"><Edit size={16} /></button><button onClick={() => handleDeleteQuiz(q.id)} className="col-span-1 bg-slate-700 hover:bg-red-600 text-white rounded-xl transition flex items-center justify-center"><Trash2 size={16} /></button>
+        {/* TAB LIBRARY */}
+        {activeTab === 'LIBRARY' && (<div className="animate-in fade-in slide-in-from-bottom-4 duration-500"><header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10"><div><h1 className="text-3xl md:text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg">Kho Vũ Khí</h1><p className="text-slate-400 mt-1 font-medium">Quản lý các bộ đề cá nhân</p></div><button onClick={() => router.push('/create-quiz')} className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-6 py-3 rounded-xl font-black shadow-lg hover:scale-105 transition"><Plus size={20}/> Chế tạo đề mới</button></header><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{libraryQuizzes.map(q=><div key={q.id} className={`bg-[#1e293b]/80 backdrop-blur-md rounded-[2rem] border transition-all duration-300 group overflow-hidden shadow-xl hover:shadow-2xl ${q.isExamActive ? 'border-red-500/50 shadow-red-500/10' : 'border-white/10 hover:border-indigo-500/50'}`}><div className="h-32 bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center relative overflow-hidden"><FileText size={48} className="text-indigo-400 group-hover:scale-110 transition-transform duration-500"/><div className="absolute top-4 left-4"><span className="bg-yellow-400 text-black px-2 py-1 rounded font-black text-xs shadow-lg flex items-center gap-1"><Hash size={12}/> {q.code || '---'}</span></div><div className="absolute top-4 right-4 flex flex-col items-end gap-1"><span className={`text-[10px] font-black px-2 py-1 rounded uppercase shadow-lg ${q.status === 'OPEN' ? 'bg-green-500 text-black' : 'bg-slate-700 text-slate-400'}`}>{q.status === 'OPEN' ? 'Game: Mở' : 'Game: Đóng'}</span>{q.isExamActive && (<span className="text-[10px] font-black px-2 py-1 rounded uppercase shadow-lg bg-red-600 text-white animate-pulse">ĐANG THI</span>)}</div></div><div className="p-6"><h3 className="text-xl font-black mb-1 truncate text-white uppercase italic tracking-tight">{q.title}</h3><div className="flex justify-between items-center mb-6"><p className="text-slate-400 text-xs font-bold uppercase tracking-widest">{q.questions?.length || 0} Mật lệnh</p><span className="text-slate-500 text-xs">{new Date(q.createdAt?.seconds * 1000).toLocaleDateString()}</span></div><div className="grid grid-cols-5 gap-2"><button onClick={() => handleToggleExamMode(q.id, q.isExamActive)} className={`col-span-2 py-2.5 rounded-xl font-black uppercase italic text-xs shadow transition-all flex items-center justify-center gap-1 ${q.isExamActive ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-slate-700 text-slate-300 hover:bg-red-600 hover:text-white'}`}><GraduationCap size={16}/> {q.isExamActive ? 'Dừng Thi' : 'Mở Thi'}</button><button onClick={() => handleToggleStatus(q.id, q.status)} className={`col-span-1 flex items-center justify-center rounded-xl transition-all border ${q.status === 'OPEN' ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-slate-700/50 text-slate-400'}`}>{q.status === 'OPEN' ? <Unlock size={18} /> : <Lock size={18} />}</button><button onClick={() => router.push(`/create-quiz?id=${q.id}`)} className="col-span-1 bg-slate-700 hover:bg-indigo-600 text-white rounded-xl transition flex items-center justify-center"><Edit size={16} /></button><button onClick={() => handleDeleteQuiz(q.id)} className="col-span-1 bg-slate-700 hover:bg-red-600 text-white rounded-xl transition flex items-center justify-center"><Trash2 size={16} /></button>
         <button onClick={() => router.push(`/race/${q.id}`)} className="col-span-3 bg-gradient-to-r from-orange-600 to-red-600 text-white py-3 rounded-xl font-black shadow-lg hover:shadow-orange-500/30 transition-all flex items-center justify-center gap-2 uppercase italic text-xs group-hover:animate-pulse"><Flag size={16} fill="currentColor"/> Biệt Đội</button>
         <button onClick={() => router.push(`/host/${q.id}`)} className="col-span-2 bg-white text-slate-900 py-3 rounded-xl font-black uppercase italic text-xs shadow hover:bg-indigo-50 transition-all flex items-center justify-center gap-1"><Swords size={16}/> Chiến Binh</button>
         <button onClick={() => router.push(`/arcade/lobby/${q.id}?from=dashboard`)} className="col-span-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white py-3 rounded-xl font-black uppercase italic text-xs shadow-lg transition-all flex items-center justify-center gap-2"><Gamepad2 size={18}/> Kho Game</button>
@@ -294,16 +325,16 @@ export default function Dashboard() {
         {activeTab === 'GAME_REPO' && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-500">
                 <header className="mb-8">
-                    <h1 className="text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg mb-2">ARENA KHO GAME</h1>
+                    <h1 className="text-3xl md:text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg mb-2">ARENA KHO GAME</h1>
                     <p className="text-slate-400 font-medium">Thư viện đề thi quy mô lớn - Phân loại theo Khối & Môn</p>
                 </header>
 
-                <div className="bg-[#1e293b] rounded-[2rem] p-6 border border-white/10 shadow-xl mb-8">
+                <div className="bg-[#1e293b] rounded-[2rem] p-4 md:p-6 border border-white/10 shadow-xl mb-8">
                     <div className="mb-6">
                         <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">1. Chọn Chiến Trường (Khối Lớp)</label>
                         <div className="flex gap-2 flex-wrap">
                             {GRADES.map(g => (
-                                <button key={g} onClick={() => setRepoGrade(g)} className={`px-6 py-2 rounded-xl font-black transition-all border-2 ${repoGrade === g ? 'bg-rose-600 text-white border-rose-600 shadow-lg scale-105' : 'bg-slate-900 border-slate-700 text-slate-500 hover:border-rose-600 hover:text-white'}`}>{g === 'Khác' ? 'KHÁC' : `KHỐI ${g}`}</button>
+                                <button key={g} onClick={() => setRepoGrade(g)} className={`px-4 md:px-6 py-2 rounded-xl font-black transition-all border-2 ${repoGrade === g ? 'bg-rose-600 text-white border-rose-600 shadow-lg scale-105' : 'bg-slate-900 border-slate-700 text-slate-500 hover:border-rose-600 hover:text-white'}`}>{g === 'Khác' ? 'KHÁC' : `KHỐI ${g}`}</button>
                             ))}
                         </div>
                     </div>
@@ -318,18 +349,18 @@ export default function Dashboard() {
                         </div>
                     </div>
                     
-                    <div className="flex items-center justify-between border-t border-white/5 pt-6">
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-t border-white/5 pt-6 gap-4">
                         <div className="flex items-center gap-4">
                             <div className="text-sm font-bold text-slate-400">Hiển thị: <span className="text-white">{filteredRepoQuizzes.length}</span> đề</div>
                             {selectedRepoItems.length > 0 && (<button onClick={handleDeleteRepoBulk} className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-lg animate-in fade-in"><Trash2 size={14}/> Xóa ({selectedRepoItems.length})</button>)}
                         </div>
-                        <button onClick={handleCreateQuizForSubject} className="bg-gradient-to-r from-rose-600 to-orange-600 text-white px-6 py-3 rounded-xl font-black shadow-lg hover:shadow-orange-500/30 transition-all flex items-center justify-center gap-2 uppercase italic text-xs"><Plus size={16} strokeWidth={3}/> Tạo Đề {repoSubject !== 'ALL' ? SUBJECTS.find(s=>s.id===repoSubject)?.name : ''} K{repoGrade}</button>
+                        <button onClick={handleCreateQuizForSubject} className="w-full md:w-auto bg-gradient-to-r from-rose-600 to-orange-600 text-white px-6 py-3 rounded-xl font-black shadow-lg hover:shadow-orange-500/30 transition-all flex items-center justify-center gap-2 uppercase italic text-xs"><Plus size={16} strokeWidth={3}/> Tạo Đề {repoSubject !== 'ALL' ? SUBJECTS.find(s=>s.id===repoSubject)?.name : ''} K{repoGrade}</button>
                     </div>
                 </div>
 
                 <div className="bg-[#1e293b] rounded-[2rem] border border-white/10 shadow-xl overflow-hidden min-h-[400px]">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left">
+                        <table className="w-full text-left min-w-[800px]">
                             <thead className="bg-slate-900 text-slate-400 text-xs font-bold uppercase sticky top-0 z-10">
                                 <tr>
                                     <th className="p-4 w-10 text-center bg-slate-900"><input type="checkbox" onChange={(e) => handleSelectRepoAll(e, filteredRepoQuizzes)} checked={filteredRepoQuizzes.length > 0 && selectedRepoItems.length === filteredRepoQuizzes.length} className="w-4 h-4 rounded border-slate-600 bg-slate-800 cursor-pointer"/></th>
@@ -356,7 +387,7 @@ export default function Dashboard() {
                                         </td>
                                         <td className="p-4">
                                             <div className="font-bold text-white truncate max-w-[300px]" title={q.title}>{q.title}</div>
-                                            <div className="text-[10px] text-slate-500 flex gap-2"><span>Mã: {q.code}</span><span>• {q.questions?.length || 0} câu</span><span>• {new Date(q.createdAt?.seconds*1000).toLocaleDateString('vi-VN')}</span></div>
+                                            <div className="text-[10px] text-slate-500 flex flex-wrap gap-2 mt-1"><span>Mã: {q.code}</span><span>• {q.questions?.length || 0} câu</span><span>• {new Date(q.createdAt?.seconds*1000).toLocaleDateString('vi-VN')}</span></div>
                                         </td>
                                         <td className="p-4 text-center">
                                             <button onClick={() => handleToggleStatus(q.id, q.status)} className={`p-2 rounded-lg transition-all ${q.status === 'OPEN' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'}`} title={q.status === 'OPEN' ? 'Đang mở Public' : 'Đang đóng'}>{q.status === 'OPEN' ? <Eye size={18}/> : <EyeOff size={18}/>}</button>
@@ -374,20 +405,20 @@ export default function Dashboard() {
         )}
         
         {/* TAB INTERACTIVE */}
-        {activeTab === 'INTERACTIVE' && (<div className="animate-in fade-in slide-in-from-right-4 duration-500"><header className="flex justify-between items-center mb-10"><div><h1 className="text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-300">ARENA TƯƠNG TÁC </h1><p className="text-slate-400 mt-1 font-medium">Bảng thảo luận thời gian thực</p></div><button onClick={handleCreateBoard} className="flex items-center gap-2 bg-white text-slate-900 px-6 py-3 rounded-xl font-black shadow-lg transition-all hover:scale-105 uppercase italic"><Plus size={20} strokeWidth={3} /> Tạo Chủ Đề Mới</button></header><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{boards.map((board) => (<div key={board.id} className="bg-[#1e293b] rounded-[2rem] border border-white/10 hover:border-orange-500/50 transition-all group overflow-hidden shadow-xl hover:shadow-orange-500/20"><div className="p-8 relative"><div className="absolute top-4 right-4"><span className="bg-cyan-400 text-black px-2 py-1 rounded font-black text-xs shadow-lg flex items-center gap-1"><Hash size={12}/> {board.code || '---'}</span></div><h3 className="text-2xl font-black mb-2 text-white uppercase italic truncate">{board.title}</h3><div className="flex items-center gap-2 mb-6"><span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${board.status === 'OPEN' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>{board.status === 'OPEN' ? 'ĐANG MỞ' : 'ĐÃ KHÓA'}</span><span className="text-slate-500 text-xs font-bold">{new Date(board.createdAt?.seconds * 1000).toLocaleDateString('vi-VN')}</span></div><div className="grid grid-cols-2 gap-3"><button onClick={() => router.push(`/interactive/${board.id}`)} className="col-span-2 bg-gradient-to-r from-orange-600 to-red-600 text-white py-3 rounded-xl font-black uppercase italic shadow-lg flex items-center justify-center gap-2"><Swords size={20}/> Vào Quản Lý</button><button onClick={() => window.open(`/connect/${board.id}`, '_blank')} className="bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-xl font-bold flex items-center justify-center gap-1 text-xs"><ExternalLink size={14}/> Link HS</button><button onClick={() => handleDeleteBoard(board.id)} className="bg-red-900/30 hover:bg-red-600 text-red-400 hover:text-white py-2 rounded-xl font-bold flex items-center justify-center gap-1 text-xs border border-red-900"><Trash2 size={14}/> Xóa</button></div></div></div>))}</div>{boards.length === 0 && <div className="text-center py-20 opacity-50"><MessageSquare size={60} className="mx-auto mb-4 text-slate-500"/><p className="text-xl font-bold uppercase tracking-widest text-slate-400">Chưa có chủ đề nào</p></div>}</div>)}
+        {activeTab === 'INTERACTIVE' && (<div className="animate-in fade-in slide-in-from-right-4 duration-500"><header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10"><div><h1 className="text-3xl md:text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-300">ARENA TƯƠNG TÁC </h1><p className="text-slate-400 mt-1 font-medium">Bảng thảo luận thời gian thực</p></div><button onClick={handleCreateBoard} className="flex items-center gap-2 bg-white text-slate-900 px-6 py-3 rounded-xl font-black shadow-lg transition-all hover:scale-105 uppercase italic"><Plus size={20} strokeWidth={3} /> Tạo Chủ Đề</button></header><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{boards.map((board) => (<div key={board.id} className="bg-[#1e293b] rounded-[2rem] border border-white/10 hover:border-orange-500/50 transition-all group overflow-hidden shadow-xl hover:shadow-orange-500/20"><div className="p-8 relative"><div className="absolute top-4 right-4"><span className="bg-cyan-400 text-black px-2 py-1 rounded font-black text-xs shadow-lg flex items-center gap-1"><Hash size={12}/> {board.code || '---'}</span></div><h3 className="text-2xl font-black mb-2 text-white uppercase italic truncate pr-16">{board.title}</h3><div className="flex items-center gap-2 mb-6"><span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${board.status === 'OPEN' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>{board.status === 'OPEN' ? 'ĐANG MỞ' : 'ĐÃ KHÓA'}</span><span className="text-slate-500 text-xs font-bold">{new Date(board.createdAt?.seconds * 1000).toLocaleDateString('vi-VN')}</span></div><div className="grid grid-cols-2 gap-3"><button onClick={() => router.push(`/interactive/${board.id}`)} className="col-span-2 bg-gradient-to-r from-orange-600 to-red-600 text-white py-3 rounded-xl font-black uppercase italic shadow-lg flex items-center justify-center gap-2"><Swords size={20}/> Vào Quản Lý</button><button onClick={() => window.open(`/connect/${board.id}`, '_blank')} className="bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-xl font-bold flex items-center justify-center gap-1 text-xs"><ExternalLink size={14}/> Link HS</button><button onClick={() => handleDeleteBoard(board.id)} className="bg-red-900/30 hover:bg-red-600 text-red-400 hover:text-white py-2 rounded-xl font-bold flex items-center justify-center gap-1 text-xs border border-red-900"><Trash2 size={14}/> Xóa</button></div></div></div>))}</div>{boards.length === 0 && <div className="text-center py-20 opacity-50"><MessageSquare size={60} className="mx-auto mb-4 text-slate-500"/><p className="text-xl font-bold uppercase tracking-widest text-slate-400">Chưa có chủ đề nào</p></div>}</div>)}
         
         {/* TAB RESULTS */}
-        {activeTab === 'RESULTS' && (<div className="animate-in fade-in slide-in-from-right-4 duration-500"><header className="mb-8"><h1 className="text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg mb-2">Trung Tâm Chiến Báo</h1><p className="text-slate-400 font-medium">Theo dõi thành tích và xuất báo cáo</p></header><div className="bg-[#1e293b]/80 backdrop-blur border border-white/10 p-6 rounded-[2rem] shadow-xl mb-8"><div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end"><div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Lọc theo Đề thi</label><div className="relative"><Search className="absolute left-3 top-3 text-slate-500" size={16}/><select value={filterExamId} onChange={(e) => setFilterExamId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 text-white pl-10 pr-4 py-2.5 rounded-xl focus:border-emerald-500 focus:outline-none appearance-none"><option value="ALL">-- Tất cả chiến dịch --</option>{uniqueExams.map(q => <option key={q.id} value={q.id}>{q.title}</option>)}</select></div></div><div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Lọc theo Lớp</label><select value={filterClass} onChange={(e) => setFilterClass(e.target.value)} className="w-full bg-slate-900 border border-slate-700 text-white px-4 py-2.5 rounded-xl focus:border-emerald-500 focus:outline-none"><option value="ALL">-- Tất cả đơn vị --</option>{uniqueClasses.map(c => <option key={c} value={c}>{c}</option>)}</select></div><div className="bg-slate-900/50 rounded-xl p-2 flex justify-around items-center border border-white/5"><div className="text-center"><div className="text-[10px] text-slate-400 uppercase font-bold">Trung bình</div><div className="text-xl font-black text-yellow-400">{stats.avg}</div></div><div className="w-px h-8 bg-white/10"></div><div className="text-center"><div className="text-[10px] text-slate-400 uppercase font-bold">Đạt ({'>'}5)</div><div className="text-xl font-black text-green-400">{stats.pass}</div></div><div className="w-px h-8 bg-white/10"></div><div className="text-center"><div className="text-[10px] text-slate-400 uppercase font-bold">Sĩ số</div><div className="text-xl font-black text-white">{filteredResults.length}</div></div></div><div className="flex gap-2"><button onClick={handleExportExcel} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl font-bold shadow-lg transition flex items-center justify-center gap-2"><Download size={18}/> Xuất Excel</button><button onClick={handleDeleteResults} className="bg-red-600/20 hover:bg-red-600/80 text-red-500 hover:text-white p-2.5 rounded-xl transition border border-red-600/50" title="Xóa kết quả đang lọc"><Trash2 size={20}/></button><button onClick={handleRefreshResults} className="bg-blue-600 hover:bg-blue-500 text-white p-2.5 rounded-xl transition shadow-lg" title="Làm mới dữ liệu"><RefreshCw size={20} className={isRefreshing ? "animate-spin" : ""} /></button></div></div></div><div className="bg-[#1e293b] rounded-[2rem] shadow-2xl overflow-hidden border border-white/5"><div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-900 text-slate-400 uppercase text-xs font-bold"><tr><th className="px-6 py-4">STT</th><th className="px-6 py-4">Chiến binh</th><th className="px-6 py-4">Ngày sinh</th><th className="px-6 py-4">Đơn vị (Lớp)</th><th className="px-6 py-4">Chiến dịch</th><th className="px-6 py-4 text-center">Điểm số</th><th className="px-6 py-4 text-right">Thời gian nộp</th></tr></thead><tbody className="divide-y divide-white/5">{filteredResults.length > 0 ? (filteredResults.map((r, i) => (<tr key={r.id} className="hover:bg-white/5 transition"><td className="px-6 py-4 font-mono text-slate-500">{i + 1}</td><td className="px-6 py-4 font-bold text-white">{r.studentName}</td><td className="px-6 py-4 text-slate-300">{r.studentDob}</td><td className="px-6 py-4"><span className="bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded text-xs font-bold uppercase">{r.studentClass}</span></td><td className="px-6 py-4 text-indigo-400 font-bold text-sm max-w-[200px] truncate">{quizzes.find(q => q.id === r.examId)?.title || <span className="text-slate-500 italic">Đề đã xóa</span>}</td><td className="px-6 py-4 text-center"><span className={`text-lg font-black ${parseFloat(r.score) >= 5 ? 'text-green-400' : 'text-red-400'}`}>{r.score}</span></td><td className="px-6 py-4 text-right text-slate-500 text-sm font-mono">{r.submittedAt ? new Date(r.submittedAt.seconds * 1000).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : '-'}<br/><span className="text-[10px]">{r.submittedAt ? new Date(r.submittedAt.seconds * 1000).toLocaleDateString('vi-VN') : ''}</span></td></tr>))) : (<tr><td colSpan="7" className="px-6 py-12 text-center text-slate-500 italic">Chưa có dữ liệu chiến đấu nào.</td></tr>)}</tbody></table></div></div></div>)}
+        {activeTab === 'RESULTS' && (<div className="animate-in fade-in slide-in-from-right-4 duration-500"><header className="mb-8"><h1 className="text-3xl md:text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg mb-2">Trung Tâm Chiến Báo</h1><p className="text-slate-400 font-medium">Theo dõi thành tích và xuất báo cáo</p></header><div className="bg-[#1e293b]/80 backdrop-blur border border-white/10 p-4 md:p-6 rounded-[2rem] shadow-xl mb-8"><div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end"><div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Lọc theo Đề thi</label><div className="relative"><Search className="absolute left-3 top-3 text-slate-500" size={16}/><select value={filterExamId} onChange={(e) => setFilterExamId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 text-white pl-10 pr-4 py-2.5 rounded-xl focus:border-emerald-500 focus:outline-none appearance-none truncate"><option value="ALL">-- Tất cả chiến dịch --</option>{uniqueExams.map(q => <option key={q.id} value={q.id}>{q.title}</option>)}</select></div></div><div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Lọc theo Lớp</label><select value={filterClass} onChange={(e) => setFilterClass(e.target.value)} className="w-full bg-slate-900 border border-slate-700 text-white px-4 py-2.5 rounded-xl focus:border-emerald-500 focus:outline-none"><option value="ALL">-- Tất cả đơn vị --</option>{uniqueClasses.map(c => <option key={c} value={c}>{c}</option>)}</select></div><div className="bg-slate-900/50 rounded-xl p-2 flex justify-around items-center border border-white/5"><div className="text-center"><div className="text-[10px] text-slate-400 uppercase font-bold">Trung bình</div><div className="text-xl md:text-2xl font-black text-yellow-400">{stats.avg}</div></div><div className="w-px h-8 bg-white/10"></div><div className="text-center"><div className="text-[10px] text-slate-400 uppercase font-bold">Đạt ({'>'}5)</div><div className="text-xl md:text-2xl font-black text-green-400">{stats.pass}</div></div><div className="w-px h-8 bg-white/10"></div><div className="text-center"><div className="text-[10px] text-slate-400 uppercase font-bold">Sĩ số</div><div className="text-xl md:text-2xl font-black text-white">{filteredResults.length}</div></div></div><div className="flex gap-2"><button onClick={handleExportExcel} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl font-bold shadow-lg transition flex items-center justify-center gap-2 text-sm"><Download size={18}/> Excel</button><button onClick={handleDeleteResults} className="bg-red-600/20 hover:bg-red-600/80 text-red-500 hover:text-white p-2.5 rounded-xl transition border border-red-600/50 flex items-center justify-center" title="Xóa kết quả đang lọc"><Trash2 size={20}/></button><button onClick={handleRefreshResults} className="bg-blue-600 hover:bg-blue-500 text-white p-2.5 rounded-xl transition shadow-lg flex items-center justify-center" title="Làm mới dữ liệu"><RefreshCw size={20} className={isRefreshing ? "animate-spin" : ""} /></button></div></div></div><div className="bg-[#1e293b] rounded-[2rem] shadow-2xl overflow-hidden border border-white/5"><div className="overflow-x-auto"><table className="w-full text-left min-w-[700px]"><thead className="bg-slate-900 text-slate-400 uppercase text-xs font-bold"><tr><th className="px-4 md:px-6 py-4">STT</th><th className="px-4 md:px-6 py-4">Chiến binh</th><th className="px-4 md:px-6 py-4">Ngày sinh</th><th className="px-4 md:px-6 py-4">Đơn vị (Lớp)</th><th className="px-4 md:px-6 py-4">Chiến dịch</th><th className="px-4 md:px-6 py-4 text-center">Điểm số</th><th className="px-4 md:px-6 py-4 text-right">Thời gian nộp</th></tr></thead><tbody className="divide-y divide-white/5">{filteredResults.length > 0 ? (filteredResults.map((r, i) => (<tr key={r.id} className="hover:bg-white/5 transition"><td className="px-4 md:px-6 py-4 font-mono text-slate-500">{i + 1}</td><td className="px-4 md:px-6 py-4 font-bold text-white">{r.studentName}</td><td className="px-4 md:px-6 py-4 text-slate-300">{r.studentDob}</td><td className="px-4 md:px-6 py-4"><span className="bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded text-xs font-bold uppercase">{r.studentClass}</span></td><td className="px-4 md:px-6 py-4 text-indigo-400 font-bold text-sm max-w-[150px] md:max-w-[200px] truncate">{quizzes.find(q => q.id === r.examId)?.title || <span className="text-slate-500 italic">Đề đã xóa</span>}</td><td className="px-4 md:px-6 py-4 text-center"><span className={`text-lg font-black ${parseFloat(r.score) >= 5 ? 'text-green-400' : 'text-red-400'}`}>{r.score}</span></td><td className="px-4 md:px-6 py-4 text-right text-slate-500 text-xs md:text-sm font-mono">{r.submittedAt ? new Date(r.submittedAt.seconds * 1000).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : '-'}<br/><span className="text-[10px]">{r.submittedAt ? new Date(r.submittedAt.seconds * 1000).toLocaleDateString('vi-VN') : ''}</span></td></tr>))) : (<tr><td colSpan="7" className="px-6 py-12 text-center text-slate-500 italic">Chưa có dữ liệu chiến đấu nào.</td></tr>)}</tbody></table></div></div></div>)}
 
         {/* TAB ASSIGNMENTS */}
         {activeTab === 'ASSIGNMENTS' && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-500">
-                <header className="mb-8"><h1 className="text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg mb-2">Hòm Thư Nộp Bài</h1><p className="text-slate-400 font-medium">Quản lý bài tập nộp từ học sinh</p></header>
+                <header className="mb-8"><h1 className="text-3xl md:text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg mb-2">Hòm Thư Nộp Bài</h1><p className="text-slate-400 font-medium">Quản lý bài tập nộp từ học sinh</p></header>
                 
-                <div className="bg-[#1e293b] p-6 rounded-[2rem] border border-white/10 shadow-xl">
-                    <div className="flex justify-between items-center mb-6">
-                        <div className="flex gap-4 items-center">
-                            <select onChange={e=>setFilterClass(e.target.value)} value={filterClass} className="bg-slate-900 border border-slate-700 p-2.5 rounded-xl text-white outline-none focus:border-blue-500 min-w-[200px]">
+                <div className="bg-[#1e293b] p-4 md:p-6 rounded-[2rem] border border-white/10 shadow-xl">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center w-full md:w-auto">
+                            <select onChange={e=>setFilterClass(e.target.value)} value={filterClass} className="w-full sm:w-auto bg-slate-900 border border-slate-700 p-2.5 rounded-xl text-white outline-none focus:border-blue-500 min-w-[200px]">
                                 <option value="ALL">-- Tất cả các lớp --</option>
                                 {uniqueAssignmentClasses.map(c => (
                                     <option key={c} value={c}>{c}</option>
@@ -395,16 +426,16 @@ export default function Dashboard() {
                             </select>
                             
                             {selectedAssigns.length > 0 && (
-                                <button onClick={handleDeleteBulk} className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white px-4 py-2.5 rounded-xl font-bold shadow-lg animate-in fade-in slide-in-from-left-2">
-                                    <Trash2 size={18}/> Xóa ({selectedAssigns.length}) bài đã chọn
+                                <button onClick={handleDeleteBulk} className="w-full sm:w-auto flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 text-white px-4 py-2.5 rounded-xl font-bold shadow-lg animate-in fade-in slide-in-from-left-2">
+                                    <Trash2 size={18}/> Xóa ({selectedAssigns.length})
                                 </button>
                             )}
                         </div>
-                        <button onClick={() => fetchAssignments(user)} className="bg-blue-600 hover:bg-blue-500 text-white p-2.5 rounded-xl transition shadow-lg"><RefreshCw size={20}/></button>
+                        <button onClick={() => fetchAssignments(user)} className="w-full md:w-auto bg-blue-600 hover:bg-blue-500 text-white p-2.5 rounded-xl transition shadow-lg flex items-center justify-center"><RefreshCw size={20}/></button>
                     </div>
 
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left">
+                        <table className="w-full text-left min-w-[600px]">
                             <thead className="bg-slate-900 text-slate-400 text-xs font-bold uppercase">
                                 <tr>
                                     <th className="p-4 w-10 text-center">
@@ -425,13 +456,13 @@ export default function Dashboard() {
                                         <td className="p-4 text-center">
                                             <input type="checkbox" onChange={() => handleSelectOne(a.id)} checked={selectedAssigns.includes(a.id)} className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-600 focus:ring-blue-500 cursor-pointer"/>
                                         </td>
-                                        <td className="p-4 text-slate-500 font-mono">{i+1}</td>
-                                        <td className="p-4 font-bold text-white">{a.name}</td>
-                                        <td className="p-4"><span className="bg-blue-900 text-blue-300 px-2 py-1 rounded text-xs font-bold">{a.className}</span></td>
-                                        <td className="p-4">{a.type === 'LINK' ? <span className="flex items-center gap-1 text-blue-400"><LinkIcon size={14}/> Link</span> : <span className="flex items-center gap-1 text-orange-400"><FileText size={14}/> File</span>}</td>
+                                        <td className="p-4 text-slate-500 font-mono text-sm">{i+1}</td>
+                                        <td className="p-4 font-bold text-white text-sm md:text-base">{a.name}</td>
+                                        <td className="p-4"><span className="bg-blue-900 text-blue-300 px-2 py-1 rounded text-[10px] md:text-xs font-bold">{a.className}</span></td>
+                                        <td className="p-4 text-xs md:text-sm">{a.type === 'LINK' ? <span className="flex items-center gap-1 text-blue-400"><LinkIcon size={14}/> Link</span> : <span className="flex items-center gap-1 text-orange-400"><FileText size={14}/> File</span>}</td>
                                         <td className="p-4 text-xs text-slate-400">{a.submittedAt ? new Date(a.submittedAt.seconds * 1000).toLocaleString('vi-VN') : '...'}</td>
                                         <td className="p-4">
-                                            <a href={a.content} target="_blank" rel="noreferrer" className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow flex items-center gap-1 w-fit"><ExternalLink size={12}/> Mở Bài</a>
+                                            <a href={a.content} target="_blank" rel="noreferrer" className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow flex items-center justify-center gap-1 w-fit"><ExternalLink size={12}/> Mở Bài</a>
                                         </td>
                                         <td className="p-4">
                                             <button onClick={() => handleDeleteAssignment(a.id)} className="text-red-500 hover:bg-red-500/10 p-2 rounded-full transition"><Trash2 size={16}/></button>
@@ -450,14 +481,14 @@ export default function Dashboard() {
         {activeTab === 'USERS' && MASTER_EMAILS.includes(user?.email) && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-500">
                 <header className="mb-8">
-                    <h1 className="text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg mb-2">Quản Lý Đội Ngũ</h1>
+                    <h1 className="text-3xl md:text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg mb-2">Quản Lý Đội Ngũ</h1>
                     <p className="text-slate-400 font-medium">Cấp quyền và gia hạn tài khoản giáo viên</p>
                 </header>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Cột Trái: Form Thêm Mới */}
                     <div className="lg:col-span-1 h-fit">
-                        <div className="bg-[#1e293b] p-6 rounded-[2rem] border border-white/10 shadow-xl sticky top-8">
+                        <div className="bg-[#1e293b] p-6 rounded-[2rem] border border-white/10 shadow-xl lg:sticky lg:top-8">
                             <div className="flex items-center gap-3 mb-6">
                                 <div className="bg-pink-600 p-2 rounded-lg"><UserPlus size={24} className="text-white"/></div>
                                 <h2 className="text-xl font-bold uppercase text-white">Cấp Quyền Mới</h2>
@@ -476,7 +507,7 @@ export default function Dashboard() {
                                 </div>
 
                                 <button type="submit" className="w-full bg-gradient-to-r from-pink-600 to-rose-600 text-white py-3 rounded-xl font-black uppercase shadow-lg hover:scale-[1.02] transition-transform flex items-center justify-center gap-2">
-                                    <Plus size={20}/> Xác Nhận Cấp Quyền
+                                    <Plus size={20}/> Xác Nhận
                                 </button>
                             </form>
                             <a href="/admin/users" target="_blank" rel="noreferrer" className="mt-6 block text-center text-xs text-slate-500 hover:text-white underline">Quản lí TK GV & HS</a>
@@ -486,14 +517,14 @@ export default function Dashboard() {
                     {/* Cột Phải: Danh Sách */}
                     <div className="lg:col-span-2">
                         <div className="bg-[#1e293b] rounded-[2rem] border border-white/10 shadow-xl overflow-hidden">
-                            <div className="p-6 border-b border-white/10 flex justify-between items-center">
-                                <h2 className="text-xl font-bold uppercase text-white flex items-center gap-2">
-                                    <Users size={24} className="text-pink-500"/> Danh Sách Giáo Viên ({allowedEmails.length})
+                            <div className="p-4 md:p-6 border-b border-white/10 flex justify-between items-center">
+                                <h2 className="text-lg md:text-xl font-bold uppercase text-white flex items-center gap-2">
+                                    <Users size={20} className="text-pink-500"/> Danh Sách Giáo Viên ({allowedEmails.length})
                                 </h2>
                             </div>
                             
                             <div className="overflow-x-auto">
-                                <table className="w-full text-left">
+                                <table className="w-full text-left min-w-[600px]">
                                     <thead className="bg-slate-900 text-slate-400 text-xs font-bold uppercase">
                                         <tr>
                                             <th className="p-4">STT</th>
@@ -507,9 +538,9 @@ export default function Dashboard() {
                                         {MASTER_EMAILS.map((email, i) => (
                                             <tr key={`master-${i}`} className="bg-yellow-500/5">
                                                 <td className="p-4 text-yellow-500 font-mono">ADMIN</td>
-                                                <td className="p-4 font-bold text-white">{email} <span className="text-[10px] bg-yellow-500 text-black px-1 rounded ml-1">MASTER</span></td>
-                                                <td className="p-4 text-slate-500 italic">Vĩnh viễn</td>
-                                                <td className="p-4 text-center"><span className="text-green-500 text-xs font-bold">Active</span></td>
+                                                <td className="p-4 font-bold text-white text-sm md:text-base">{email} <span className="text-[10px] bg-yellow-500 text-black px-1 rounded ml-1">MASTER</span></td>
+                                                <td className="p-4 text-slate-500 italic text-sm">Vĩnh viễn</td>
+                                                <td className="p-4 text-center"><span className="text-green-500 text-[10px] md:text-xs font-bold">Active</span></td>
                                                 <td className="p-4 text-right"><Lock size={16} className="ml-auto text-slate-500"/></td>
                                             </tr>
                                         ))}
@@ -518,14 +549,14 @@ export default function Dashboard() {
                                             const status = checkStatus(item.expiredAt);
                                             return (
                                                 <tr key={item.id} className="hover:bg-white/5 transition group">
-                                                    <td className="p-4 text-slate-500 font-mono">{index + 1}</td>
+                                                    <td className="p-4 text-slate-500 font-mono text-sm">{index + 1}</td>
                                                     <td className="p-4">
-                                                        <div className="font-bold text-white">{item.email}</div>
-                                                        <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                                                        <div className="font-bold text-white text-sm md:text-base">{item.email}</div>
+                                                        <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-1">
                                                             <Calendar size={10}/> ĐK: {item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleDateString('vi-VN') : '---'}
                                                         </div>
                                                     </td>
-                                                    <td className="p-4 text-sm text-slate-300">
+                                                    <td className="p-4 text-xs md:text-sm text-slate-300">
                                                         {item.expiredAt ? new Date(item.expiredAt.seconds * 1000).toLocaleDateString('vi-VN') : <span className="text-slate-500 italic">Chưa có hạn</span>}
                                                     </td>
                                                     <td className="p-4 text-center">
@@ -536,17 +567,17 @@ export default function Dashboard() {
                                                     <td className="p-4 flex justify-end gap-2">
                                                         <button 
                                                             onClick={() => handleExtendEmail(item.id, item.expiredAt)}
-                                                            className="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-blue-600/30"
+                                                            className="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white px-2 py-1.5 rounded-lg text-[10px] md:text-xs font-bold transition flex items-center gap-1 border border-blue-600/30 whitespace-nowrap"
                                                             title="Gia hạn thêm 1 năm"
                                                         >
-                                                            <RefreshCw size={14}/> Gia hạn
+                                                            <RefreshCw size={12}/> Gia hạn
                                                         </button>
                                                         <button 
                                                             onClick={() => handleDeleteEmail(item.id)}
-                                                            className="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white p-2 rounded-lg transition border border-red-600/30"
+                                                            className="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white p-1.5 md:p-2 rounded-lg transition border border-red-600/30"
                                                             title="Xóa tài khoản"
                                                         >
-                                                            <Trash2 size={16}/>
+                                                            <Trash2 size={14}/>
                                                         </button>
                                                     </td>
                                                 </tr>
@@ -565,15 +596,14 @@ export default function Dashboard() {
         {/* TAB SETTINGS */}
         {activeTab === 'SETTINGS' && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-500 max-w-5xl mx-auto pb-10">
-                <header className="mb-8"><h1 className="text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg mb-2">QUẢN TRỊ HỆ THỐNG</h1><p className="text-slate-400 font-medium">Cấu hình API và Quyền truy cập</p></header>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <header className="mb-8"><h1 className="text-3xl md:text-4xl font-black text-white italic uppercase tracking-tighter drop-shadow-lg mb-2">QUẢN TRỊ HỆ THỐNG</h1><p className="text-slate-400 font-medium">Cấu hình API và Quyền truy cập</p></header>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                     {MASTER_EMAILS.includes(user?.email) && (
-                        <div className="bg-[#1e293b] p-8 rounded-[2rem] border border-yellow-500/30 shadow-xl relative overflow-hidden md:col-span-2">
+                        <div className="bg-[#1e293b] p-6 md:p-8 rounded-[2rem] border border-yellow-500/30 shadow-xl relative overflow-hidden md:col-span-2">
                             <div className="absolute top-0 right-0 p-4 opacity-10"><LayoutTemplate size={120} /></div>
-                            <div className="flex items-center gap-3 mb-6 relative z-10"><div className="bg-purple-600 p-2 rounded-lg"><Image size={24} className="text-white"/></div><h2 className="text-xl font-bold uppercase text-white">Giao Diện Trang Chủ</h2></div>
+                            <div className="flex items-center gap-3 mb-6 relative z-10"><div className="bg-purple-600 p-2 rounded-lg"><Image size={24} className="text-white"/></div><h2 className="text-lg md:text-xl font-bold uppercase text-white">Giao Diện Trang Chủ</h2></div>
                             <form onSubmit={saveHomeConfig} className="space-y-6 relative z-10">
                                 <div className="grid grid-cols-1 gap-4">
-                                    {/* UPLOAD LOGO */}
                                     <div>
                                         <label className="block text-xs font-bold text-cyan-400 mb-2 uppercase">Logo / Tiêu đề (Thay thế chữ)</label>
                                         <input type="file" className="hidden" ref={logoTitleInput} onChange={(e)=>handleBannerUpload(e, 'logoTitleImage')}/>
@@ -581,21 +611,21 @@ export default function Dashboard() {
                                     </div>
 
                                     <div><label className="block text-xs font-bold text-purple-400 mb-2 uppercase">Banner Trên Cùng (1920x300px)</label><input type="file" className="hidden" ref={topBannerInput} onChange={(e)=>handleBannerUpload(e, 'topBanner')}/><UploadBox label="Tải ảnh lên" img={homeConfig.topBanner} onClick={()=>topBannerInput.current.click()} onClear={()=>setHomeConfig({...homeConfig, topBanner: ''})} loading={uploading}/></div>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div><label className="block text-xs font-bold text-purple-400 mb-2 uppercase">Banner Trái (Dọc)</label><input type="file" className="hidden" ref={leftBannerInput} onChange={(e)=>handleBannerUpload(e, 'leftBanner')}/><UploadBox label="Tải ảnh lên" img={homeConfig.leftBanner} onClick={()=>leftBannerInput.current.click()} onClear={()=>setHomeConfig({...homeConfig, leftBanner: ''})} loading={uploading}/></div>
                                         <div><label className="block text-xs font-bold text-purple-400 mb-2 uppercase">Banner Phải (Dọc)</label><input type="file" className="hidden" ref={rightBannerInput} onChange={(e)=>handleBannerUpload(e, 'rightBanner')}/><UploadBox label="Tải ảnh lên" img={homeConfig.rightBanner} onClick={()=>rightBannerInput.current.click()} onClear={()=>setHomeConfig({...homeConfig, rightBanner: ''})} loading={uploading}/></div>
                                     </div>
                                 </div>
-                                <button type="submit" className="w-full bg-purple-600 hover:bg-purple-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform active:scale-95"><Save size={20}/> Lưu Giao Diện</button>
+                                <button type="submit" className="w-full bg-purple-600 hover:bg-purple-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95"><Save size={20}/> Lưu Giao Diện</button>
                             </form>
                         </div>
                     )}
                     
-                    <div className="bg-[#1e293b] p-8 rounded-[2rem] border border-white/10 shadow-xl relative overflow-hidden">
+                    <div className="bg-[#1e293b] p-6 md:p-8 rounded-[2rem] border border-white/10 shadow-xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-10"><Key size={120} /></div>
-                        <div className="flex items-center gap-3 mb-6 relative z-10"><div className="bg-blue-600 p-2 rounded-lg"><Settings size={24} className="text-white"/></div><h2 className="text-xl font-bold uppercase text-white">Cấu Hình API</h2></div>
+                        <div className="flex items-center gap-3 mb-6 relative z-10"><div className="bg-blue-600 p-2 rounded-lg"><Settings size={24} className="text-white"/></div><h2 className="text-lg md:text-xl font-bold uppercase text-white">Cấu Hình API</h2></div>
                         <form onSubmit={saveUserConfig} className="space-y-6 relative z-10">
-                            <div className="bg-slate-900/50 p-6 rounded-2xl border border-blue-500/30">
+                            <div className="bg-slate-900/50 p-4 md:p-6 rounded-2xl border border-blue-500/30">
                                 <h3 className="text-blue-400 font-bold uppercase text-sm mb-4 flex items-center gap-2"><QrCode size={18}/> Mã Nộp Bài Của Bạn</h3>
                                 <div className="space-y-2">
                                     <label className="block text-xs font-bold text-slate-400">Mã này dùng để học sinh nộp bài cho riêng bạn</label>
@@ -605,15 +635,15 @@ export default function Dashboard() {
                             </div>
                             <div className="space-y-4">
                                 <h3 className="text-orange-400 font-bold uppercase text-sm border-b border-white/10 pb-2">Lưu trữ Ảnh (Cloudinary)</h3>
-                                <div><label className="block text-xs font-bold text-slate-400 mb-1">Cloud Name</label><input value={userConfig.cloudinaryName} onChange={e=>setUserConfig({...userConfig, cloudinaryName: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500 font-mono"/></div>
-                                <div><label className="block text-xs font-bold text-slate-400 mb-1">Upload Preset</label><input value={userConfig.cloudinaryPreset} onChange={e=>setUserConfig({...userConfig, cloudinaryPreset: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500 font-mono"/></div>
+                                <div><label className="block text-xs font-bold text-slate-400 mb-1">Cloud Name</label><input value={userConfig.cloudinaryName} onChange={e=>setUserConfig({...userConfig, cloudinaryName: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500 font-mono text-sm"/></div>
+                                <div><label className="block text-xs font-bold text-slate-400 mb-1">Upload Preset</label><input value={userConfig.cloudinaryPreset} onChange={e=>setUserConfig({...userConfig, cloudinaryPreset: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500 font-mono text-sm"/></div>
                             </div>
                             <div className="space-y-4">
                                 <h3 className="text-purple-400 font-bold uppercase text-sm border-b border-white/10 pb-2">Trí tuệ nhân tạo (Gemini)</h3>
-                                <div><label className="block text-xs font-bold text-slate-400 mb-1">Gemini API Key</label><input type="password" value={userConfig.geminiKey} onChange={e=>setUserConfig({...userConfig, geminiKey: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500 font-mono"/></div>
+                                <div><label className="block text-xs font-bold text-slate-400 mb-1">Gemini API Key</label><input type="password" value={userConfig.geminiKey} onChange={e=>setUserConfig({...userConfig, geminiKey: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500 font-mono text-sm"/></div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 mb-1">Phiên bản Model</label>
-                                    <select value={userConfig.geminiModel} onChange={e=>setUserConfig({...userConfig, geminiModel: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500">
+                                    <select value={userConfig.geminiModel} onChange={e=>setUserConfig({...userConfig, geminiModel: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500 text-sm">
                                         <option value="gemini-3-flash-preview">gemini-3-flash-preview(free)</option>
                                         <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
                                         <option value="gemini-2.0-flash">Gemini 2.0 Flash (Nhanh free)</option>                                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
@@ -625,48 +655,44 @@ export default function Dashboard() {
                         </form>
                     </div>
 
-                    {/* [MỚI] KHUNG ĐỔI MẬT KHẨU - CHỈ HIỆN CHO TÀI KHOẢN PASSWORD */}
-                 {/* --- BẮT ĐẦU ĐOẠN CODE THAY THẾ --- */}
-<div className="bg-[#1e293b] p-8 rounded-[2rem] border border-white/10 shadow-xl relative overflow-hidden h-fit">
-    <div className="absolute top-0 right-0 p-4 opacity-10"><Lock size={120} /></div>
-    <div className="flex items-center gap-3 mb-6 relative z-10">
-        <div className="bg-red-600 p-2 rounded-lg"><Key size={24} className="text-white"/></div>
-        <h2 className="text-xl font-bold uppercase text-white">Bảo Mật Tài Khoản</h2>
-    </div>
-    
-    {/* Kiểm tra: Nếu là User Mật khẩu thì hiện Form, không thì hiện Cảnh báo */}
-    {isPasswordUser ? (
-        <form onSubmit={handleChangePassword} className="space-y-6 relative z-10">
-            <div className="bg-slate-900/50 p-6 rounded-2xl border border-red-500/30">
-                <label className="block text-xs font-bold text-red-400 mb-2 uppercase">Mật khẩu mới</label>
-                <input 
-                    type="password" 
-                    value={newPassword} 
-                    onChange={(e) => setNewPassword(e.target.value)} 
-                    placeholder="Nhập mật khẩu mới..."
-                    className="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-white font-bold outline-none focus:border-red-500 transition-colors"
-                    required
-                    minLength={6}
-                />
-                <p className="text-[10px] text-slate-500 mt-2 italic">* Sau khi đổi mật khẩu thành công, bạn sẽ cần đăng nhập lại.</p>
-            </div>
-            <button type="submit" disabled={isChangingPass} className="w-full bg-red-600 hover:bg-red-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50">
-                {isChangingPass ? <Loader2 className="animate-spin"/> : <RefreshCw size={20}/>} Đổi Mật Khẩu
-            </button>
-        </form>
-    ) : (
-        <div className="relative z-10 bg-yellow-500/10 p-6 rounded-2xl border border-yellow-500/30 flex items-start gap-4">
-            <div className="bg-yellow-500/20 p-3 rounded-xl"><AlertTriangle size={24} className="text-yellow-400"/></div>
-            <div>
-                <h3 className="text-yellow-400 font-bold uppercase text-sm mb-1">Tính năng không khả dụng</h3>
-                <p className="text-slate-400 text-xs leading-relaxed">
-                    Tài khoản này được đăng ký qua Google hoặc chưa thiết lập mật khẩu lớp bảo mật. Bạn không cần đổi mật khẩu tại đây.
-                </p>
-            </div>
-        </div>
-    )}
-</div>
-{/* --- KẾT THÚC ĐOẠN CODE THAY THẾ --- */}
+                    <div className="bg-[#1e293b] p-6 md:p-8 rounded-[2rem] border border-white/10 shadow-xl relative overflow-hidden h-fit">
+                        <div className="absolute top-0 right-0 p-4 opacity-10"><Lock size={120} /></div>
+                        <div className="flex items-center gap-3 mb-6 relative z-10">
+                            <div className="bg-red-600 p-2 rounded-lg"><Key size={24} className="text-white"/></div>
+                            <h2 className="text-lg md:text-xl font-bold uppercase text-white">Bảo Mật Tài Khoản</h2>
+                        </div>
+                        
+                        {isPasswordUser ? (
+                            <form onSubmit={handleChangePassword} className="space-y-6 relative z-10">
+                                <div className="bg-slate-900/50 p-4 md:p-6 rounded-2xl border border-red-500/30">
+                                    <label className="block text-xs font-bold text-red-400 mb-2 uppercase">Mật khẩu mới</label>
+                                    <input 
+                                        type="password" 
+                                        value={newPassword} 
+                                        onChange={(e) => setNewPassword(e.target.value)} 
+                                        placeholder="Nhập mật khẩu mới..."
+                                        className="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-white font-bold outline-none focus:border-red-500 transition-colors"
+                                        required
+                                        minLength={6}
+                                    />
+                                    <p className="text-[10px] text-slate-500 mt-2 italic">* Sau khi đổi mật khẩu thành công, bạn sẽ cần đăng nhập lại.</p>
+                                </div>
+                                <button type="submit" disabled={isChangingPass} className="w-full bg-red-600 hover:bg-red-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50">
+                                    {isChangingPass ? <Loader2 className="animate-spin"/> : <RefreshCw size={20}/>} Đổi Mật Khẩu
+                                </button>
+                            </form>
+                        ) : (
+                            <div className="relative z-10 bg-yellow-500/10 p-4 md:p-6 rounded-2xl border border-yellow-500/30 flex items-start gap-4">
+                                <div className="bg-yellow-500/20 p-3 rounded-xl hidden sm:block"><AlertTriangle size={24} className="text-yellow-400"/></div>
+                                <div>
+                                    <h3 className="text-yellow-400 font-bold uppercase text-sm mb-1">Tính năng không khả dụng</h3>
+                                    <p className="text-slate-400 text-xs leading-relaxed">
+                                        Tài khoản này được đăng ký qua Google hoặc chưa thiết lập mật khẩu. Bạn không cần đổi mật khẩu tại đây.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         )}
