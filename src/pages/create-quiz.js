@@ -652,10 +652,7 @@ const handleOpenPreview = () => {
                   <h3 className="font-black text-slate-700 flex items-center gap-2 uppercase text-sm"><Info size={18} /> Thông tin chung</h3>
                   {origin === 'GAME_REPO' && <span className="bg-rose-100 text-rose-600 px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap">GAME REPO</span>}
               </div>
-              <div className="flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-lg border border-slate-200 shadow-sm w-full sm:w-auto justify-between sm:justify-start">
-            
-                  <button onClick={() => setExamCode(generateExamCode())} className="p-1 hover:bg-white rounded transition" title="Tạo lại mã"><RefreshCcw size={14} className="text-blue-500"/></button>
-              </div>
+              
           </div>
           <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full text-xl md:text-3xl font-black border-b-2 border-slate-100 focus:border-indigo-500 outline-none py-2 mb-6 md:mb-8 placeholder-slate-200" placeholder="Tên bài kiểm tra..." />
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
