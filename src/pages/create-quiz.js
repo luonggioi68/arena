@@ -653,11 +653,7 @@ const handleOpenPreview = () => {
                   {origin === 'GAME_REPO' && <span className="bg-rose-100 text-rose-600 px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap">GAME REPO</span>}
               </div>
               <div className="flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-lg border border-slate-200 shadow-sm w-full sm:w-auto justify-between sm:justify-start">
-                  <div className="flex items-center gap-2">
-                      <Hash size={14} className="text-indigo-500"/>
-                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Mã đề:</span>
-                      <span className="font-black text-indigo-700 text-lg">{examCode}</span>
-                  </div>
+            
                   <button onClick={() => setExamCode(generateExamCode())} className="p-1 hover:bg-white rounded transition" title="Tạo lại mã"><RefreshCcw size={14} className="text-blue-500"/></button>
               </div>
           </div>
