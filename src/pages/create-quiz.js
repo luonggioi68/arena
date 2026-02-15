@@ -690,7 +690,7 @@ const handleOpenPreview = () => {
                         onPaste={(e) => handlePaste(e, qIndex, 'QUESTION')}
                         rows={3} 
                         className="w-full border-2 border-slate-100 rounded-xl p-3 md:p-4 font-bold text-base md:text-lg focus:border-indigo-500 outline-none bg-slate-50 transition-all break-words" 
-                        placeholder="Gõ nội dung hoặc dùng [img] chèn ảnh..." 
+                        placeholder="Gõ nội dung hoặc dùng [img] chèn ảnh hoặc Ctrl+V dán ảnh..." 
                     />
                     <button onClick={() => triggerUpload(qIndex, -1, 'QUESTION')} className="p-3 bg-slate-100 hover:bg-indigo-100 rounded-xl transition text-slate-500 hover:text-indigo-600 flex justify-center items-center sm:w-auto w-full border border-slate-200"><ImageIcon size={20}/><span className="sm:hidden ml-2 text-sm font-bold">Thêm ảnh</span></button>
                 </div>
