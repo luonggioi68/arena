@@ -616,6 +616,19 @@ export default function Dashboard() {
                                         <div><label className="block text-xs font-bold text-purple-400 mb-2 uppercase">Banner Phải (Dọc)</label><input type="file" className="hidden" ref={rightBannerInput} onChange={(e)=>handleBannerUpload(e, 'rightBanner')}/><UploadBox label="Tải ảnh lên" img={homeConfig.rightBanner} onClick={()=>rightBannerInput.current.click()} onClear={()=>setHomeConfig({...homeConfig, rightBanner: ''})} loading={uploading}/></div>
                                     </div>
                                 </div>
+                                {/* BẮT ĐẦU THÊM MỚI: Ô NHẬP CHỮ CHẠY */}
+    <div>
+        <label className="block text-xs font-bold text-green-400 mb-2 uppercase">Dòng chữ chạy thông báo (Marquee)</label>
+        <input 
+            type="text" 
+            value={homeConfig.marqueeText || ''} 
+            onChange={(e) => setHomeConfig({...homeConfig, marqueeText: e.target.value})} 
+            placeholder="Ví dụ: Chào mừng năm học mới 2026! Arena chuẩn bị mở giải đấu lớn..."
+            className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-green-500 font-bold transition-all"
+        />
+        <p className="text-[10px] text-slate-500 mt-1 italic">* Để trống nếu không muốn hiển thị chữ chạy trên trang chủ.</p>
+    </div>
+    {/* KẾT THÚC THÊM MỚI */}
                                 <button type="submit" className="w-full bg-purple-600 hover:bg-purple-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95"><Save size={20}/> Lưu Giao Diện</button>
                             </form>
                         </div>

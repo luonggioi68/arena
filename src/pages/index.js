@@ -258,7 +258,21 @@ export default function HomePage() {
               </div>
           </div>
       </header>
-
+{/* BẮT ĐẦU THÊM MỚI: THANH CHỮ CHẠY THÔNG BÁO */}
+      {homeConfig.marqueeText && (
+          <div className="w-full bg-gradient-to-r from-red-600 to-orange-600 border-b border-orange-500/50 text-white overflow-hidden flex items-center h-6 md:h-8 shrink-0 relative z-40 shadow-sm">
+              <div className="animate-marquee whitespace-nowrap font-bold text-[10px] md:text-xs tracking-widest drop-shadow-md flex items-center gap-3">
+                  <Zap size={12} className="text-yellow-300 inline" fill="currentColor" />
+                  
+                  {/* [ĐÃ SỬA Ở ĐÂY] Cho phép render HTML để gán link */}
+                  <span dangerouslySetInnerHTML={{ __html: homeConfig.marqueeText }} />
+                  
+                  <Zap size={12} className="text-yellow-300 inline" fill="currentColor" />
+              </div>
+          </div>
+      )}
+      {/* KẾT THÚC THÊM MỚI */}
+   
       {/* 2. BODY CONTENT */}
       <div className="flex-1 w-full 2xl:max-w-[70%] mx-auto flex flex-col px-4 md:px-8 pt-4 pb-2 justify-between overflow-hidden">
             {/* NAV LUYỆN TẬP */}
@@ -335,20 +349,14 @@ export default function HomePage() {
       </div>
 
       {/* FOOTER */}
-      <footer className="h-[30px] shrink-0 bg-[#0a0a0a]/90 backdrop-blur border-t border-white/5 relative z-20 flex items-center justify-between px-6">
-        <div className="flex items-center gap-4 md:gap-6">
-          <div className="h-3 w-px bg-white/10"></div>
-            <div className="flex items-center gap-2 group cursor-help" title="Tổng lượt truy cập thực tế">
-                <Eye size={10} className="text-purple-500"/>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-purple-400 transition-colors text-center">
-                    Tổng lượt truy cập: <span className="text-white font-mono">{realVisitorCount.toLocaleString()}</span>
-                </p>
-            </div>
-        </div>
-        <p className="absolute left-1/2 -translate-x-1/2 text-slate-600 text-[10px] font-bold uppercase tracking-[0.3em] hover:text-cyan-600 transition-colors cursor-default whitespace-nowrap">
-            © 2026 Arena Edu Connect - 0383477162
-        </p>
-      </footer>
+<footer className="h-[30px] shrink-0 bg-[#0a0a0a]/90 backdrop-blur border-t border-white/5 relative z-20 flex items-center justify-center px-6">
+  <p className="text-center text-slate-600 text-[8px] font-bold uppercase tracking-[0.3em] hover:text-cyan-600 transition-colors cursor-default leading-tight">
+    Lượt truy cập: <span className="text-white font-mono">{realVisitorCount.toLocaleString()}</span>
+    <br />
+    © 2026 Arena Edu Connect - 0383477162
+  </p>
+</footer>
+
 
       {/* MODAL PIN */}
       {showPinModal && (
@@ -435,6 +443,22 @@ export default function HomePage() {
             </div>
         </div>
       )}
+      {/* CSS CHO HIỆU ỨNG CHỮ CHẠY */}
+      <style jsx>{`
+        @keyframes marquee {
+          0% { transform: translateX(100vw); }
+          100% { transform: translateX(-100%); }
+        }
+        .animate-marquee {
+          display: inline-block;
+          animation: marquee 25s linear infinite;
+          will-change: transform;
+        }
+        .animate-marquee:hover {
+          animation-play-state: paused; /* Tạm dừng chữ khi người dùng trỏ chuột vào */
+        }
+      `}</style>
+ 
     </div>
   );
 }
