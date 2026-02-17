@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hướng Dẫn Soạn Đề - Arena Mix</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #09090b;
+            background-image: url("https://www.transparenttextures.com/patterns/carbon-fibre.png");
+            color: #fef2f2;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        .glow-text { text-shadow: 0 0 10px rgba(249, 115, 22, 0.8); }
+        .code-block { font-family: 'Courier New', Courier, monospace; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8 selection:bg-orange-500 selection:text-white">
+
+    <div class="max-w-4xl mx-auto bg-zinc-900/90 border border-red-600/30 rounded-2xl shadow-[0_0_30px_rgba(220,38,38,0.15)] overflow-hidden backdrop-blur-sm">
+        
+        <div class="bg-gradient-to-r from-red-950 via-red-800 to-orange-600 p-6 border-b border-red-500/50 flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-400 to-red-500 uppercase italic tracking-tight glow-text">
+                    ARENA MIX - CẨM NANG SOẠN ĐỀ
+                </h1>
+                <p class="text-orange-200/90 text-sm font-bold tracking-wider mt-1">QUY TẮC SOẠN ĐỀ GỐC CHUẨN GDPT 2018</p>
+            </div>
+            <button onclick="window.close()" class="px-4 py-2 bg-black/40 hover:bg-black/60 border border-orange-500/50 text-orange-400 rounded-lg text-sm font-bold uppercase transition-all">Đóng</button>
+        </div>
+
+        <div class="p-6 md:p-8 space-y-8">
+            
+            <div class="bg-orange-950/40 border-l-4 border-orange-500 p-4 rounded-r-lg">
+                <p class="text-orange-200 text-sm font-medium">
+                    <strong class="text-orange-400">LƯU Ý QUAN TRỌNG:</strong> Thầy cô chỉ cần soạn nội dung câu hỏi bắt đầu từ chữ <b>PHẦN I</b>. Hệ thống sẽ tự động vẽ Tiêu đề (Sở/Trường/Mã đề), tự động ép lề A4, và tự động đổi toàn bộ sang font <b>Times New Roman 12pt</b>. Thầy cô KHÔNG CẦN mất công căn lề hay tạo Header trong file gốc!
+                </p>
+            </div>
+
+            <div class="border border-zinc-800 bg-black/40 rounded-xl p-5">
+                <h2 class="text-lg font-black text-red-500 uppercase mb-3 flex items-center gap-2">
+                    <span class="bg-red-500 text-white px-2 py-0.5 rounded text-sm">1</span> PHẦN I: Trắc nghiệm 4 đáp án (Chọn 1)
+                </h2>
+                <ul class="list-disc list-inside text-sm text-zinc-300 space-y-2 mb-4 ml-2">
+                    <li>Gõ đúng chữ <b class="text-orange-400">PHẦN I</b> (hoặc [P1] PHẦN I) để hệ thống nhận diện.</li>
+                    <li>Đáp án đúng được đánh dấu bằng ký tự <b class="text-orange-400">dấu sao (*)</b> viết liền trước ký tự A, B, C, D.</li>
+                    <li>Chỉ được phép có <b>DUY NHẤT 1</b> đáp án đúng.</li>
+                </ul>
+                <div class="bg-zinc-950 border border-zinc-800 p-4 rounded-lg text-orange-100/80 text-sm code-block">
+                    [P1] PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn.<br>
+                    Câu 1: Hướng nghiêng chung của địa hình nước ta là<br>
+                    A. tây - đông.<br>
+                    B. bắc - nam.<br>
+                    <span class="text-green-400 font-bold">*C. tây bắc - đông nam.</span><br>
+                    D. đông bắc - tây nam.
+                </div>
+            </div>
+
+            <div class="border border-zinc-800 bg-black/40 rounded-xl p-5">
+                <h2 class="text-lg font-black text-orange-500 uppercase mb-3 flex items-center gap-2">
+                    <span class="bg-orange-500 text-white px-2 py-0.5 rounded text-sm">2</span> PHẦN II: Trắc nghiệm Đúng/Sai
+                </h2>
+                <ul class="list-disc list-inside text-sm text-zinc-300 space-y-2 mb-4 ml-2">
+                    <li>Gõ đúng chữ <b class="text-orange-400">PHẦN II</b> (hoặc [P2] PHẦN II).</li>
+                    <li>Mỗi câu phải có đủ 4 ý nhỏ a, b, c, d.</li>
+                    <li>Ý nào ĐÚNG thì thêm <b class="text-orange-400">dấu sao (*)</b> trước a, b, c, d. Ý nào SAI thì để bình thường.</li>
+                </ul>
+                <div class="bg-zinc-950 border border-zinc-800 p-4 rounded-lg text-orange-100/80 text-sm code-block">
+                    [P2] PHẦN II. Câu trắc nghiệm đúng sai.<br>
+                    Câu 1: Nhận định về đặc điểm Đồng bằng sông Cửu Long:<br>
+                    <span class="text-green-400 font-bold">*a) Là vựa lúa lớn nhất cả nước.</span> <i class="text-zinc-500">// Câu này Đúng</i><br>
+                    b) Có mùa đông lạnh nhất cả nước. <i class="text-zinc-500">// Câu này Sai</i><br>
+                    <span class="text-green-400 font-bold">*c) Có mạng lưới kênh rạch chằng chịt.</span><br>
+                    <span class="text-green-400 font-bold">*d) Xâm nhập mặn là khó khăn lớn nhất.</span>
+                </div>
+            </div>
+
+            <div class="border border-zinc-800 bg-black/40 rounded-xl p-5">
+                <h2 class="text-lg font-black text-yellow-500 uppercase mb-3 flex items-center gap-2">
+                    <span class="bg-yellow-500 text-black px-2 py-0.5 rounded text-sm">3</span> PHẦN III: Trả lời ngắn (Điền khuyết)
+                </h2>
+                <ul class="list-disc list-inside text-sm text-zinc-300 space-y-2 mb-4 ml-2">
+                    <li>Gõ đúng chữ <b class="text-orange-400">PHẦN III</b> (hoặc [P3] PHẦN III).</li>
+                    <li>Đáp án phải được ghi ở dòng cuối cùng của câu hỏi, bắt đầu bằng chữ <b class="text-orange-400">Key:</b> hoặc <b class="text-orange-400">Đáp án:</b></li>
+                    <li>Hệ thống sẽ ghi nhận đáp án này vào file Excel và TỰ ĐỘNG XÓA dòng Key khỏi đề thi của học sinh.</li>
+                </ul>
+                <div class="bg-zinc-950 border border-zinc-800 p-4 rounded-lg text-orange-100/80 text-sm code-block">
+                    [P3] PHẦN III. Câu trắc nghiệm trả lời ngắn.<br>
+                    Câu 1: Biên độ nhiệt độ trung bình năm tại Hà Nội là bao nhiêu độ C?<br>
+                    <span class="text-green-400 font-bold">Key: 12,5</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</body>
+</html>

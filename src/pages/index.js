@@ -312,34 +312,47 @@ export default function HomePage() {
             </div>
 
             {/* C. FOOTER BAR */}
-            <div className="shrink-0 w-full bg-black/80 backdrop-blur-xl border-t-2 border-cyan-600/50 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(6,182,212,0.1)] animate-in fade-in slide-in-from-bottom-4 relative z-20 h-[70px] md:h-[80px]">
+           <div className="shrink-0 w-full bg-black/80 backdrop-blur-xl border-t-2 border-cyan-600/50 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(6,182,212,0.1)] animate-in fade-in slide-in-from-bottom-4 relative z-20 h-[70px] md:h-[80px]">
                 <div className="grid grid-cols-8 w-full h-full bg-slate-900/50">
                     {[...Array(8)].map((_, index) => {
                         const isSpin = index === 0;
                         const isVote = index === 1;
-                        const isGrade = index >= 2 && index <= 6; 
-                        const gradeNum = isGrade ? index - 1 : null; 
+                        const isMixer = index === 2; // [MỚI] Vị trí số 3 dành cho Trộn Đề
+                        const isGrade = index >= 3 && index <= 7; // [SỬA] Đẩy lớp 1-5 về các ô cuối
+                        const gradeNum = isGrade ? index - 2 : null; // [SỬA] Công thức tính lại số lớp: index 3 -> Lớp 1
 
                         const handleClick = () => {
                             if (isSpin) router.push('/bottom/SpinWheel');
                             else if (isVote) router.push('/bottom/VoteArena');
+                            else if (isMixer) router.push('/mixer'); // [MỚI] Link tới trang Trộn Đề
                             else if (isGrade) router.push(`/training?grade=${gradeNum}`);
                         };
 
                         return (
-                            <button key={index} onClick={handleClick} className={`group relative w-full h-full flex flex-col items-center justify-center transition-all duration-300 border-r border-cyan-900/30 last:border-r-0 overflow-hidden ${isSpin||isVote||isGrade ? 'cursor-pointer' : 'cursor-default bg-transparent opacity-50'} ${isGrade ? 'hover:flex-[1.1]' : ''}`}>
-                                {(isSpin || isVote) && <div className="absolute inset-0 bg-gradient-to-b from-cyan-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500"></div>}
+                            <button key={index} onClick={handleClick} className={`group relative w-full h-full flex flex-col items-center justify-center transition-all duration-300 border-r border-cyan-900/30 last:border-r-0 overflow-hidden cursor-pointer ${isGrade ? 'hover:flex-[1.1]' : ''}`}>
+                                
+                                {/* Nền hover cho Vòng Xoay, Vote và Trộn Đề */}
+                                {(isSpin || isVote || isMixer) && <div className="absolute inset-0 bg-gradient-to-b from-cyan-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500"></div>}
+                                
+                                {/* Nền hover rực lửa cho Luyện Tập */}
                                 {isGrade && (
                                     <>
                                         <div className="absolute inset-0 bg-gradient-to-b from-red-900/40 to-orange-900/40 group-hover:opacity-0 transition-opacity"></div>
                                         <div className="absolute inset-0 bg-gradient-to-b from-red-600/80 via-orange-500/80 to-yellow-500/80 opacity-0 group-hover:opacity-100 transition-all duration-500"></div>
                                     </>
                                 )}
+                                
                                 <div className="relative z-10 flex flex-col items-center gap-0.5 justify-center h-full w-full">
-                                    {isSpin ? (<><Disc size={20} className="text-cyan-300 group-hover:rotate-180 transition-transform duration-700"/><span className="text-[9px] font-black uppercase text-cyan-100 tracking-wider leading-none text-center mt-1">Vòng Xoay</span></>) : 
-                                     isVote ? (<><BarChart2 size={20} className="text-cyan-300 group-hover:scale-110 transition-transform duration-300"/><span className="text-[9px] font-black uppercase text-cyan-100 tracking-wider leading-none text-center mt-1">Vote</span></>) : 
-                                     isGrade ? (<><span className="text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none mb-0.5">Luyện Tập</span><span className="text-2xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:text-white drop-shadow-md leading-none">{gradeNum}</span><span className="text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none mb-0.5">Lớp</span></>) : 
-                                     (<><span className="text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none mb-0.5">LIÊN HỆ Phone/zalo</span><span className="text-[18px] font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:text-white drop-shadow-md leading-none">0383477162</span></>)}
+                                    {isSpin ? (
+                                        <><Disc size={20} className="text-cyan-300 group-hover:rotate-180 transition-transform duration-700"/><span className="text-[9px] font-black uppercase text-cyan-100 tracking-wider leading-none text-center mt-1">Vòng Xoay</span></>
+                                    ) : isVote ? (
+                                        <><BarChart2 size={20} className="text-cyan-300 group-hover:scale-110 transition-transform duration-300"/><span className="text-[9px] font-black uppercase text-cyan-100 tracking-wider leading-none text-center mt-1">Vote</span></>
+                                    ) : isMixer ? (
+                                        // [MỚI] Icon Zap (tia chớp) màu Cam/Vàng cho Trộn Đề để nổi bật
+                                        <><Zap size={20} className="text-orange-400 group-hover:scale-125 group-hover:text-yellow-300 transition-all duration-300"/><span className="text-[9px] font-black uppercase text-orange-200 group-hover:text-yellow-100 tracking-wider leading-none text-center mt-1">Trộn Đề</span></>
+                                    ) : isGrade ? (
+                                        <><span className="text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none mb-0.5">Luyện Tập</span><span className="text-2xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:text-white drop-shadow-md leading-none">{gradeNum}</span><span className="text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none mb-0.5">Lớp</span></>
+                                    ) : null}
                                 </div>
                             </button>
                         );
