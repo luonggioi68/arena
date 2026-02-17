@@ -48,7 +48,7 @@ export default function ExamMixer() {
           formData.append('file', file);
           formData.append('config', JSON.stringify(config)); 
 
-          const response = await fetch('https://arena-mix-api.onrender.com', {
+          const response = await fetch('https://arena-mix-api.onrender.com/api/mix-docx', {
               method: 'POST',
               body: formData,
           });
