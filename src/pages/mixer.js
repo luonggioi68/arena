@@ -152,7 +152,7 @@ export default function ExamMixer() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 
                 <div className="bg-black/30 p-4 rounded-xl border border-zinc-800 flex flex-col">
-                    <h3 className="text-orange-500 font-bold uppercase tracking-widest text-[10px] mb-2">Mã Đề Tự Động</h3>
+                    <h3 className="text-orange-500 font-bold uppercase tracking-widest text-[10px] mb-2">Mã Đề Tự Động, có thể nhập tuỳ chọn số khác hoặc Nhậpmã đề 4 số</h3>
                     <div className="flex flex-wrap gap-2 overflow-y-auto max-h-[110px] pr-1 custom-scrollbar">
                         {config.maDeList.map((ma, idx) => (
                             <div key={idx} className="bg-zinc-950 border border-red-900/50 p-1 rounded flex items-center w-14 relative group hover:border-orange-500 transition-colors">
