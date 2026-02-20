@@ -108,7 +108,7 @@ useEffect(() => {
       let isMaster = MASTER_EMAILS.includes(currentUser.email);
 
       try {
-          // 1. Lấy dữ liệu hồ sơ từ bảng 'users' (nơi lưu ngày hết hạn)
+          // 1. Lấy dữ liệu hồ sơ từ bảng 'users' (Bảng chuẩn hiện tại)
           const userDocSnap = await getDoc(doc(firestore, "users", currentUser.uid));
           let userData = userDocSnap.exists() ? userDocSnap.data() : null;
 
@@ -121,33 +121,38 @@ useEffect(() => {
                   return;
               }
 
-              // Kiểm tra ngày hết hạn (Dạng YYYY-MM-DD)
+              // Xử lý kiểm tra ngày hết hạn
               if (userData.expireDate) {
                   const expireDate = new Date(userData.expireDate);
                   const now = new Date();
                   
-                  // Đưa cả 2 biến về cùng thời điểm 00:00:00 để so sánh chuẩn xác theo ngày
+                  // Đưa cả 2 biến về cùng thời điểm 00:00:00 để tính toán số ngày chính xác
                   expireDate.setHours(0, 0, 0, 0);
                   now.setHours(0, 0, 0, 0);
 
-                  // Nếu hôm nay LỚN HƠN ngày hết hạn -> Chặn truy cập
-                  if (now > expireDate) {
+                  // Tính số ngày còn lại
+                  const diffTime = expireDate - now;
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                  if (diffDays < 0) {
+                      // HẾT HẠN -> Chặn truy cập và đá ra ngoài
                       alert(`⛔ TÀI KHOẢN ĐÃ HẾT HẠN SỬ DỤNG!\nNgày hết hạn của bạn là: ${userData.expireDate}\n\nVui lòng liên hệ Admin để gia hạn.`);
                       await signOut(auth);
                       router.push('/');
                       return;
+                  } else if (diffDays <= 3) {
+                      // SẮP HẾT HẠN (Còn <= 3 ngày) -> Hiện cảnh báo nhưng vẫn cho vào
+                      // Dùng sessionStorage để chỉ hiện 1 lần lúc mới đăng nhập, tránh làm phiền liên tục
+                      if (!sessionStorage.getItem('expire_warning_shown')) {
+                          alert(`⚠️ CHÚ Ý: Tài khoản của bạn sẽ hết hạn sau ${diffDays} ngày nữa (vào ngày ${userData.expireDate}).\n\nVui lòng liên hệ Admin để gia hạn tránh gián đoạn công việc!`);
+                          sessionStorage.setItem('expire_warning_shown', 'true');
+                      }
                   }
               }
           }
 
           // 3. Nếu hợp lệ, lưu thông tin vào Store
-          setUser({ ...currentUser, ...userData });
-
-          // (Giữ nguyên logic cũ) Dành riêng cho Master lấy danh sách allowed_emails
-          if (isMaster) {
-              const snap = await getDocs(collection(firestore, "allowed_emails"));
-              setAllowedEmails(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-          }
+          setUser({ ...currentUser, ...userData, isMaster });
 
           // 4. Lấy các cấu hình hệ thống
           const configSnap = await getDoc(doc(firestore, "user_configs", currentUser.uid));
