@@ -101,44 +101,84 @@ export default function Dashboard() {
   const [filterExamId, setFilterExamId] = useState('ALL');
   const [filterClass, setFilterClass] = useState('ALL');
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) { router.push('/'); return; }
-      
-      let isMaster = MASTER_EMAILS.includes(currentUser.email);
-      let myPermission = null;
-      let allPermissions = [];
+useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        // 1. Kiểm tra đăng nhập cơ bản
+        if (!firebaseUser) {
+            router.push('/');
+            return;
+        }
 
-      try {
-          const snap = await getDocs(collection(firestore, "allowed_emails"));
-          allPermissions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setAllowedEmails(allPermissions);
-          myPermission = allPermissions.find(p => p.email === currentUser.email);
-      } catch (e) { console.error("Lỗi lấy danh sách quyền:", e); }
-      
-      if (!isMaster) {
-          if (!myPermission) { alert(`Tài khoản chưa được cấp quyền truy cập!`); await signOut(auth); router.push('/'); return; }
-          if (myPermission.expiredAt) {
-              const expireDate = new Date(myPermission.expiredAt.seconds * 1000);
-              const now = new Date();
-              if (now > expireDate) { alert(`⛔ TÀI KHOẢN HẾT HẠN!`); await signOut(auth); router.push('/'); return; }
-          }
-      }
-      
-      setUser(currentUser);
-      
-      try {
-          const configSnap = await getDoc(doc(firestore, "user_configs", currentUser.uid));
-          if (configSnap.exists()) setUserConfig({ ...userConfig, ...configSnap.data() });
-          const homeSnap = await getDoc(doc(firestore, "system_config", "homepage"));
-          if (homeSnap.exists()) setHomeConfig(homeSnap.data());
-      } catch (e) {}
-      
-      await Promise.all([ fetchQuizzes(currentUser.uid), fetchResults(currentUser.uid), fetchBoards(currentUser.uid), fetchAssignments(currentUser) ]);
-      setLoading(false);
+        const isMaster = MASTER_EMAILS.includes(firebaseUser.email);
+        let userData = null;
+
+        try {
+            // 2. Lấy dữ liệu chi tiết từ bảng 'users' thay vì 'allowed_emails'
+            const userDoc = await getDoc(doc(firestore, "users", firebaseUser.uid));
+            
+            if (userDoc.exists()) {
+                userData = userDoc.data();
+            }
+
+            // 3. Logic kiểm tra quyền truy cập (Trừ Master Email)
+            if (!isMaster) {
+                // Kiểm tra sự tồn tại và trạng thái kích hoạt
+                if (!userData || userData.status !== 'active') {
+                    alert("Tài khoản của bạn chưa được kích hoạt hoặc đã bị khóa!");
+                    await signOut(auth);
+                    router.push('/');
+                    return;
+                }
+
+                // Kiểm tra ngày hết hạn (giả sử định dạng YYYY-MM-DD)
+                if (userData.expireDate) {
+                    const expireDate = new Date(userData.expireDate);
+                    const now = new Date();
+                    // Đặt giờ về 0 để so sánh chính xác theo ngày
+                    now.setHours(0, 0, 0, 0);
+
+                    if (now > expireDate) {
+                        alert(`⛔ TÀI KHOẢN ĐÃ HẾT HẠN SỬ DỤNG!\nNgày hết hạn: ${userData.expireDate}`);
+                        await signOut(auth);
+                        router.push('/');
+                        return;
+                    }
+                }
+            }
+
+            // 4. Cập nhật User vào Store (Gộp thông tin Auth và Firestore)
+            setUser({
+                ...firebaseUser,
+                ...userData, // Chứa role, status, expireDate để các nút 'Tạo Game' mở ra
+                isMaster: isMaster
+            });
+
+            // 5. Lấy các cấu hình hệ thống khác
+            const [configSnap, homeSnap] = await Promise.all([
+                getDoc(doc(firestore, "user_configs", firebaseUser.uid)),
+                getDoc(doc(firestore, "system_config", "homepage"))
+            ]);
+
+            if (configSnap.exists()) setUserConfig(prev => ({ ...prev, ...configSnap.data() }));
+            if (homeSnap.exists()) setHomeConfig(homeSnap.data());
+
+            // 6. Tải dữ liệu Dashboard
+            await Promise.all([
+                fetchQuizzes(firebaseUser.uid),
+                fetchResults(firebaseUser.uid),
+                fetchBoards(firebaseUser.uid),
+                fetchAssignments(firebaseUser)
+            ]);
+
+        } catch (error) {
+            console.error("Lỗi khởi tạo Dashboard:", error);
+        } finally {
+            setLoading(false);
+        }
     });
+
     return () => unsubscribe();
-  }, [router, setUser]);
+}, [router, setUser]);
 
   // --- CÁC HÀM FETCH DATA ---
   const fetchAssignments = async (currentUser) => {

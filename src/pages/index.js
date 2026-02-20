@@ -17,6 +17,10 @@ import {
 export default function HomePage() {
   const router = useRouter();
   const { user, setUser } = useAuthStore();
+  // lấy ngày
+  const expireDate6Months = new Date();
+  expireDate6Months.setMonth(expireDate6Months.getMonth() + 6);
+  const expireDateString = expireDate6Months.toISOString().split('T')[0]; // Trả về dạng YYYY-MM-DD
   
   // State cho Game Pin
   const [showPinModal, setShowPinModal] = useState(false);
@@ -67,73 +71,96 @@ export default function HomePage() {
 
   // --- AUTH HANDLERS ---
   const handleGoogleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-      setShowAuthModal(false);
-    } catch (error) { setAuthError("Đăng nhập Google thất bại!"); }
+      try {
+          const result = await signInWithPopup(auth, googleProvider);
+          const user = result.user;
+          const userRef = doc(firestore, 'users', user.uid);
+          const userSnap = await getDoc(userRef);
+
+          if (!userSnap.exists()) {
+              await setDoc(userRef, {
+                  name: user.displayName,
+                  email: user.email,
+                  role: 'teacher',
+                  status: 'active',
+                  createdAt: serverTimestamp(),
+                  expireDate: "2027-12-31"
+              });
+          }
+          router.push('/dashboard');
+      } catch (error) {
+          console.error(error);
+      }
   };
 
   const handleAuthSubmit = async (e) => {
       e.preventDefault();
       setAuthLoading(true);
-      setAuthError('');
-      setAuthSuccess('');
+      setAuthError(null);
+      setAuthSuccess(null);
 
       try {
-          if (authMode === 'LOGIN') {
-              await signInWithEmailAndPassword(auth, authData.email, authData.password);
-              router.push('/dashboard');
-          } 
-          else if (authMode === 'REGISTER') {
-              // 1. Tạo tài khoản Auth
+          if (authMode === 'REGISTER') {
+              // 1. Tạo tài khoản đăng nhập
               const userCredential = await createUserWithEmailAndPassword(auth, authData.email, authData.password);
-              const newUser = userCredential.user;
+              const user = userCredential.user;
+              await updateProfile(user, { displayName: authData.name });
 
-              // 2. Cập nhật tên hiển thị
-              await updateProfile(newUser, { displayName: authData.name });
+              // 2. Tính toán ngày hết hạn (6 tháng từ hôm nay)
+              const expireDate6Months = new Date();
+              expireDate6Months.setMonth(expireDate6Months.getMonth() + 6);
+              const expireDateString = expireDate6Months.toISOString().split('T')[0];
 
-              // [LOGIC MỚI] 3. Tự động thêm vào danh sách cho phép (allowed_emails) với hạn 180 ngày
-              const expiredDate = new Date();
-              expiredDate.setDate(expiredDate.getDate() + 180); // Cộng thêm 180 ngày
-
-              await addDoc(collection(firestore, "allowed_emails"), {
+              // 3. Ghi vào Firestore - ĐÂY LÀ BƯỚC QUAN TRỌNG ĐỂ KÍCH HOẠT
+              await setDoc(doc(firestore, 'users', user.uid), {
+                  name: authData.name,
                   email: authData.email,
-                  name: authData.name, // Lưu tên để hiển thị trong Admin
-                  phone: authData.phone, // Lưu SĐT
-                  createdAt: serverTimestamp(),
-                  expiredAt: expiredDate, // Hạn dùng
-                  addedBy: 'System (Self-Register)',
-                  role: 'TEACHER'
+                  phone: authData.phone || "",
+                  role: 'teacher',   // Mặc định là giáo viên
+                  status: 'active', // KÍCH HOẠT NGAY
+                  expireDate: expireDateString, // HẠN 6 THÁNG
+                  createdAt: serverTimestamp()
               });
 
-              // 4. Lưu thông tin profile (user_configs)
-              await setDoc(doc(firestore, "user_configs", newUser.uid), {
-                  email: authData.email,
-                  phone: authData.phone,
-                  displayName: authData.name,
-                  createdAt: serverTimestamp(),
-                  role: 'TEACHER', 
-                  status: 'ACTIVE'
-              }, { merge: true });
+              // 4. Đăng nhập thành công, đóng modal và vào thẳng Dashboard
+              setShowAuthModal(false);
+              router.push('/dashboard'); 
 
-              // 5. Reload để cập nhật profile
-              await newUser.reload();
-              setUser(auth.currentUser);
-              
-              setAuthSuccess("Đăng ký thành công! Bạn được tặng 180 ngày sử dụng.");
-              setTimeout(() => router.push('/dashboard'), 1500);
-          } 
-          else if (authMode === 'FORGOT') {
-              await sendPasswordResetEmail(auth, authData.email);
-              setAuthSuccess(`Đã gửi link khôi phục đến ${authData.email}. Vui lòng kiểm tra hộp thư.`);
+          } else if (authMode === 'LOGIN') {
+              await signInWithEmailAndPassword(auth, authData.email, authData.password);
+              setShowAuthModal(false);
+              router.push('/dashboard');
           }
       } catch (error) {
+          if (error.code === 'auth/invalid-credential') setAuthError("Email hoặc mật khẩu không chính xác!");
+          else setAuthError(error.message);
+      } finally {
+          setAuthLoading(false);
+      }
+  };
+
+  const handleResetPassword = async (e) => {
+      e.preventDefault();
+      setAuthError(null);
+      setAuthSuccess(null);
+      
+      if (!authData.email) {
+          setAuthError("Vui lòng nhập Email để khôi phục mật khẩu!");
+          return;
+      }
+      setAuthLoading(true);
+      try {
+          await sendPasswordResetEmail(auth, authData.email);
+          setAuthSuccess("Đã gửi link khôi phục mật khẩu! Vui lòng kiểm tra hộp thư của bạn (kể cả mục Thư rác/Spam).");
+          // Đợi 3 giây rồi tự động chuyển về chế độ LOGIN
+          setTimeout(() => {
+              setAuthMode('LOGIN');
+              setAuthSuccess('');
+          }, 3000);
+      } catch (error) {
           console.error(error);
-          let msg = "Đã có lỗi xảy ra.";
-          if(error.code === 'auth/email-already-in-use') msg = "Email này đã được sử dụng.";
-          if(error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') msg = "Sai tài khoản hoặc mật khẩu.";
-          if(error.code === 'auth/weak-password') msg = "Mật khẩu quá yếu (tối thiểu 6 ký tự).";
-          setAuthError(msg);
+          if (error.code === 'auth/user-not-found') setAuthError("Email này chưa được đăng ký!");
+          else setAuthError("Lỗi: " + error.message);
       } finally {
           setAuthLoading(false);
       }
@@ -258,20 +285,17 @@ export default function HomePage() {
               </div>
           </div>
       </header>
-{/* BẮT ĐẦU THÊM MỚI: THANH CHỮ CHẠY THÔNG BÁO */}
+
+      {/* THANH CHỮ CHẠY THÔNG BÁO */}
       {homeConfig.marqueeText && (
           <div className="w-full bg-gradient-to-r from-red-600 to-orange-600 border-b border-orange-500/50 text-white overflow-hidden flex items-center h-6 md:h-8 shrink-0 relative z-40 shadow-sm">
               <div className="animate-marquee whitespace-nowrap font-bold text-[10px] md:text-xs tracking-widest drop-shadow-md flex items-center gap-3">
                   <Zap size={12} className="text-yellow-300 inline" fill="currentColor" />
-                  
-                  {/* [ĐÃ SỬA Ở ĐÂY] Cho phép render HTML để gán link */}
                   <span dangerouslySetInnerHTML={{ __html: homeConfig.marqueeText }} />
-                  
                   <Zap size={12} className="text-yellow-300 inline" fill="currentColor" />
               </div>
           </div>
       )}
-      {/* KẾT THÚC THÊM MỚI */}
    
       {/* 2. BODY CONTENT */}
       <div className="flex-1 w-full 2xl:max-w-[70%] mx-auto flex flex-col px-4 md:px-8 pt-4 pb-2 justify-between overflow-hidden">
@@ -317,14 +341,14 @@ export default function HomePage() {
                     {[...Array(8)].map((_, index) => {
                         const isSpin = index === 0;
                         const isVote = index === 1;
-                        const isMixer = index === 2; // [MỚI] Vị trí số 3 dành cho Trộn Đề
-                        const isGrade = index >= 3 && index <= 7; // [SỬA] Đẩy lớp 1-5 về các ô cuối
-                        const gradeNum = isGrade ? index - 2 : null; // [SỬA] Công thức tính lại số lớp: index 3 -> Lớp 1
+                        const isMixer = index === 2;
+                        const isGrade = index >= 3 && index <= 7;
+                        const gradeNum = isGrade ? index - 2 : null;
 
                         const handleClick = () => {
                             if (isSpin) router.push('/bottom/SpinWheel');
                             else if (isVote) router.push('/bottom/VoteArena');
-                            else if (isMixer) router.push('/mixer'); // [MỚI] Link tới trang Trộn Đề
+                            else if (isMixer) router.push('/mixer');
                             else if (isGrade) router.push(`/training?grade=${gradeNum}`);
                         };
 
@@ -348,7 +372,6 @@ export default function HomePage() {
                                     ) : isVote ? (
                                         <><BarChart2 size={20} className="text-cyan-300 group-hover:scale-110 transition-transform duration-300"/><span className="text-[9px] font-black uppercase text-cyan-100 tracking-wider leading-none text-center mt-1">Vote</span></>
                                     ) : isMixer ? (
-                                        // [MỚI] Icon Zap (tia chớp) màu Cam/Vàng cho Trộn Đề để nổi bật
                                         <><Zap size={20} className="text-orange-400 group-hover:scale-125 group-hover:text-yellow-300 transition-all duration-300"/><span className="text-[9px] font-black uppercase text-orange-200 group-hover:text-yellow-100 tracking-wider leading-none text-center mt-1">Trộn Đề</span></>
                                     ) : isGrade ? (
                                         <><span className="text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none mb-0.5">Luyện Tập</span><span className="text-2xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:text-white drop-shadow-md leading-none">{gradeNum}</span><span className="text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none mb-0.5">Lớp</span></>
@@ -362,14 +385,13 @@ export default function HomePage() {
       </div>
 
       {/* FOOTER */}
-<footer className="h-[30px] shrink-0 bg-[#0a0a0a]/90 backdrop-blur border-t border-white/5 relative z-20 flex items-center justify-center px-6">
-  <p className="text-center text-slate-600 text-[8px] font-bold uppercase tracking-[0.3em] hover:text-cyan-600 transition-colors cursor-default leading-tight">
-    Lượt truy cập: <span className="text-white font-mono">{realVisitorCount.toLocaleString()}</span>
-    <br />
-    © 2026 Arena Edu Connect - 0383477162
-  </p>
-</footer>
-
+      <footer className="h-[30px] shrink-0 bg-[#0a0a0a]/90 backdrop-blur border-t border-white/5 relative z-20 flex items-center justify-center px-6">
+        <p className="text-center text-slate-600 text-[8px] font-bold uppercase tracking-[0.3em] hover:text-cyan-600 transition-colors cursor-default leading-tight">
+          Lượt truy cập: <span className="text-white font-mono">{realVisitorCount.toLocaleString()}</span>
+          <br />
+          © 2026 Arena Edu Connect - 0383477162
+        </p>
+      </footer>
 
       {/* MODAL PIN */}
       {showPinModal && (
@@ -389,7 +411,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* --- MODAL AUTHENTICATION (NEW) --- */}
+      {/* --- MODAL AUTHENTICATION (CẬP NHẬT FORGOT PASSWORD) --- */}
       {showAuthModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in fade-in duration-300">
             <div className="bg-[#0f172a] border border-cyan-500/30 p-8 rounded-[2rem] w-full max-w-md shadow-[0_0_100px_rgba(6,182,212,0.2)] relative animate-in zoom-in-95 duration-300 overflow-hidden">
@@ -403,7 +425,8 @@ export default function HomePage() {
                     <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Học sinh đăng nhập/đăng ký trong Luyện Tập</p>
                 </div>
 
-                <form onSubmit={handleAuthSubmit} className="space-y-4">
+                {/* GẮN CHUYỂN ĐỔI ONSUBMIT DỰA TRÊN CHẾ ĐỘ */}
+                <form onSubmit={authMode === 'FORGOT' ? handleResetPassword : handleAuthSubmit} className="space-y-4">
                     {authMode === 'REGISTER' && (
                         <>
                             <div className="relative">
@@ -433,7 +456,7 @@ export default function HomePage() {
                     {authSuccess && <div className="text-green-400 text-xs font-bold bg-green-900/20 p-3 rounded-lg flex items-center gap-2 border border-green-500/30"><CheckCircle size={14}/> {authSuccess}</div>}
 
                     <button type="submit" disabled={authLoading} className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 text-white py-3 rounded-xl font-black uppercase shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                        {authLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : (authMode === 'LOGIN' ? 'Đăng Nhập' : authMode === 'REGISTER' ? 'Đăng Ký Ngay' : 'Gửi Link')}
+                        {authLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : (authMode === 'LOGIN' ? 'Đăng Nhập' : authMode === 'REGISTER' ? 'Đăng Ký Ngay' : 'Gửi Link Khôi Phục')}
                     </button>
                 </form>
 
@@ -450,7 +473,7 @@ export default function HomePage() {
                         </>
                     )}
                     {authMode !== 'LOGIN' && (
-                        <button onClick={() => setAuthMode('LOGIN')} className="text-xs font-bold text-cyan-400 hover:underline mt-2">Quay lại Đăng nhập</button>
+                        <button onClick={() => { setAuthMode('LOGIN'); setAuthError(null); setAuthSuccess(null); }} className="text-xs font-bold text-cyan-400 hover:underline mt-2">Quay lại Đăng nhập</button>
                     )}
                 </div>
             </div>
