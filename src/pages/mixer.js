@@ -101,7 +101,7 @@ export default function ExamMixer() {
                         Arena Trộn Đề
                     </h1>
                     <p className="text-orange-200/90 text-xs md:text-sm font-bold tracking-wider uppercase flex items-center gap-1 mt-0.5">
-                       <Crosshair size={14}/> Vũ khí tinh nhuệ cho GDPT 2018!
+                       <Crosshair size={12}/>  All In One: Trắc nghiệm - Đúng/sai- Trả lời ngắn - Tự luận Vũ khí tinh nhuệ cho giáo viên!
                     </p>
                 </div>
             </div>
