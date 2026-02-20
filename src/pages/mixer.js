@@ -17,7 +17,7 @@ export default function ExamMixer() {
     monThi: 'TOÁN HỌC 11',
     thoiGian: '90', 
     soDe: 4,
-    maDeList: ['401', '702', '803', '304']
+    maDeList: ['001', '002', '003', '004']
   });
 
   useEffect(() => {
