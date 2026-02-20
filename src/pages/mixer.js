@@ -101,7 +101,7 @@ export default function ExamMixer() {
                         Arena Trộn Đề
                     </h1>
                     <p className="text-orange-200/90 text-xs md:text-sm font-bold tracking-wider uppercase flex items-center gap-1 mt-0.5">
-                       <Crosshair size={14}/> Vũ khí tinh nhuệ cho GDPT 2018!
+                       <Crosshair size={14}/> All In One: Trắc nghiệm - Đúng/sai- Trả lời ngắn - Tự luận. Vũ khí tinh nhuệ cho giáo viên!
                     </p>
                 </div>
             </div>
@@ -152,7 +152,7 @@ export default function ExamMixer() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 
                 <div className="bg-black/30 p-4 rounded-xl border border-zinc-800 flex flex-col">
-                    <h3 className="text-orange-500 font-bold uppercase tracking-widest text-[10px] mb-2">Mã Đề Tự Động, có thể nhập tuỳ chọn số khác hoặc Nhậpmã đề 4 số</h3>
+                    <h3 className="text-orange-500 font-bold uppercase tracking-widest text-[10px] mb-2">Mã Đề Tự Động, có thể nhập tuỳ chọn số khác hoặc Nhập mã đề 4 số</h3>
                     <div className="flex flex-wrap gap-2 overflow-y-auto max-h-[110px] pr-1 custom-scrollbar">
                         {config.maDeList.map((ma, idx) => (
                             <div key={idx} className="bg-zinc-950 border border-red-900/50 p-1 rounded flex items-center w-14 relative group hover:border-orange-500 transition-colors">
