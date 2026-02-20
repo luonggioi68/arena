@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { firestore } from '@/lib/firebase';
-import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { Clock, CheckCircle, XCircle, AlertTriangle, User, Trophy, ArrowLeft, Home, Zap, Shield, Target, EyeOff, Lock, AlertOctagon, Flame } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import MathRender from '@/components/MathRender'; 
@@ -54,41 +54,56 @@ export default function ExamRoom() {
   };
 
   // 1. LOAD ĐỀ
+ // 1. LOAD ĐỀ (REALTIME BẰNG ONSNAPSHOT)
   useEffect(() => {
     if (!id) return;
-    const fetchExam = async () => {
-      try {
-        const docSnap = await getDoc(doc(firestore, "quizzes", id));
+    
+    // onSnapshot giúp lắng nghe mọi thay đổi từ phía Giáo viên (kể cả việc Bật/Tắt xem đáp án)
+    const unsubscribe = onSnapshot(doc(firestore, "quizzes", id), (docSnap) => {
         if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.status !== 'OPEN') {
-             alert("Đề thi này đã đóng!");
-             router.push('/exam');
-             return;
-          }
-          
-          setQuiz(data);
-          const durationMinutes = data.duration || 45;
-          setTimeLeft(durationMinutes * 60);
+            const data = docSnap.data();
+            
+            // Nếu GV đóng thi mà HS chưa nộp bài thì mới văng ra ngoài
+            if (data.status !== 'OPEN' && !submitted) {
+                alert("Đề thi này đã đóng!");
+                router.push('/');
+                return;
+            }
+            
+            // Cập nhật state quiz liên tục (để nhận cờ choPhepXemDapAn mới nhất)
+            setQuiz(data);
 
-          const formatQuestions = (qs) => qs.map(q => {
-             if(q.type === 'TF') {
-                 return { ...q, items: q.items.map(i => ({...i, img: i.img || ''})) }
-             }
-             return q;
-          });
+            // Cập nhật câu hỏi và thời gian (CHỈ LÀM 1 LẦN để không bị trộn lại đề khi đang xem)
+            setQuestions(prev => {
+                if (prev.length > 0) return prev; // Đã load rồi thì giữ nguyên thứ tự cũ
+                
+                const durationMinutes = data.duration || 45;
+                setTimeLeft(durationMinutes * 60);
 
-          const p1 = formatQuestions(data.questions.filter(q => q.type === 'MCQ')).sort(() => Math.random() - 0.5);
-          const p2 = formatQuestions(data.questions.filter(q => q.type === 'TF')).sort(() => Math.random() - 0.5);
-          const p3 = formatQuestions(data.questions.filter(q => q.type === 'SA')).sort(() => Math.random() - 0.5);
-          
-          setQuestions([...p1, ...p2, ...p3]);
+                const formatQuestions = (qs) => qs.map(q => {
+                    if(q.type === 'TF') {
+                        return { ...q, items: q.items.map(i => ({...i, img: i.img || ''})) }
+                    }
+                    return q;
+                });
+
+                const p1 = formatQuestions(data.questions.filter(q => q.type === 'MCQ')).sort(() => Math.random() - 0.5);
+                const p2 = formatQuestions(data.questions.filter(q => q.type === 'TF')).sort(() => Math.random() - 0.5);
+                const p3 = formatQuestions(data.questions.filter(q => q.type === 'SA')).sort(() => Math.random() - 0.5);
+                
+                return [...p1, ...p2, ...p3];
+            });
+            
+            setLoading(false);
         }
-      } catch (error) { console.error(error); } 
-      finally { setLoading(false); }
-    };
-    fetchExam();
-  }, [id]);
+    }, (error) => {
+        console.error("Lỗi tải đề:", error);
+        setLoading(false);
+    });
+
+    // Cleanup listener khi học sinh thoát khỏi phòng thi
+    return () => unsubscribe();
+  }, [id, submitted, router]);
 
   // 2. CHỐNG GIAN LẬN
   useEffect(() => {
@@ -345,16 +360,25 @@ export default function ExamRoom() {
                 <span className="bg-slate-700 text-slate-300 px-2 py-1 rounded uppercase">Lớp: {className}</span>
             </div>
         </div>
-
+{/* CẢNH BÁO NẾU BỊ KHÓA ĐÁP ÁN */}
+{submitted && !quiz?.choPhepXemDapAn && (
+    <div className="bg-slate-900/80 border border-slate-700 p-6 rounded-2xl text-center mb-6 animate-in zoom-in">
+        <Shield size={40} className="mx-auto text-slate-500 mb-3" />
+        <h2 className="text-xl font-bold text-slate-300">Tính năng xem đáp án đã bị khóa</h2>
+        
+    </div>
+)}
         {questions.map((q, index) => {
             const isQCorrect = submitted && scoreData.detail.find(d => d.qId === q.id)?.isCorrect;
             const earnedPoints = submitted ? scoreData.detail.find(d => d.qId === q.id)?.earned : 0;
 
             return (
             <div key={q.id} className={`relative bg-[#1e293b] rounded-xl md:rounded-2xl border-2 overflow-hidden transition-all ${
-                submitted 
-                ? (isQCorrect ? 'border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.2)]' : 'border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]') 
-                : 'border-white/10 hover:border-indigo-500/50'
+               submitted 
+    ? (quiz?.choPhepXemDapAn 
+        ? (isQCorrect ? 'border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.2)]' : 'border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]') 
+        : 'border-slate-700/50 opacity-70') // Nếu không cho xem, làm mờ đi
+    : 'border-white/10 hover:border-indigo-500/50'
             }`}>
                 <div className="bg-slate-800/50 px-4 py-2 md:px-5 md:py-3 border-b border-white/5 flex justify-between items-center">
                     <div className="flex items-center gap-3">
@@ -364,7 +388,7 @@ export default function ExamRoom() {
                         }`}>
                             {q.type === 'MCQ' ? 'P1' : q.type === 'TF' ? 'P2' : 'P3'} - Câu {index + 1}
                         </span>
-                        {submitted && <span className="text-xs font-bold text-yellow-400">+{parseFloat(earnedPoints).toFixed(2)}đ</span>}
+                        {submitted && quiz?.choPhepXemDapAn && <span className="text-xs font-bold text-yellow-400">+{parseFloat(earnedPoints).toFixed(2)}đ</span>}
                     </div>
                 </div>
 
@@ -396,12 +420,15 @@ export default function ExamRoom() {
                                 
                                 let btnClass = "border-2 border-slate-700 bg-slate-800/50 hover:bg-slate-700";
                                 if (submitted) {
-                                    if (isCorrectAns) btnClass = "border-green-500 bg-green-500/20 text-green-400";
-                                    else if (isSelected && !isCorrectAns) btnClass = "border-red-500 bg-red-500/20 text-red-400"; 
-                                    else btnClass = "border-slate-700 opacity-50"; 
-                                } else {
-                                    if (isSelected) btnClass = "border-indigo-500 bg-indigo-600 text-white shadow-lg transform scale-[1.01]";
-                                }
+    if (quiz?.choPhepXemDapAn) {
+        if (isCorrectAns) btnClass = "border-green-500 bg-green-500/20 text-green-400";
+        else if (isSelected && !isCorrectAns) btnClass = "border-red-500 bg-red-500/20 text-red-400"; 
+        else btnClass = "border-slate-700 opacity-50";
+    } else {
+        if (isSelected) btnClass = "border-indigo-500 bg-indigo-600/50 text-white"; // Giữ lại phần học sinh chọn nhưng không tô đúng sai
+        else btnClass = "border-slate-700 opacity-50";
+    }
+}
 
                                 return (
                                     <button 
@@ -447,7 +474,7 @@ export default function ExamRoom() {
                                         const trueKey = String(item.isTrue);
                                         const isRowCorrect = String(userChoice) === trueKey;
                                         let rowClass = "hover:bg-white/5";
-                                        if (submitted) rowClass = isRowCorrect ? "bg-green-500/10" : "bg-red-500/10";
+if (submitted && quiz?.choPhepXemDapAn) rowClass = isRowCorrect ? "bg-green-500/10" : "bg-red-500/10";
 
                                         return (
                                             <tr key={idx} className={rowClass}>
@@ -467,11 +494,11 @@ export default function ExamRoom() {
                                                     </div>
                                                 </td>
                                                 <td className="text-center px-1 align-top pt-4">
-                                                    <button onClick={() => handleAnswer(q.id, "true", idx)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "true" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && item.isTrue === true ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "true" && <CheckCircle size={18} className="text-white"/>}</button>
-                                                </td>
-                                                <td className="text-center px-1 align-top pt-4">
-                                                    <button onClick={() => handleAnswer(q.id, "false", idx)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "false" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && item.isTrue === false ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "false" && <CheckCircle size={18} className="text-white"/>}</button>
-                                                </td>
+    <button onClick={() => handleAnswer(q.id, "true", idx)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "true" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && quiz?.choPhepXemDapAn && item.isTrue === true ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "true" && <CheckCircle size={18} className="text-white"/>}</button>
+</td>
+<td className="text-center px-1 align-top pt-4">
+    <button onClick={() => handleAnswer(q.id, "false", idx)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "false" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && quiz?.choPhepXemDapAn && item.isTrue === false ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "false" && <CheckCircle size={18} className="text-white"/>}</button>
+</td>
                                             </tr>
                                         );
                                     })}
@@ -481,17 +508,17 @@ export default function ExamRoom() {
                     )}
 
                     {q.type === 'SA' && (
-                        <div>
-                            <input type="text" className={`w-full bg-[#0f172a] border-2 p-4 md:p-5 rounded-xl outline-none font-bold text-xl md:text-2xl placeholder-slate-600 uppercase ${submitted ? (isQCorrect ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400') : 'border-slate-700 focus:border-indigo-500 text-white'}`} placeholder="NHẬP ĐÁP ÁN..." value={answers[q.id] || ''} onChange={(e) => handleAnswer(q.id, e.target.value)} disabled={submitted} />
-                            {submitted && !isQCorrect && (
-                                <div className="mt-3 text-base font-bold text-green-400 flex items-center gap-2 animate-pulse">
-                                    <Target size={20}/> 
-                                    <span>Đáp án đúng:</span> 
-                                    <span className="text-lg">
-                                        {renderWithInlineImage(q.correct)}
-                                    </span>
-                                </div>
-                            )}
+    <div>
+        <input type="text" className={`w-full bg-[#0f172a] border-2 p-4 md:p-5 rounded-xl outline-none font-bold text-xl md:text-2xl placeholder-slate-600 uppercase ${submitted ? (quiz?.choPhepXemDapAn ? (isQCorrect ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400') : 'border-indigo-500 text-indigo-400') : 'border-slate-700 focus:border-indigo-500 text-white'}`} placeholder="NHẬP ĐÁP ÁN..." value={answers[q.id] || ''} onChange={(e) => handleAnswer(q.id, e.target.value)} disabled={submitted} />
+        {submitted && quiz?.choPhepXemDapAn && !isQCorrect && (
+            <div className="mt-3 text-base font-bold text-green-400 flex items-center gap-2 animate-pulse">
+                <Target size={20}/> 
+                <span>Đáp án đúng:</span> 
+                <span className="text-lg">
+                    {renderWithInlineImage(q.correct)}
+                </span>
+            </div>
+        )}
                         </div>
                     )}
                 </div>
