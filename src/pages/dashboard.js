@@ -102,83 +102,76 @@ export default function Dashboard() {
   const [filterClass, setFilterClass] = useState('ALL');
 
 useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-        // 1. Kiểm tra đăng nhập cơ bản
-        if (!firebaseUser) {
-            router.push('/');
-            return;
-        }
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!currentUser) { router.push('/'); return; }
+      
+      let isMaster = MASTER_EMAILS.includes(currentUser.email);
 
-        const isMaster = MASTER_EMAILS.includes(firebaseUser.email);
-        let userData = null;
+      try {
+          // 1. Lấy dữ liệu hồ sơ từ bảng 'users' (nơi lưu ngày hết hạn)
+          const userDocSnap = await getDoc(doc(firestore, "users", currentUser.uid));
+          let userData = userDocSnap.exists() ? userDocSnap.data() : null;
 
-        try {
-            // 2. Lấy dữ liệu chi tiết từ bảng 'users' thay vì 'allowed_emails'
-            const userDoc = await getDoc(doc(firestore, "users", firebaseUser.uid));
-            
-            if (userDoc.exists()) {
-                userData = userDoc.data();
-            }
+          // 2. KIỂM TRA BẢO MẬT & THỜI HẠN (Bỏ qua nếu là Master Admin)
+          if (!isMaster) {
+              if (!userData || userData.status !== 'active') {
+                  alert("Tài khoản của bạn chưa được kích hoạt hoặc đã bị khóa!");
+                  await signOut(auth);
+                  router.push('/');
+                  return;
+              }
 
-            // 3. Logic kiểm tra quyền truy cập (Trừ Master Email)
-            if (!isMaster) {
-                // Kiểm tra sự tồn tại và trạng thái kích hoạt
-                if (!userData || userData.status !== 'active') {
-                    alert("Tài khoản của bạn chưa được kích hoạt hoặc đã bị khóa!");
-                    await signOut(auth);
-                    router.push('/');
-                    return;
-                }
+              // Kiểm tra ngày hết hạn (Dạng YYYY-MM-DD)
+              if (userData.expireDate) {
+                  const expireDate = new Date(userData.expireDate);
+                  const now = new Date();
+                  
+                  // Đưa cả 2 biến về cùng thời điểm 00:00:00 để so sánh chuẩn xác theo ngày
+                  expireDate.setHours(0, 0, 0, 0);
+                  now.setHours(0, 0, 0, 0);
 
-                // Kiểm tra ngày hết hạn (giả sử định dạng YYYY-MM-DD)
-                if (userData.expireDate) {
-                    const expireDate = new Date(userData.expireDate);
-                    const now = new Date();
-                    // Đặt giờ về 0 để so sánh chính xác theo ngày
-                    now.setHours(0, 0, 0, 0);
+                  // Nếu hôm nay LỚN HƠN ngày hết hạn -> Chặn truy cập
+                  if (now > expireDate) {
+                      alert(`⛔ TÀI KHOẢN ĐÃ HẾT HẠN SỬ DỤNG!\nNgày hết hạn của bạn là: ${userData.expireDate}\n\nVui lòng liên hệ Admin để gia hạn.`);
+                      await signOut(auth);
+                      router.push('/');
+                      return;
+                  }
+              }
+          }
 
-                    if (now > expireDate) {
-                        alert(`⛔ TÀI KHOẢN ĐÃ HẾT HẠN SỬ DỤNG!\nNgày hết hạn: ${userData.expireDate}`);
-                        await signOut(auth);
-                        router.push('/');
-                        return;
-                    }
-                }
-            }
+          // 3. Nếu hợp lệ, lưu thông tin vào Store
+          setUser({ ...currentUser, ...userData });
 
-            // 4. Cập nhật User vào Store (Gộp thông tin Auth và Firestore)
-            setUser({
-                ...firebaseUser,
-                ...userData, // Chứa role, status, expireDate để các nút 'Tạo Game' mở ra
-                isMaster: isMaster
-            });
+          // (Giữ nguyên logic cũ) Dành riêng cho Master lấy danh sách allowed_emails
+          if (isMaster) {
+              const snap = await getDocs(collection(firestore, "allowed_emails"));
+              setAllowedEmails(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+          }
 
-            // 5. Lấy các cấu hình hệ thống khác
-            const [configSnap, homeSnap] = await Promise.all([
-                getDoc(doc(firestore, "user_configs", firebaseUser.uid)),
-                getDoc(doc(firestore, "system_config", "homepage"))
-            ]);
+          // 4. Lấy các cấu hình hệ thống
+          const configSnap = await getDoc(doc(firestore, "user_configs", currentUser.uid));
+          if (configSnap.exists()) setUserConfig(prev => ({ ...prev, ...configSnap.data() }));
+          
+          const homeSnap = await getDoc(doc(firestore, "system_config", "homepage"));
+          if (homeSnap.exists()) setHomeConfig(homeSnap.data());
 
-            if (configSnap.exists()) setUserConfig(prev => ({ ...prev, ...configSnap.data() }));
-            if (homeSnap.exists()) setHomeConfig(homeSnap.data());
-
-            // 6. Tải dữ liệu Dashboard
-            await Promise.all([
-                fetchQuizzes(firebaseUser.uid),
-                fetchResults(firebaseUser.uid),
-                fetchBoards(firebaseUser.uid),
-                fetchAssignments(firebaseUser)
-            ]);
-
-        } catch (error) {
-            console.error("Lỗi khởi tạo Dashboard:", error);
-        } finally {
-            setLoading(false);
-        }
+      } catch (e) { 
+          console.error("Lỗi khởi tạo Dashboard:", e); 
+      }
+      
+      // 5. Tải dữ liệu các Tab
+      await Promise.all([ 
+          fetchQuizzes(currentUser.uid), 
+          fetchResults(), 
+          fetchBoards(currentUser.uid), 
+          fetchAssignments(currentUser) 
+      ]);
+      setLoading(false);
     });
-
+    
     return () => unsubscribe();
-}, [router, setUser]);
+  }, [router, setUser]);
 
   // --- CÁC HÀM FETCH DATA ---
   const fetchAssignments = async (currentUser) => {
