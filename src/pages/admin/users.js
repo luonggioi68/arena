@@ -29,7 +29,7 @@ export default function AdminUserManagement() {
                 const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 setAllUsers(data.filter(u => u.role === 'teacher' || !u.role));
             } else {
-                // Đọc từ bảng student_profiles cho Học sinh (GIỮ NGUYÊN CẤU TRÚC CŨ CỦA BẠN)
+                // Đọc từ bảng student_profiles cho Học sinh
                 const querySnapshot = await getDocs(collection(firestore, 'student_profiles'));
                 const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 setAllUsers(data);
@@ -49,16 +49,12 @@ export default function AdminUserManagement() {
         return () => unsubscribe();
     }, [activeTab]);
 
-    // 2. HÀM XÓA (Tự động biết xóa ở bảng nào)
- // 2. HÀM XÓA (Gọi API Backend để xóa tận gốc)
+    // 2. HÀM XÓA (Gọi API Backend để xóa tận gốc)
     const handleDelete = async (id) => {
         if (window.confirm("Bạn có chắc chắn muốn XÓA TẬN GỐC tài khoản này không? Toàn bộ dữ liệu đăng nhập và hồ sơ sẽ bốc hơi và không thể khôi phục!")) {
             setLoading(true);
             try {
-                // Xác định xem đang xóa Giáo viên (bảng users) hay Học sinh (bảng student_profiles)
                 const targetCollection = activeTab === 'TEACHER' ? 'users' : 'student_profiles';
-                
-                // Gọi API backend chúng ta vừa tạo
                 const response = await fetch('/api/delete-user', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -75,7 +71,7 @@ export default function AdminUserManagement() {
                 }
 
                 alert("✅ Đã xóa tận gốc thành công!");
-                fetchUsers(); // Tải lại danh sách
+                fetchUsers(); 
             } catch (error) {
                 console.error(error);
                 alert("Lỗi khi xóa: " + error.message);
@@ -85,7 +81,7 @@ export default function AdminUserManagement() {
         }
     };
 
-    // 3. HÀM LƯU / CẬP NHẬT (Tự nhận diện trường dữ liệu)
+    // 3. HÀM LƯU / CẬP NHẬT 
     const handleSave = async () => {
         if (!currentUser.name) return alert("Vui lòng nhập tên!");
         setLoading(true);
@@ -101,10 +97,9 @@ export default function AdminUserManagement() {
                     role: 'teacher'
                 });
             } else {
-                // Học sinh dùng trường fullName và nickname
                 await updateDoc(userRef, {
                     fullName: currentUser.name,
-                    nickname: currentUser.name, // Cập nhật luôn nickname
+                    nickname: currentUser.name,
                     grade: currentUser.grade || "10"
                 });
             }
@@ -119,7 +114,7 @@ export default function AdminUserManagement() {
         }
     };
 
-    // Hàm lọc tìm kiếm (hỗ trợ cả field name của GV và fullName của HS)
+    // Hàm lọc tìm kiếm 
     const filteredUsers = allUsers.filter(user => {
         const nameToSearch = (user.name || user.fullName || "").toLowerCase();
         const emailToSearch = (user.email || "").toLowerCase();
@@ -178,74 +173,92 @@ export default function AdminUserManagement() {
                             <tr><td colSpan="3" className="px-6 py-12 text-center text-slate-500">Đang kiểm tra bảo mật và tải dữ liệu...</td></tr>
                         ) : filteredUsers.length === 0 ? (
                             <tr><td colSpan="3" className="px-6 py-12 text-center text-slate-500">Không tìm thấy tài khoản nào</td></tr>
-                        ) : filteredUsers.map((user) => (
-                            <tr key={user.id} className="hover:bg-slate-800/30 transition group">
-                                <td className="px-6 py-4">
-                                    <div className="font-bold text-white flex items-center gap-2">
-                                        {/* Avatar cho học sinh (nếu có) */}
-                                        {activeTab === 'STUDENT' && user.photoURL && <img src={user.photoURL} className="w-6 h-6 rounded-full border border-slate-600"/>}
-                                        {user.name || user.fullName || 'Chưa cập nhật'}
-                                    </div>
-                                    <div className="text-xs text-slate-500 font-mono mt-1">{user.email || user.phone}</div>
-                                </td>
-                                
-                                <td className="px-6 py-4">
-                                    {activeTab === 'TEACHER' ? (
-                                        // CỘT HIỂN THỊ CỦA GIÁO VIÊN
-                                        <>
-                                            {user.status === 'active' ? (
-                                                <span className="text-emerald-400 text-[10px] font-black bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20 flex items-center gap-1 w-fit">
-                                                    <CheckCircle size={10}/> ĐÃ KÍCH HOẠT
-                                                </span>
-                                            ) : (
-                                                <span className="text-amber-400 text-[10px] font-black bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20 flex items-center gap-1 w-fit">
-                                                    <Clock size={10}/> CHỜ GIA HẠN
-                                                </span>
-                                            )}
-                                            <div className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
-                                                <Calendar size={10}/> {user.expireDate || 'Vô thời hạn'}
-                                            </div>
-                                        </>
-                                    ) : (
-                                        // CỘT HIỂN THỊ CỦA HỌC SINH
-                                        <>
-                                            <span className="text-cyan-400 text-[10px] font-black bg-cyan-500/10 px-2 py-1 rounded-lg border border-cyan-500/20 flex items-center gap-1 w-fit mb-1">
-                                                <CheckCircle size={10}/> TÀI KHOẢN ACTIVE
-                                            </span>
-                                            <div className="text-[11px] text-slate-400 font-bold uppercase flex items-center gap-2">
-                                                <span>LỚP {user.grade || '10'}</span> 
-                                                <span className="text-slate-600">|</span> 
-                                                <span className="text-yellow-500 flex items-center gap-1"><Star size={10} fill="currentColor"/> {user.totalScore || 0} XP</span>
-                                            </div>
-                                        </>
-                                    )}
-                                </td>
+                        ) : filteredUsers.map((user) => {
+                            
+                            // LOGIC KIỂM TRA HẾT HẠN (Sẽ chạy với mỗi user)
+                            let isExpired = false;
+                            if (activeTab === 'TEACHER' && user.expireDate) {
+                                const exp = new Date(user.expireDate);
+                                const now = new Date();
+                                exp.setHours(0,0,0,0);
+                                now.setHours(0,0,0,0);
+                                isExpired = now > exp;
+                            }
 
-                                <td className="px-6 py-4 text-right">
-                                    <div className="flex justify-end gap-2">
-                                        <button 
-                                            onClick={() => { 
-                                                // Nạp dữ liệu vào form sửa (đồng nhất fullName/name)
-                                                setCurrentUser({
-                                                    ...user,
-                                                    name: user.name || user.fullName || ''
-                                                }); 
-                                                setIsModalOpen(true); 
-                                            }}
-                                            className="p-2 hover:bg-indigo-500/20 text-indigo-400 rounded-lg transition"
-                                        >
-                                            <Edit size={18} />
-                                        </button>
-                                        <button 
-                                            onClick={() => handleDelete(user.id)}
-                                            className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
+                            return (
+                                <tr key={user.id} className="hover:bg-slate-800/30 transition group">
+                                    <td className="px-6 py-4">
+                                        <div className="font-bold text-white flex items-center gap-2">
+                                            {activeTab === 'STUDENT' && user.photoURL && <img src={user.photoURL} className="w-6 h-6 rounded-full border border-slate-600"/>}
+                                            {user.name || user.fullName || 'Chưa cập nhật'}
+                                        </div>
+                                        <div className="text-xs text-slate-500 font-mono mt-1">{user.email || user.phone}</div>
+                                    </td>
+                                    
+                                    <td className="px-6 py-4">
+                                        {activeTab === 'TEACHER' ? (
+                                            // CỘT HIỂN THỊ CỦA GIÁO VIÊN
+                                            <>
+                                                {user.status !== 'active' ? (
+                                                    <span className="text-amber-400 text-[10px] font-black bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20 flex items-center gap-1 w-fit">
+                                                        <Clock size={10}/> CHỜ GIA HẠN
+                                                    </span>
+                                                ) : isExpired ? (
+                                                    <span className="text-red-400 text-[10px] font-black bg-red-500/10 px-2 py-1 rounded-lg border border-red-500/20 flex items-center gap-1 w-fit animate-pulse shadow-[0_0_10px_rgba(248,113,113,0.2)]">
+                                                        <AlertTriangle size={10}/> ĐÃ HẾT HẠN
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-emerald-400 text-[10px] font-black bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20 flex items-center gap-1 w-fit">
+                                                        <CheckCircle size={10}/> ĐÃ KÍCH HOẠT
+                                                    </span>
+                                                )}
+                                                
+                                                <div className={`text-[10px] mt-1 flex items-center gap-1 ${isExpired ? 'text-red-400 font-bold' : 'text-slate-500'}`}>
+                                                    <Calendar size={10}/> {user.expireDate || 'Vô thời hạn'}
+                                                </div>
+                                            </>
+                                        ) : (
+                                            // CỘT HIỂN THỊ CỦA HỌC SINH
+                                            <>
+                                                <span className="text-cyan-400 text-[10px] font-black bg-cyan-500/10 px-2 py-1 rounded-lg border border-cyan-500/20 flex items-center gap-1 w-fit mb-1">
+                                                    <CheckCircle size={10}/> TÀI KHOẢN ACTIVE
+                                                </span>
+                                                <div className="text-[11px] text-slate-400 font-bold uppercase flex items-center gap-2">
+                                                    <span>LỚP {user.grade || '10'}</span> 
+                                                    <span className="text-slate-600">|</span> 
+                                                    <span className="text-yellow-500 flex items-center gap-1"><Star size={10} fill="currentColor"/> {user.totalScore || 0} XP</span>
+                                                </div>
+                                            </>
+                                        )}
+                                    </td>
+
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <button 
+                                                onClick={() => { 
+                                                    setCurrentUser({
+                                                        ...user,
+                                                        name: user.name || user.fullName || ''
+                                                    }); 
+                                                    setIsModalOpen(true); 
+                                                }}
+                                                className="p-2 hover:bg-indigo-500/20 text-indigo-400 rounded-lg transition"
+                                                title="Chỉnh sửa / Gia hạn"
+                                            >
+                                                <Edit size={18} />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDelete(user.id)}
+                                                className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition"
+                                                title="Xóa vĩnh viễn"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
@@ -267,7 +280,6 @@ export default function AdminUserManagement() {
                                 />
                             </div>
                             
-                            {/* Phân loại Form nhập theo Giáo viên / Học sinh */}
                             {activeTab === 'TEACHER' ? (
                                 <div>
                                     <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block text-indigo-400">Ngày hết hạn (Gia hạn)</label>
