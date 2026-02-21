@@ -58,7 +58,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
-  // [MỚI] State điều khiển Menu trên Mobile
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   const [quizzes, setQuizzes] = useState([]);
@@ -67,7 +66,6 @@ export default function Dashboard() {
   const [assignments, setAssignments] = useState([]);
   const [selectedAssigns, setSelectedAssigns] = useState([]);
   
-  // State cho Arena Kho Game
   const [repoGrade, setRepoGrade] = useState('10'); 
   const [repoSubject, setRepoSubject] = useState('ALL'); 
   const [selectedRepoItems, setSelectedRepoItems] = useState([]);
@@ -101,18 +99,16 @@ export default function Dashboard() {
   const [filterExamId, setFilterExamId] = useState('ALL');
   const [filterClass, setFilterClass] = useState('ALL');
 
-useEffect(() => {
+  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) { router.push('/'); return; }
       
       let isMaster = MASTER_EMAILS.includes(currentUser.email);
 
       try {
-          // 1. Lấy dữ liệu hồ sơ từ bảng 'users' (Bảng chuẩn hiện tại)
           const userDocSnap = await getDoc(doc(firestore, "users", currentUser.uid));
           let userData = userDocSnap.exists() ? userDocSnap.data() : null;
 
-          // 2. KIỂM TRA BẢO MẬT & THỜI HẠN (Bỏ qua nếu là Master Admin)
           if (!isMaster) {
               if (!userData || userData.status !== 'active') {
                   alert("Tài khoản của bạn chưa được kích hoạt hoặc đã bị khóa!");
@@ -121,28 +117,23 @@ useEffect(() => {
                   return;
               }
 
-              // Xử lý kiểm tra ngày hết hạn
+              // KIỂM TRA BÁO SẮP HẾT HẠN
               if (userData.expireDate) {
                   const expireDate = new Date(userData.expireDate);
                   const now = new Date();
                   
-                  // Đưa cả 2 biến về cùng thời điểm 00:00:00 để tính toán số ngày chính xác
                   expireDate.setHours(0, 0, 0, 0);
                   now.setHours(0, 0, 0, 0);
 
-                  // Tính số ngày còn lại
                   const diffTime = expireDate - now;
                   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
                   if (diffDays < 0) {
-                      // HẾT HẠN -> Chặn truy cập và đá ra ngoài
                       alert(`⛔ TÀI KHOẢN ĐÃ HẾT HẠN SỬ DỤNG!\nNgày hết hạn của bạn là: ${userData.expireDate}\n\nVui lòng liên hệ Admin để gia hạn.`);
                       await signOut(auth);
                       router.push('/');
                       return;
                   } else if (diffDays <= 3) {
-                      // SẮP HẾT HẠN (Còn <= 3 ngày) -> Hiện cảnh báo nhưng vẫn cho vào
-                      // Dùng sessionStorage để chỉ hiện 1 lần lúc mới đăng nhập, tránh làm phiền liên tục
                       if (!sessionStorage.getItem('expire_warning_shown')) {
                           alert(`⚠️ CHÚ Ý: Tài khoản của bạn sẽ hết hạn sau ${diffDays} ngày nữa (vào ngày ${userData.expireDate}).\n\nVui lòng liên hệ Admin để gia hạn tránh gián đoạn công việc!`);
                           sessionStorage.setItem('expire_warning_shown', 'true');
@@ -151,10 +142,8 @@ useEffect(() => {
               }
           }
 
-          // 3. Nếu hợp lệ, lưu thông tin vào Store
           setUser({ ...currentUser, ...userData, isMaster });
 
-          // 4. Lấy các cấu hình hệ thống
           const configSnap = await getDoc(doc(firestore, "user_configs", currentUser.uid));
           if (configSnap.exists()) setUserConfig(prev => ({ ...prev, ...configSnap.data() }));
           
@@ -165,13 +154,19 @@ useEffect(() => {
           console.error("Lỗi khởi tạo Dashboard:", e); 
       }
       
-      // 5. Tải dữ liệu các Tab
+      // Tải dữ liệu các Tab
       await Promise.all([ 
           fetchQuizzes(currentUser.uid), 
           fetchResults(), 
           fetchBoards(currentUser.uid), 
           fetchAssignments(currentUser) 
       ]);
+
+      // [BỔ SUNG QUAN TRỌNG]: Tải danh sách giáo viên nếu là MASTER ADMIN
+      if (isMaster) {
+          await fetchAllowedEmails();
+      }
+
       setLoading(false);
     });
     
@@ -179,6 +174,15 @@ useEffect(() => {
   }, [router, setUser]);
 
   // --- CÁC HÀM FETCH DATA ---
+  // [BỔ SUNG]: Hàm tải danh sách User
+  const fetchAllowedEmails = async () => {
+      try {
+          const q = query(collection(firestore, "allowed_emails"), orderBy("createdAt", "desc"));
+          const s = await getDocs(q);
+          setAllowedEmails(s.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (e) { console.error("Lỗi tải danh sách giáo viên:", e); }
+  };
+
   const fetchAssignments = async (currentUser) => {
       try {
           const u = currentUser || user;
@@ -223,12 +227,44 @@ useEffect(() => {
   // --- LOGIC QUẢN LÝ USER ---
   const handleAddEmail = async (e) => {
       e.preventDefault();
-      if (!newEmail.includes('@')) return alert("Email sai!");
-      const now = new Date(); const expiredDate = new Date(); expiredDate.setFullYear(now.getFullYear() + 1);
-      try { const docRef = await addDoc(collection(firestore, "allowed_emails"), { email: newEmail, addedBy: user.email, createdAt: serverTimestamp(), expiredAt: expiredDate }); setAllowedEmails([...allowedEmails, { id: docRef.id, email: newEmail, addedBy: user.email, createdAt: { seconds: now.getTime() / 1000 }, expiredAt: { seconds: expiredDate.getTime() / 1000 } }]); setNewEmail(''); alert("✅ Đã cấp quyền 1 năm!"); } catch (e) { alert(e.message); }
+      const trimmedEmail = newEmail.toLowerCase().trim();
+      if (!trimmedEmail.includes('@')) return alert("Email sai định dạng!");
+      
+      // Chống trùng lặp
+      if (allowedEmails.some(item => item.email === trimmedEmail)) {
+          return alert("Email này đã được cấp quyền trước đó!");
+      }
+
+      const now = new Date(); 
+      const expiredDate = new Date(); 
+      expiredDate.setFullYear(now.getFullYear() + 1);
+
+      try { 
+          const docRef = await addDoc(collection(firestore, "allowed_emails"), { 
+              email: trimmedEmail, 
+              addedBy: user.email, 
+              createdAt: serverTimestamp(), 
+              expiredAt: expiredDate 
+          }); 
+          
+          // Cập nhật State để UI hiển thị ngay lập tức lên ĐẦU danh sách
+          setAllowedEmails([{ 
+              id: docRef.id, 
+              email: trimmedEmail, 
+              addedBy: user.email, 
+              createdAt: { seconds: now.getTime() / 1000 }, 
+              expiredAt: { seconds: expiredDate.getTime() / 1000 } 
+          }, ...allowedEmails]); 
+          
+          setNewEmail(''); 
+          alert("✅ Đã cấp quyền 1 năm thành công!"); 
+      } catch (e) { alert("Lỗi: " + e.message); }
   };
+
   const handleExtendEmail = async (id, currentExpiredAt) => { if (!confirm("Gia hạn thêm 1 năm cho tài khoản này?")) return; try { let newExp; if (currentExpiredAt && currentExpiredAt.seconds * 1000 > Date.now()) { newExp = new Date(currentExpiredAt.seconds * 1000); } else { newExp = new Date(); } newExp.setFullYear(newExp.getFullYear() + 1); await updateDoc(doc(firestore, "allowed_emails", id), { expiredAt: newExp }); setAllowedEmails(prev => prev.map(item => item.id === id ? { ...item, expiredAt: { seconds: newExp.getTime() / 1000 } } : item)); alert("✅ Đã gia hạn thành công!"); } catch (e) { alert("Lỗi gia hạn: " + e.message); } };
+  
   const handleDeleteEmail = async (id) => { if (!MASTER_EMAILS.includes(user.email)) return alert("Chỉ Admin gốc mới được xóa!"); if(confirm("Xóa giáo viên này khỏi hệ thống?")) { await deleteDoc(doc(firestore, "allowed_emails", id)); setAllowedEmails(p => p.filter(e => e.id !== id)); } };
+  
   const checkStatus = (expiredAt) => { if (!expiredAt) return { text: "Vĩnh viễn", color: "text-green-400", bg: "bg-green-500/20" }; const expDate = new Date(expiredAt.seconds * 1000); const now = new Date(); const diffTime = expDate - now; const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); if (diffDays < 0) return { text: "Đã hết hạn", color: "text-red-500", bg: "bg-red-500/20", icon: <AlertTriangle size={14}/> }; if (diffDays <= 30) return { text: `Hết hạn sau ${diffDays} ngày`, color: "text-yellow-400", bg: "bg-yellow-500/20", icon: <AlertTriangle size={14}/> }; return { text: "Đang hoạt động", color: "text-blue-400", bg: "bg-blue-500/20" }; };
 
   // --- LOGIC KHÁC ---
@@ -537,7 +573,7 @@ useEffect(() => {
             </div>
         )}
 
-        {/* TAB USER MANAGEMENT */}
+        {/* TAB USER MANAGEMENT - ĐÃ ĐƯỢC CHUỐT LẠI */}
         {activeTab === 'USERS' && MASTER_EMAILS.includes(user?.email) && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-500">
                 <header className="mb-8">
@@ -550,44 +586,61 @@ useEffect(() => {
                     <div className="lg:col-span-1 h-fit">
                         <div className="bg-[#1e293b] p-6 rounded-[2rem] border border-white/10 shadow-xl lg:sticky lg:top-8">
                             <div className="flex items-center gap-3 mb-6">
-                                <div className="bg-pink-600 p-2 rounded-lg"><UserPlus size={24} className="text-white"/></div>
+                                <div className="bg-pink-600 p-2 rounded-lg shadow-lg shadow-pink-500/20"><UserPlus size={24} className="text-white"/></div>
                                 <h2 className="text-xl font-bold uppercase text-white">Cấp Quyền Mới</h2>
-
                             </div>
                             
-                            <form onSubmit={handleAddEmail} className="space-y-4">
+                            <form onSubmit={handleAddEmail} className="space-y-5">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 mb-1 uppercase">Email Giáo Viên</label>
-                                    <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="w-full bg-slate-900 border border-slate-700 text-white p-4 rounded-xl focus:border-pink-500 focus:outline-none font-bold" placeholder="vidu: giaovien@gmail.com" required/>
+                                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Email Giáo Viên</label>
+                                    <input 
+                                        type="email" 
+                                        value={newEmail} 
+                                        onChange={(e) => setNewEmail(e.target.value)} 
+                                        className="w-full bg-slate-900/50 border border-slate-700 text-white p-4 rounded-xl focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none font-bold transition-all placeholder:text-slate-600" 
+                                        placeholder="vidu: giaovien@gmail.com" 
+                                        required
+                                    />
                                 </div>
                                 
-                                <div className="bg-slate-900/50 p-4 rounded-xl border border-white/5 text-xs text-slate-400 space-y-2">
-                                    <div className="flex justify-between"><span>Ngày đăng ký:</span> <span className="text-white font-bold">{new Date().toLocaleDateString('vi-VN')}</span></div>
-                                    <div className="flex justify-between"><span>Hết hạn (Mặc định):</span> <span className="text-pink-400 font-bold">+1 Năm</span></div>
+                                <div className="bg-slate-900/50 p-4 rounded-xl border border-white/5 text-xs text-slate-400 space-y-3">
+                                    <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                                        <span className="flex items-center gap-1"><Calendar size={14}/> Ngày đăng ký:</span> 
+                                        <span className="text-white font-bold">{new Date().toLocaleDateString('vi-VN')}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="flex items-center gap-1"><Clock size={14}/> Hết hạn (Mặc định):</span> 
+                                        <span className="text-pink-400 font-bold bg-pink-500/10 px-2 py-1 rounded">+1 Năm</span>
+                                    </div>
                                 </div>
 
-                                <button type="submit" className="w-full bg-gradient-to-r from-pink-600 to-rose-600 text-white py-3 rounded-xl font-black uppercase shadow-lg hover:scale-[1.02] transition-transform flex items-center justify-center gap-2">
-                                    <Plus size={20}/> Xác Nhận
+                                <button type="submit" className="w-full bg-gradient-to-r from-pink-600 to-rose-600 text-white py-3.5 rounded-xl font-black uppercase shadow-lg shadow-pink-600/30 hover:shadow-pink-600/50 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                                    <Plus strokeWidth={3} size={20}/> Xác Nhận
                                 </button>
                             </form>
-                            <a href="/admin/users" target="_blank" rel="noreferrer" className="mt-6 block text-center text-xs text-slate-500 hover:text-white underline">Quản lí TK GV & HS</a>
+                            <a href="/admin/users" target="_blank" rel="noreferrer" className="mt-6 flex justify-center items-center gap-1 text-xs text-slate-500 hover:text-pink-400 transition-colors">
+                                <Settings size={12}/> Quản lí tài khoản chi tiết
+                            </a>
                         </div>
                     </div>
 
-                    {/* Cột Phải: Danh Sách */}
+                    {/* Cột Phải: Danh Sách Đã Có Data */}
                     <div className="lg:col-span-2">
-                        <div className="bg-[#1e293b] rounded-[2rem] border border-white/10 shadow-xl overflow-hidden">
-                            <div className="p-4 md:p-6 border-b border-white/10 flex justify-between items-center">
+                        <div className="bg-[#1e293b] rounded-[2rem] border border-white/10 shadow-xl overflow-hidden h-full flex flex-col">
+                            <div className="p-5 md:p-6 border-b border-white/10 flex justify-between items-center bg-slate-900/50">
                                 <h2 className="text-lg md:text-xl font-bold uppercase text-white flex items-center gap-2">
                                     <Users size={20} className="text-pink-500"/> Danh Sách Giáo Viên ({allowedEmails.length})
                                 </h2>
+                                <button onClick={fetchAllowedEmails} className="p-2 text-slate-400 hover:text-white bg-slate-800 rounded-lg transition-colors border border-slate-700">
+                                    <RefreshCw size={16}/>
+                                </button>
                             </div>
                             
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left min-w-[600px]">
-                                    <thead className="bg-slate-900 text-slate-400 text-xs font-bold uppercase">
+                            <div className="overflow-x-auto flex-1">
+                                <table className="w-full text-left min-w-[650px]">
+                                    <thead className="bg-slate-900 text-slate-400 text-xs font-bold uppercase sticky top-0 z-10">
                                         <tr>
-                                            <th className="p-4">STT</th>
+                                            <th className="p-4 w-16 text-center">STT</th>
                                             <th className="p-4">Tài khoản</th>
                                             <th className="p-4">Thời hạn</th>
                                             <th className="p-4 text-center">Trạng thái</th>
@@ -595,57 +648,69 @@ useEffect(() => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
+                                        {/* Hiển thị Admin Gốc */}
                                         {MASTER_EMAILS.map((email, i) => (
-                                            <tr key={`master-${i}`} className="bg-yellow-500/5">
-                                                <td className="p-4 text-yellow-500 font-mono">ADMIN</td>
-                                                <td className="p-4 font-bold text-white text-sm md:text-base">{email} <span className="text-[10px] bg-yellow-500 text-black px-1 rounded ml-1">MASTER</span></td>
-                                                <td className="p-4 text-slate-500 italic text-sm">Vĩnh viễn</td>
-                                                <td className="p-4 text-center"><span className="text-green-500 text-[10px] md:text-xs font-bold">Active</span></td>
-                                                <td className="p-4 text-right"><Lock size={16} className="ml-auto text-slate-500"/></td>
+                                            <tr key={`master-${i}`} className="bg-yellow-500/5 border-b-2 border-yellow-500/20">
+                                                <td className="p-4 text-center text-yellow-500 font-black text-xs">ADMIN</td>
+                                                <td className="p-4 font-bold text-white text-sm md:text-base flex items-center gap-2">
+                                                    {email} 
+                                                    <span className="text-[9px] font-black tracking-widest bg-yellow-500 text-black px-1.5 py-0.5 rounded shadow-sm">MASTER</span>
+                                                </td>
+                                                <td className="p-4 text-slate-400 italic text-sm">Vĩnh viễn</td>
+                                                <td className="p-4 text-center"><span className="text-green-500 text-[10px] md:text-xs font-bold bg-green-500/10 px-2 py-1 rounded">Hoạt động</span></td>
+                                                <td className="p-4 text-right"><Lock size={16} className="ml-auto text-slate-600"/></td>
                                             </tr>
                                         ))}
 
+                                        {/* Hiển thị danh sách giáo viên */}
                                         {allowedEmails.map((item, index) => {
                                             const status = checkStatus(item.expiredAt);
                                             return (
                                                 <tr key={item.id} className="hover:bg-white/5 transition group">
-                                                    <td className="p-4 text-slate-500 font-mono text-sm">{index + 1}</td>
+                                                    <td className="p-4 text-center text-slate-500 font-mono text-sm">{index + 1}</td>
                                                     <td className="p-4">
-                                                        <div className="font-bold text-white text-sm md:text-base">{item.email}</div>
+                                                        <div className="font-bold text-slate-200 text-sm md:text-base group-hover:text-white transition-colors">{item.email}</div>
                                                         <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-1">
                                                             <Calendar size={10}/> ĐK: {item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleDateString('vi-VN') : '---'}
                                                         </div>
                                                     </td>
-                                                    <td className="p-4 text-xs md:text-sm text-slate-300">
-                                                        {item.expiredAt ? new Date(item.expiredAt.seconds * 1000).toLocaleDateString('vi-VN') : <span className="text-slate-500 italic">Chưa có hạn</span>}
+                                                    <td className="p-4 text-xs md:text-sm text-slate-300 font-mono">
+                                                        {item.expiredAt ? new Date(item.expiredAt.seconds * 1000).toLocaleDateString('vi-VN') : <span className="text-slate-500 italic">Chưa xác định</span>}
                                                     </td>
                                                     <td className="p-4 text-center">
-                                                        <span className={`${status.color} ${status.bg} px-2 py-1 rounded text-[10px] font-bold uppercase inline-flex items-center gap-1`}>
+                                                        <span className={`${status.color} ${status.bg} px-2.5 py-1 rounded-md text-[10px] font-bold uppercase inline-flex items-center gap-1.5 tracking-wider`}>
                                                             {status.icon} {status.text}
                                                         </span>
                                                     </td>
-                                                    <td className="p-4 flex justify-end gap-2">
-                                                        <button 
-                                                            onClick={() => handleExtendEmail(item.id, item.expiredAt)}
-                                                            className="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white px-2 py-1.5 rounded-lg text-[10px] md:text-xs font-bold transition flex items-center gap-1 border border-blue-600/30 whitespace-nowrap"
-                                                            title="Gia hạn thêm 1 năm"
-                                                        >
-                                                            <RefreshCw size={12}/> Gia hạn
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => handleDeleteEmail(item.id)}
-                                                            className="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white p-1.5 md:p-2 rounded-lg transition border border-red-600/30"
-                                                            title="Xóa tài khoản"
-                                                        >
-                                                            <Trash2 size={14}/>
-                                                        </button>
+                                                    <td className="p-4">
+                                                        <div className="flex justify-end gap-2">
+                                                            <button 
+                                                                onClick={() => handleExtendEmail(item.id, item.expiredAt)}
+                                                                className="bg-blue-600/10 hover:bg-blue-600 text-blue-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border border-blue-600/30 whitespace-nowrap shadow-sm"
+                                                                title="Gia hạn thêm 1 năm"
+                                                            >
+                                                                <RefreshCw size={14}/> Gia hạn
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleDeleteEmail(item.id)}
+                                                                className="bg-red-900/30 hover:bg-red-600 text-red-400 hover:text-white p-2 rounded-lg transition-all border border-red-900/50 shadow-sm"
+                                                                title="Xóa tài khoản"
+                                                            >
+                                                                <Trash2 size={16}/>
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             );
                                         })}
                                     </tbody>
                                 </table>
-                                {allowedEmails.length === 0 && <div className="p-8 text-center text-slate-500 italic">Chưa có giáo viên nào được cấp quyền.</div>}
+                                {allowedEmails.length === 0 && (
+                                    <div className="p-12 text-center flex flex-col items-center justify-center opacity-50">
+                                        <Users size={48} className="text-slate-500 mb-3"/>
+                                        <p className="text-sm font-bold uppercase tracking-widest text-slate-400">Chưa có giáo viên nào</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -676,7 +741,7 @@ useEffect(() => {
                                         <div><label className="block text-xs font-bold text-purple-400 mb-2 uppercase">Banner Phải (Dọc)</label><input type="file" className="hidden" ref={rightBannerInput} onChange={(e)=>handleBannerUpload(e, 'rightBanner')}/><UploadBox label="Tải ảnh lên" img={homeConfig.rightBanner} onClick={()=>rightBannerInput.current.click()} onClear={()=>setHomeConfig({...homeConfig, rightBanner: ''})} loading={uploading}/></div>
                                     </div>
                                 </div>
-                                {/* BẮT ĐẦU THÊM MỚI: Ô NHẬP CHỮ CHẠY */}
+                                
     <div>
         <label className="block text-xs font-bold text-green-400 mb-2 uppercase">Dòng chữ chạy thông báo (Marquee)</label>
         <input 
@@ -688,7 +753,7 @@ useEffect(() => {
         />
         <p className="text-[10px] text-slate-500 mt-1 italic">* Để trống nếu không muốn hiển thị chữ chạy trên trang chủ.</p>
     </div>
-    {/* KẾT THÚC THÊM MỚI */}
+    
                                 <button type="submit" className="w-full bg-purple-600 hover:bg-purple-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95"><Save size={20}/> Lưu Giao Diện</button>
                             </form>
                         </div>
