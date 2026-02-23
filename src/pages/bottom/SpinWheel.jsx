@@ -128,7 +128,6 @@ export default function SpinWheelArena() {
       }
   };
 
-  // --- LOGIC XÓA NHIỀU ---
   const toggleSelection = (id) => {
       const newSelected = new Set(selectedIds);
       if (newSelected.has(id)) newSelected.delete(id);
@@ -154,7 +153,6 @@ export default function SpinWheelArena() {
     const len = activeEntries.length;
     const size = 600; const center = size / 2; const radius = size / 2 - 20;
     
-    // Gán width height thật để vẽ sắc nét, CSS sẽ lo việc thu phóng
     canvas.width = size; canvas.height = size;
     ctx.clearRect(0, 0, size, size);
 
@@ -166,14 +164,21 @@ export default function SpinWheelArena() {
 
     if (len === 0) return;
 
+    // Góc quay cho mỗi ô
     const arc = (2 * Math.PI) / len;
+    
     activeEntries.forEach((entry, i) => {
+      // Góc bắt đầu của ô hiện tại
       const angle = i * arc;
+      
       ctx.beginPath(); ctx.moveTo(center, center);
       ctx.arc(center, center, radius, angle, angle + arc);
       ctx.fillStyle = NEON_COLORS[i % NEON_COLORS.length]; ctx.fill();
       ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.save(); ctx.translate(center, center); ctx.rotate(angle + arc / 2);
+      
+      // Vẽ chữ nằm ở giữa ô
+      ctx.save(); ctx.translate(center, center); 
+      ctx.rotate(angle + arc / 2);
       ctx.textAlign = "right"; ctx.fillStyle = "#fff"; ctx.font = "bold 24px Arial";
       ctx.shadowColor = "rgba(0,0,0,0.8)"; ctx.shadowBlur = 4;
       ctx.fillText(entry.label.substring(0, 18), radius - 30, 10);
@@ -193,10 +198,11 @@ export default function SpinWheelArena() {
     }());
   };
 
-  // --- 6. LOGIC QUAY ---
+  // --- 6. LOGIC QUAY (ĐÃ ĐƯỢC TOÁN HỌC HÓA CỰC CHUẨN) ---
   const spin = () => {
     const activeEntries = entries.filter(e => e.active);
-    if (activeEntries.length === 0) return alert("Danh sách trống!");
+    const numEntries = activeEntries.length;
+    if (numEntries === 0) return alert("Danh sách trống!");
     if (isSpinning) return;
 
     setIsSpinning(true);
@@ -215,11 +221,29 @@ export default function SpinWheelArena() {
       spinSfxRef.current.interval = spinInterval;
     }
 
-    const winnerIndex = Math.floor(Math.random() * activeEntries.length);
-    const sliceAngle = 360 / activeEntries.length;
+    // 1. Chọn ngẫu nhiên 1 người chiến thắng
+    const winnerIndex = Math.floor(Math.random() * numEntries);
+    
+    // 2. Kích thước 1 ô (tính bằng độ)
+    const sliceAngle = 360 / numEntries;
+    
+    // 3. Tính góc từ điểm 0 độ đến TÂM của ô chiến thắng (nếu bánh xe đứng yên)
+    const centerOfWinnerSlice = (winnerIndex * sliceAngle) + (sliceAngle / 2);
+    
+    // 4. Vì kim của chúng ta chỉ ở hướng 3h (Tức là nằm đúng ở góc 0 độ hoặc 360 độ của vòng tròn lượng giác).
+    // Nên để cái Tâm của ô chiến thắng chĩa đúng vào kim, chúng ta phải QUAY LÙI bánh xe lại một góc bằng đúng centerOfWinnerSlice.
+    // Lấy 360 độ trừ đi centerOfWinnerSlice là ra góc cần quay.
+    const targetAngle = 360 - centerOfWinnerSlice;
+    
+    // 5. Thêm số vòng quay (Spins) để nhìn cho chóng mặt (VD: 8 vòng = 8 * 360)
     const spins = 360 * 8; 
-    const targetRotation = spins + (360 - (winnerIndex * sliceAngle) - (sliceAngle / 2));
-    setRotation(rotation + targetRotation);
+    
+    // 6. Tính tổng góc quay tuyệt đối (Bỏ qua số vòng đã quay trước đó bằng cách reset rotation về 0 + target)
+    // Để giữ hiệu ứng quay liên tục, ta lấy rotation hiện tại, làm tròn xuống bội số của 360, rồi cộng thêm spins và target
+    const currentBase = Math.floor(rotation / 360) * 360;
+    const finalRotation = currentBase + spins + targetAngle;
+
+    setRotation(finalRotation);
 
     setTimeout(() => {
       setIsSpinning(false);
@@ -238,11 +262,10 @@ export default function SpinWheelArena() {
       if (removeAfterSpin) {
         setEntries(prev => prev.map(e => e.id === winnerEntry.id ? { ...e, active: false } : e));
       }
-    }, 5000);
+    }, 5000); // Khớp với transition: 5s trong CSS
   };
 
   return (
-    // [CẬP NHẬT] Dùng h-[100dvh] để fix lỗi Safari trên iPhone, chống vỡ layout
     <div className="h-[100dvh] bg-[#050505] text-white font-sans flex flex-col overflow-hidden relative selection:bg-orange-500 selection:text-white">
       {/* Background */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/30 via-[#050505] to-black z-0 pointer-events-none"></div>
@@ -265,7 +288,6 @@ export default function SpinWheelArena() {
               </div>
           </div>
           
-          {/* Nút cài đặt hiển thị trên mobile ở góc trên cùng bên phải */}
           <div className="flex items-center gap-2 sm:hidden">
               <button onClick={() => setIsMuted(!isMuted)} className={`p-1.5 rounded-full transition ${!isMuted ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50' : 'bg-slate-800 text-slate-500'}`}>
                 {isMuted ? <VolumeX size={16}/> : <Volume2 size={16}/>}
@@ -273,7 +295,6 @@ export default function SpinWheelArena() {
           </div>
         </div>
 
-        {/* Khu vực công cụ bên phải (Máy tính) / Hàng thứ 2 (Mobile) */}
         <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-3 sm:gap-4">
           <label className="flex items-center gap-1.5 sm:gap-2 cursor-pointer group">
             <div className={`w-8 sm:w-10 h-4 sm:h-5 rounded-full p-0.5 sm:p-1 transition-colors relative ${removeAfterSpin ? 'bg-green-500' : 'bg-slate-700'}`}>
@@ -295,17 +316,13 @@ export default function SpinWheelArena() {
         </div>
       </header>
 
-      {/* --- MAIN CONTENT: RESPONSIVE LAYOUT --- */}
-      {/* Mobile: flex-col (Vòng xoay trên, list dưới). Desktop: flex-row (List trái, vòng xoay phải) */}
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden z-10">
         
-        {/* KHU VỰC VÒNG XOAY: Đẩy lên trên cùng trên Mobile */}
         <div className="flex-[0.8] lg:flex-[1.2] flex flex-col items-center justify-center relative p-2 sm:p-6 min-h-[300px] lg:min-h-0 order-1 lg:order-2">
           
-          {/* Căn chỉnh kích thước Vòng Xoay bằng max-w và aspect-square */}
           <div className="relative w-full max-w-[280px] sm:max-w-[400px] lg:max-w-[550px] aspect-square mx-auto flex items-center justify-center">
             
-            {/* Cây Kiếm Chỉ Vị Trí */}
+            {/* KIẾM CHỈ VỊ TRÍ GÓC 0 ĐỘ (BÊN PHẢI) */}
             <div className="absolute top-1/2 -right-2 sm:-right-4 lg:-right-8 -translate-y-1/2 z-30 drop-shadow-[0_0_15px_rgba(0,0,0,0.8)]">
                <Sword className="text-slate-200 fill-slate-300 rotate-[-90deg] drop-shadow-md w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20" strokeWidth={1.5} />
                <div className="absolute top-1/2 left-0 -translate-y-1/2 -translate-x-1 sm:-translate-x-2 w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 bg-orange-500 rounded-full animate-ping"></div>
@@ -315,7 +332,6 @@ export default function SpinWheelArena() {
               <canvas ref={canvasRef} className="w-full h-full rounded-full" />
             </div>
 
-            {/* Nút Bấm "QUAY" Ở Giữa */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
               <button onClick={spin} disabled={isSpinning} className="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-full bg-gradient-to-br from-red-600 to-orange-600 border-2 sm:border-4 border-black shadow-[0_0_30px_rgba(220,38,38,0.6)] flex items-center justify-center group active:scale-95 transition-all disabled:grayscale disabled:opacity-80">
                 <div className="absolute inset-0 rounded-full border border-white/20 animate-ping"></div>
@@ -324,7 +340,6 @@ export default function SpinWheelArena() {
             </div>
           </div>
 
-          {/* Popup Chiến Thắng */}
           {winner && !isSpinning && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300 p-4">
               <div className="bg-[#111] border-2 border-yellow-500 p-6 sm:p-10 rounded-[2rem] text-center shadow-[0_0_100px_rgba(234,179,8,0.5)] relative overflow-hidden animate-in zoom-in-50 duration-500 max-w-md w-full">
@@ -341,9 +356,7 @@ export default function SpinWheelArena() {
           )}
         </div>
 
-        {/* KHU VỰC CÔNG CỤ NHẬP LIỆU: Nằm dưới (Mobile) hoặc Nằm trái (Desktop) */}
         <aside className="w-full lg:w-[400px] bg-[#0a0a0a]/90 border-t lg:border-t-0 lg:border-r border-slate-800 flex flex-col shadow-[0_-10px_20px_rgba(0,0,0,0.5)] lg:shadow-2xl z-20 backdrop-blur-sm h-1/2 lg:h-full shrink-0 order-2 lg:order-1">
-          {/* TABS */}
           <div className="flex border-b border-slate-800 shrink-0">
             {[
               { id: 'manual', icon: <Type size={14} className="sm:w-4 sm:h-4"/>, label: 'Nhập tay' },
@@ -360,7 +373,6 @@ export default function SpinWheelArena() {
             ))}
           </div>
 
-          {/* INPUT AREA */}
           <div className="p-3 sm:p-5 border-b border-slate-800 bg-[#0f0f0f] shrink-0">
             {inputMode === 'manual' && (
               <div className="space-y-2 sm:space-y-3">
@@ -390,7 +402,6 @@ export default function SpinWheelArena() {
             )}
           </div>
 
-          {/* LIST HEADER with MULTI DELETE TOGGLE */}
           <div className="px-3 py-2 flex justify-between items-center bg-[#0a0a0a] z-10 border-b border-slate-800/50 shrink-0">
              <div className="flex items-center gap-2">
                  <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Danh sách</span>
@@ -414,13 +425,11 @@ export default function SpinWheelArena() {
              </div>
           </div>
 
-          {/* LIST ITEMS - Cuộn linh hoạt */}
           <div className="flex-1 overflow-y-auto custom-scrollbar p-2 min-h-0 pb-10">
             <div className="space-y-1">
               {entries.map((entry) => (
                 <div key={entry.id} className={`group flex items-center justify-between p-2 sm:p-2.5 rounded-lg border transition-all ${deleteMode && selectedIds.has(entry.id) ? 'bg-red-900/30 border-red-800' : entry.active ? 'bg-slate-900 border-slate-800' : 'bg-black border-transparent opacity-40'}`}>
                   
-                  {/* Item Content */}
                   <div 
                       className="flex items-center gap-2 sm:gap-3 overflow-hidden cursor-pointer flex-1" 
                       onClick={() => {
@@ -428,7 +437,6 @@ export default function SpinWheelArena() {
                           else toggleActive(entry.id);
                       }}
                   >
-                    {/* Checkbox Icon */}
                     <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 
                         ${deleteMode 
                             ? (selectedIds.has(entry.id) ? 'bg-red-600 border-red-500 text-white' : 'border-slate-600') 
@@ -441,7 +449,6 @@ export default function SpinWheelArena() {
                     <span className={`truncate text-xs sm:text-sm font-bold ${entry.active ? 'text-slate-200' : 'text-slate-500 decoration-line-through'}`}>{entry.label}</span>
                   </div>
 
-                  {/* Single Delete Button */}
                   {!deleteMode && (
                       <button onClick={() => deleteEntry(entry.id)} className="text-slate-600 hover:text-red-500 p-1 sm:opacity-0 sm:group-hover:opacity-100 transition"><X size={14}/></button>
                   )}
@@ -456,7 +463,6 @@ export default function SpinWheelArena() {
 
       </main>
 
-      {/* --- CSS STYLE INJECT --- */}
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; } 
         @media (min-width: 768px) { .custom-scrollbar::-webkit-scrollbar { width: 6px; } }
@@ -464,7 +470,6 @@ export default function SpinWheelArena() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #333; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: #ea580c; }
         
-        /* Hiệu ứng Rực Lửa cho Tiêu Đề */
         .fire-text {
             background: linear-gradient(0deg, #f80 0%, #ff0 50%, #fff 100%);
             -webkit-background-clip: text;
