@@ -322,11 +322,15 @@ export default function SpinWheelArena() {
           
           <div className="relative w-full max-w-[280px] sm:max-w-[400px] lg:max-w-[550px] aspect-square mx-auto flex items-center justify-center">
             
-            {/* KIẾM CHỈ VỊ TRÍ GÓC 0 ĐỘ (BÊN PHẢI) */}
-            <div className="absolute top-1/2 -right-2 sm:-right-4 lg:-right-8 -translate-y-1/2 z-30 drop-shadow-[0_0_15px_rgba(0,0,0,0.8)]">
-               <Sword className="text-slate-200 fill-slate-300 rotate-[-90deg] drop-shadow-md w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20" strokeWidth={1.5} />
-               <div className="absolute top-1/2 left-0 -translate-y-1/2 -translate-x-1 sm:-translate-x-2 w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 bg-orange-500 rounded-full animate-ping"></div>
-            </div>
+          {/* KIẾM CHỈ VỊ TRÍ GÓC 0 ĐỘ (CĂN CHUẨN XÁC) */}
+<div className="absolute top-1/2 -right-4 sm:-right-8 lg:-right-12 z-30 drop-shadow-[0_0_15px_rgba(0,0,0,0.8)]" style={{ transform: 'translateY(-50%)' }}>
+    {/* Dùng rotate-[-45deg] để mũi kiếm chỉ thẳng tắp sang trái (góc 9h nhìn từ kiếm, tức 0 độ của vòng xoay) */}
+   <Sword className="text-slate-200 fill-slate-300 rotate-[-140deg] drop-shadow-md w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 -mt-2" strokeWidth={1.5} />
+   
+   {/* Chấm tròn đỏ định vị mũi nhọn */}
+   <div className="absolute top-1/2 left-0 -translate-y-1/2 translate-x-2 sm:translate-x-3 lg:translate-x-4 w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 bg-orange-500 rounded-full animate-ping z-40"></div>
+   <div className="absolute top-1/2 left-0 -translate-y-1/2 translate-x-2 sm:translate-x-3 lg:translate-x-4 w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 bg-red-600 rounded-full z-40"></div>
+</div>
             
             <div style={{ transform: `rotate(${rotation}deg)`, transition: isSpinning ? 'transform 5s cubic-bezier(0.25, 0.1, 0.25, 1)' : 'none' }} className="rounded-full w-full h-full relative z-10">
               <canvas ref={canvasRef} className="w-full h-full rounded-full" />
