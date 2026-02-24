@@ -796,7 +796,7 @@ export default function Dashboard() {
                                 </h3>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-400 mb-1">Trắc nghiệm (MCQ) - giây</label>
+                                        <label className="block text-xs font-bold text-slate-400 mb-1">Trắc nghiệm(MCQ)-giây</label>
                                         <input 
                                             type="number" min="5" max="300"
                                             value={userConfig.timeMCQ || 15} 
