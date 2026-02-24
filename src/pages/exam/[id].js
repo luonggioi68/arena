@@ -19,6 +19,7 @@ export default function ExamRoom() {
   
   // State Thời gian & Gian lận
   const [timeLeft, setTimeLeft] = useState(0); 
+  const [endTime, setEndTime] = useState(null); // [CẬP NHẬT]: Thêm mốc thời gian kết thúc tuyệt đối
   const [violationCount, setViolationCount] = useState(0);
   const [isCheatDetected, setIsCheatDetected] = useState(false); 
   const MAX_VIOLATIONS = 3; 
@@ -27,10 +28,15 @@ export default function ExamRoom() {
   const isSubmittingRef = useRef(false);
   const lastViolationTimeRef = useRef(0);
 
+  // Khóa nhận diện phiên thi của từng học sinh (Dùng cho LocalStorage)
+  const sessionKey = useMemo(() => {
+      if (!id || !name) return null;
+      return `arena_exam_${id}_${name}_${dob}`;
+  }, [id, name, dob]);
+
   // --- HÀM RENDER VĂN BẢN KÈM ẢNH INLINE ---
   const renderWithInlineImage = (text, imgUrl) => {
     if (!text) return null;
-    
     if (text.includes('[img]') && imgUrl) {
         const parts = text.split('[img]');
         return (
@@ -39,11 +45,7 @@ export default function ExamRoom() {
                     <span key={index}>
                         <MathRender content={part} />
                         {index < parts.length - 1 && (
-                            <img 
-                                src={imgUrl} 
-                                className="inline-block align-middle mx-1 max-h-12 border rounded bg-white shadow-sm" 
-                                alt="minh-hoa"
-                            />
+                            <img src={imgUrl} className="inline-block align-middle mx-1 max-h-12 border rounded bg-white shadow-sm" alt="minh-hoa" />
                         )}
                     </span>
                 ))}
@@ -53,37 +55,55 @@ export default function ExamRoom() {
     return <MathRender content={text} />;
   };
 
-  // 1. LOAD ĐỀ
- // 1. LOAD ĐỀ (REALTIME BẰNG ONSNAPSHOT)
+  // 1. LOAD ĐỀ & PHỤC HỒI DỮ LIỆU TỪ LOCAL STORAGE
   useEffect(() => {
-    if (!id) return;
+    if (!id || !sessionKey) return;
     
-    // onSnapshot giúp lắng nghe mọi thay đổi từ phía Giáo viên (kể cả việc Bật/Tắt xem đáp án)
     const unsubscribe = onSnapshot(doc(firestore, "quizzes", id), (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data();
             
-            // Nếu GV đóng thi mà HS chưa nộp bài thì mới văng ra ngoài
             if (data.status !== 'OPEN' && !submitted) {
                 alert("Đề thi này đã đóng!");
                 router.push('/');
                 return;
             }
             
-            // Cập nhật state quiz liên tục (để nhận cờ choPhepXemDapAn mới nhất)
             setQuiz(data);
 
-            // Cập nhật câu hỏi và thời gian (CHỈ LÀM 1 LẦN để không bị trộn lại đề khi đang xem)
             setQuestions(prev => {
-                if (prev.length > 0) return prev; // Đã load rồi thì giữ nguyên thứ tự cũ
+                if (prev.length > 0) return prev; 
                 
-                const durationMinutes = data.duration || 45;
-                setTimeLeft(durationMinutes * 60);
+                // [CẬP NHẬT]: KIỂM TRA BỘ NHỚ TRÌNH DUYỆT (CHỐNG F5)
+                const savedSession = localStorage.getItem(sessionKey);
+                let currentEndTime;
+
+                if (savedSession) {
+                    // Nếu đã có dữ liệu lưu (Học sinh vừa F5)
+                    const parsed = JSON.parse(savedSession);
+                    currentEndTime = parsed.endTime;
+                    
+                    // Phục hồi đáp án và vi phạm
+                    setAnswers(parsed.answers || {});
+                    setViolationCount(parsed.violationCount || 0);
+                    violationsRef.current = parsed.violationCount || 0;
+                } else {
+                    // Lần đầu tiên vào thi
+                    const durationMinutes = data.duration || 45;
+                    currentEndTime = Date.now() + durationMinutes * 60 * 1000;
+                    
+                    // Khởi tạo bộ nhớ
+                    localStorage.setItem(sessionKey, JSON.stringify({
+                        endTime: currentEndTime,
+                        violationCount: 0,
+                        answers: {}
+                    }));
+                }
+
+                setEndTime(currentEndTime);
 
                 const formatQuestions = (qs) => qs.map(q => {
-                    if(q.type === 'TF') {
-                        return { ...q, items: q.items.map(i => ({...i, img: i.img || ''})) }
-                    }
+                    if(q.type === 'TF') return { ...q, items: q.items.map(i => ({...i, img: i.img || ''})) };
                     return q;
                 });
 
@@ -101,9 +121,19 @@ export default function ExamRoom() {
         setLoading(false);
     });
 
-    // Cleanup listener khi học sinh thoát khỏi phòng thi
     return () => unsubscribe();
-  }, [id, submitted, router]);
+  }, [id, submitted, router, sessionKey]);
+
+  // [CẬP NHẬT]: 1.5. ĐỒNG BỘ HÓA LIÊN TỤC VÀO LOCAL STORAGE
+  // Mỗi khi học sinh chọn đáp án hoặc vi phạm tăng lên, tự động lưu lại
+  useEffect(() => {
+      if (!sessionKey || !endTime || submitted) return;
+      localStorage.setItem(sessionKey, JSON.stringify({
+          endTime: endTime,
+          violationCount: violationCount,
+          answers: answers
+      }));
+  }, [answers, violationCount, endTime, sessionKey, submitted]);
 
   // 2. CHỐNG GIAN LẬN
   useEffect(() => {
@@ -111,10 +141,8 @@ export default function ExamRoom() {
 
     const handleViolation = (reason) => {
         if (submitted || isSubmittingRef.current) return;
-
         const now = Date.now();
         if (now - lastViolationTimeRef.current < 3000) return;
-
         lastViolationTimeRef.current = now;
         
         violationsRef.current += 1;
@@ -151,56 +179,54 @@ export default function ExamRoom() {
     };
   }, [loading, submitted]);
 
-  // 3. ĐỒNG HỒ
+  // 3. ĐỒNG HỒ (Tính toán dựa trên EndTime tuyệt đối)
   useEffect(() => {
-    if (loading || submitted || timeLeft <= 0) return;
+    if (loading || submitted || !endTime) return;
+
     const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) { handleSubmit(true, "Hết giờ làm bài"); return 0; }
-        return prev - 1;
-      });
+        const now = Date.now();
+        const remainingSeconds = Math.max(0, Math.floor((endTime - now) / 1000));
+        
+        setTimeLeft(remainingSeconds);
+
+        if (remainingSeconds <= 0) {
+            clearInterval(timer);
+            handleSubmit(true, "Hết giờ làm bài");
+        }
     }, 1000);
+
     return () => clearInterval(timer);
-  }, [loading, submitted, timeLeft]);
+  }, [loading, submitted, endTime]);
 
   const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
-// 3.5 BẢO VỆ NÚT BACK VÀ F5 (CHỐNG MẤT BÀI)
+
+  // 3.5 BẢO VỆ NÚT BACK VÀ F5 (CHỐNG MẤT BÀI)
   useEffect(() => {
     if (loading || submitted) return;
-
-    // A. Chặn học sinh bấm F5 (Tải lại trang) hoặc Tắt hẳn tab
     const handleBeforeUnload = (e) => {
         e.preventDefault();
-        e.returnValue = 'Bạn đang làm bài thi! Nếu tải lại trang, toàn bộ kết quả sẽ bị mất.';
+        e.returnValue = 'Bạn đang làm bài thi! Mọi thay đổi sẽ được lưu, nhưng thời gian vẫn đếm ngược.';
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
 
-    // B. Chặn học sinh bấm nút Back/Forward của trình duyệt (Cơ chế của Next.js)
     const handleRouteChangeStart = (url) => {
-        // Nếu không phải đang trong quá trình nộp bài hợp lệ
         if (!isSubmittingRef.current) {
             const confirmLeave = window.confirm("⛔ CẢNH BÁO: Bạn đang trong thời gian làm bài!\n\nNếu bạn rời khỏi trang này, bài làm của bạn sẽ TỰ ĐỘNG ĐƯỢC NỘP với số điểm hiện tại. Bạn có chắc chắn muốn thoát?");
-            
-            if (confirmLeave) {
-                // Nếu học sinh chọn "OK" -> Ép hệ thống tự động nộp bài luôn
-                handleSubmit(true, "Thoát trang đột ngột");
-            } else {
-                // Nếu học sinh chọn "Cancel" -> Hủy lệnh Back, giữ học sinh ở lại trang thi
+            if (confirmLeave) handleSubmit(true, "Thoát trang đột ngột");
+            else {
                 router.events.emit('routeChangeError');
                 throw 'Hủy chuyển trang để bảo vệ bài thi.';
             }
         }
     };
-
     router.events.on('routeChangeStart', handleRouteChangeStart);
-
-    // Dọn dẹp sự kiện khi component unmount
     return () => {
         window.removeEventListener('beforeunload', handleBeforeUnload);
         router.events.off('routeChangeStart', handleRouteChangeStart);
     };
-  }, [loading, submitted, answers]); // Thêm 'answers' vào đây để khi ép nộp bài, nó lấy được đáp án mới nhất
-  // 4. LOGIC
+  }, [loading, submitted, answers]);
+
+  // 4. LOGIC CHỌN ĐÁP ÁN
   const handleAnswer = (qId, value, subIndex = null) => {
     if (submitted) return;
     setAnswers(prev => {
@@ -216,10 +242,8 @@ export default function ExamRoom() {
     let totalScore = 0;
     const detail = [];
     const config = quiz.scoreConfig || { p1: 6, p3: 1 }; 
-
     const p1Count = questions.filter(q => q.type === 'MCQ').length;
     const p3Count = questions.filter(q => q.type === 'SA').length;
-    
     const scorePerP1 = p1Count > 0 ? (config.p1 / p1Count) : 0;
     const scorePerP3 = p3Count > 0 ? (config.p3 / p3Count) : 0;
 
@@ -228,17 +252,12 @@ export default function ExamRoom() {
         let isCorrect = false;
 
         if (q.type === 'MCQ') {
-            if (answers[q.id] == q.correct) { 
-                earned = scorePerP1;
-                isCorrect = true;
-            }
+            if (answers[q.id] == q.correct) { earned = scorePerP1; isCorrect = true; }
         }
         else if (q.type === 'TF') {
             let correctCount = 0;
             const userAns = answers[q.id] || {};
-            q.items.forEach((item, idx) => {
-                if (String(userAns[idx]) === String(item.isTrue)) correctCount++;
-            });
+            q.items.forEach((item, idx) => { if (String(userAns[idx]) === String(item.isTrue)) correctCount++; });
             if (correctCount === 1) earned = 0.1;
             else if (correctCount === 2) earned = 0.25;
             else if (correctCount === 3) earned = 0.5;
@@ -247,10 +266,7 @@ export default function ExamRoom() {
         else if (q.type === 'SA') {
             const userText = String(answers[q.id] || "").trim().toLowerCase();
             const correctText = String(q.correct || "").trim().toLowerCase();
-            if (userText && userText === correctText) {
-                earned = scorePerP3;
-                isCorrect = true;
-            }
+            if (userText && userText === correctText) { earned = scorePerP3; isCorrect = true; }
         }
         totalScore += earned;
         detail.push({ qId: q.id, earned, isCorrect });
@@ -272,6 +288,9 @@ export default function ExamRoom() {
     const result = calculateScore();
     setScoreData({ score: result.totalScore, detail: result.detail });
     setSubmitted(true);
+    
+    // [CẬP NHẬT] Xóa bộ nhớ LocalStorage sau khi đã nộp thành công
+    if (sessionKey) localStorage.removeItem(sessionKey);
 
     if (result.totalScore >= 5 && violationCount < MAX_VIOLATIONS) {
         const duration = 3000;
@@ -360,14 +379,14 @@ export default function ExamRoom() {
                 <span className="bg-slate-700 text-slate-300 px-2 py-1 rounded uppercase">Lớp: {className}</span>
             </div>
         </div>
-{/* CẢNH BÁO NẾU BỊ KHÓA ĐÁP ÁN */}
-{submitted && !quiz?.choPhepXemDapAn && (
-    <div className="bg-slate-900/80 border border-slate-700 p-6 rounded-2xl text-center mb-6 animate-in zoom-in">
-        <Shield size={40} className="mx-auto text-slate-500 mb-3" />
-        <h2 className="text-xl font-bold text-slate-300">Tính năng xem đáp án đã bị khóa</h2>
-        
-    </div>
-)}
+
+        {submitted && !quiz?.choPhepXemDapAn && (
+            <div className="bg-slate-900/80 border border-slate-700 p-6 rounded-2xl text-center mb-6 animate-in zoom-in">
+                <Shield size={40} className="mx-auto text-slate-500 mb-3" />
+                <h2 className="text-xl font-bold text-slate-300">Tính năng xem đáp án đã bị khóa</h2>
+            </div>
+        )}
+
         {questions.map((q, index) => {
             const isQCorrect = submitted && scoreData.detail.find(d => d.qId === q.id)?.isCorrect;
             const earnedPoints = submitted ? scoreData.detail.find(d => d.qId === q.id)?.earned : 0;
@@ -375,10 +394,10 @@ export default function ExamRoom() {
             return (
             <div key={q.id} className={`relative bg-[#1e293b] rounded-xl md:rounded-2xl border-2 overflow-hidden transition-all ${
                submitted 
-    ? (quiz?.choPhepXemDapAn 
-        ? (isQCorrect ? 'border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.2)]' : 'border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]') 
-        : 'border-slate-700/50 opacity-70') // Nếu không cho xem, làm mờ đi
-    : 'border-white/10 hover:border-indigo-500/50'
+                ? (quiz?.choPhepXemDapAn 
+                    ? (isQCorrect ? 'border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.2)]' : 'border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]') 
+                    : 'border-slate-700/50 opacity-70')
+                : 'border-white/10 hover:border-indigo-500/50'
             }`}>
                 <div className="bg-slate-800/50 px-4 py-2 md:px-5 md:py-3 border-b border-white/5 flex justify-between items-center">
                     <div className="flex items-center gap-3">
@@ -394,20 +413,12 @@ export default function ExamRoom() {
 
                 <div className="p-3 md:p-5">
                     <div className="mb-4">
-                        {/* 1. HIỂN THỊ NỘI DUNG VĂN BẢN TRƯỚC */}
                         <h3 className="text-base md:text-lg font-bold text-white leading-relaxed whitespace-pre-line mb-3">
                             {renderWithInlineImage(q.q, q.img)}
                         </h3>
-
-                        {/* 2. HIỂN THỊ ẢNH SAU (Nếu không dùng thẻ [img]) */}
-                        {/* CSS MỚI: Căn giữa, giới hạn chiều cao nhưng max-width 100% để hiển thị tốt ảnh lớn */}
                         {q.img && !q.q.includes('[img]') && (
                             <div className="w-full flex justify-center mb-3">
-                                <img 
-                                    src={q.img} 
-                                    className="max-w-full h-auto max-h-80 md:max-h-96 rounded-lg border border-white/10 object-contain bg-black/20" 
-                                    alt="Minh họa câu hỏi"
-                                />
+                                <img src={q.img} className="max-w-full h-auto max-h-80 md:max-h-96 rounded-lg border border-white/10 object-contain bg-black/20" alt="Minh họa câu hỏi" />
                             </div>
                         )}
                     </div>
@@ -418,17 +429,24 @@ export default function ExamRoom() {
                                 const isSelected = answers[q.id] == aIdx;
                                 const isCorrectAns = q.correct == aIdx;
                                 
-                                let btnClass = "border-2 border-slate-700 bg-slate-800/50 hover:bg-slate-700";
+                                let btnClass = "border-2 border-slate-700 bg-slate-800/50 hover:bg-slate-700 text-slate-300";
+                                let circleClass = "border-slate-600 text-slate-400";
+                                
                                 if (submitted) {
-    if (quiz?.choPhepXemDapAn) {
-        if (isCorrectAns) btnClass = "border-green-500 bg-green-500/20 text-green-400";
-        else if (isSelected && !isCorrectAns) btnClass = "border-red-500 bg-red-500/20 text-red-400"; 
-        else btnClass = "border-slate-700 opacity-50";
-    } else {
-        if (isSelected) btnClass = "border-indigo-500 bg-indigo-600/50 text-white"; // Giữ lại phần học sinh chọn nhưng không tô đúng sai
-        else btnClass = "border-slate-700 opacity-50";
-    }
-}
+                                    if (quiz?.choPhepXemDapAn) {
+                                        if (isCorrectAns) { btnClass = "border-green-500 bg-green-500/20 text-green-400"; circleClass = "border-green-500 bg-green-500 text-white"; }
+                                        else if (isSelected && !isCorrectAns) { btnClass = "border-red-500 bg-red-500/20 text-red-400"; circleClass = "border-red-500 bg-red-500 text-white"; }
+                                        else { btnClass = "border-slate-700 opacity-50"; circleClass = "border-slate-700"; }
+                                    } else {
+                                        if (isSelected) { btnClass = "border-indigo-500 bg-indigo-600/50 text-white"; circleClass = "border-indigo-500 bg-indigo-500 text-white"; }
+                                        else { btnClass = "border-slate-700 opacity-50"; circleClass = "border-slate-700"; }
+                                    }
+                                } else {
+                                    if (isSelected) { 
+                                        btnClass = "border-indigo-500 bg-indigo-500/20 text-indigo-300 ring-1 ring-indigo-500";
+                                        circleClass = "border-indigo-500 bg-indigo-500 text-white";
+                                    }
+                                }
 
                                 return (
                                     <button 
@@ -438,19 +456,15 @@ export default function ExamRoom() {
                                         className={`p-4 md:p-5 rounded-xl text-left font-bold transition-all flex flex-col gap-2 ${btnClass} active:scale-95 touch-manipulation`}
                                     >   
                                         <div className="flex items-start gap-3 w-full">
-                                            <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs shrink-0 font-black uppercase mt-0.5">
+                                            <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs shrink-0 font-black uppercase mt-0.5 transition-colors ${circleClass}`}>
                                                 {String.fromCharCode(65 + aIdx)}
                                             </div>
                                             <div className="text-lg md:text-xl leading-snug flex-1">
                                                 {renderWithInlineImage(ans, q.aImages?.[aIdx])}
                                             </div>
                                         </div>
-                                        {/* CSS MỚI CHO ĐÁP ÁN: max-w-full để không bị tràn */}
                                         {q.aImages?.[aIdx] && !ans.includes('[img]') && (
-                                            <img 
-                                                src={q.aImages[aIdx]} 
-                                                className="max-w-full h-auto max-h-48 rounded object-contain mt-2 self-start border border-white/10" 
-                                            />
+                                            <img src={q.aImages[aIdx]} className="max-w-full h-auto max-h-48 rounded object-contain mt-2 self-start border border-white/10" alt="Đáp án" />
                                         )}
                                     </button>
                                 );
@@ -474,7 +488,7 @@ export default function ExamRoom() {
                                         const trueKey = String(item.isTrue);
                                         const isRowCorrect = String(userChoice) === trueKey;
                                         let rowClass = "hover:bg-white/5";
-if (submitted && quiz?.choPhepXemDapAn) rowClass = isRowCorrect ? "bg-green-500/10" : "bg-red-500/10";
+                                        if (submitted && quiz?.choPhepXemDapAn) rowClass = isRowCorrect ? "bg-green-500/10" : "bg-red-500/10";
 
                                         return (
                                             <tr key={idx} className={rowClass}>
@@ -484,21 +498,17 @@ if (submitted && quiz?.choPhepXemDapAn) rowClass = isRowCorrect ? "bg-green-500/
                                                             <span className="font-bold text-slate-500 shrink-0">{String.fromCharCode(97+idx)})</span>
                                                             <div>{renderWithInlineImage(item.text, item.img)}</div>
                                                         </div>
-                                                        {/* CSS MỚI CHO TF: max-w-full */}
                                                         {item.img && !item.text.includes('[img]') && (
-                                                            <img 
-                                                                src={item.img} 
-                                                                className="max-w-full h-auto max-h-48 mt-1 ml-6 rounded border border-slate-600 block" 
-                                                            />
+                                                            <img src={item.img} className="max-w-full h-auto max-h-48 mt-1 ml-6 rounded border border-slate-600 block" />
                                                         )}
                                                     </div>
                                                 </td>
                                                 <td className="text-center px-1 align-top pt-4">
-    <button onClick={() => handleAnswer(q.id, "true", idx)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "true" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && quiz?.choPhepXemDapAn && item.isTrue === true ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "true" && <CheckCircle size={18} className="text-white"/>}</button>
-</td>
-<td className="text-center px-1 align-top pt-4">
-    <button onClick={() => handleAnswer(q.id, "false", idx)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "false" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && quiz?.choPhepXemDapAn && item.isTrue === false ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "false" && <CheckCircle size={18} className="text-white"/>}</button>
-</td>
+                                                    <button onClick={() => handleAnswer(q.id, "true", idx)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "true" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && quiz?.choPhepXemDapAn && item.isTrue === true ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "true" && <CheckCircle size={18} className="text-white"/>}</button>
+                                                </td>
+                                                <td className="text-center px-1 align-top pt-4">
+                                                    <button onClick={() => handleAnswer(q.id, "false", idx)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "false" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && quiz?.choPhepXemDapAn && item.isTrue === false ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "false" && <CheckCircle size={18} className="text-white"/>}</button>
+                                                </td>
                                             </tr>
                                         );
                                     })}
@@ -508,24 +518,22 @@ if (submitted && quiz?.choPhepXemDapAn) rowClass = isRowCorrect ? "bg-green-500/
                     )}
 
                     {q.type === 'SA' && (
-    <div>
-        <input type="text" className={`w-full bg-[#0f172a] border-2 p-4 md:p-5 rounded-xl outline-none font-bold text-xl md:text-2xl placeholder-slate-600 uppercase ${submitted ? (quiz?.choPhepXemDapAn ? (isQCorrect ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400') : 'border-indigo-500 text-indigo-400') : 'border-slate-700 focus:border-indigo-500 text-white'}`} placeholder="NHẬP ĐÁP ÁN..." value={answers[q.id] || ''} onChange={(e) => handleAnswer(q.id, e.target.value)} disabled={submitted} />
-        {submitted && quiz?.choPhepXemDapAn && !isQCorrect && (
-            <div className="mt-3 text-base font-bold text-green-400 flex items-center gap-2 animate-pulse">
-                <Target size={20}/> 
-                <span>Đáp án đúng:</span> 
-                <span className="text-lg">
-                    {renderWithInlineImage(q.correct)}
-                </span>
-            </div>
-        )}
+                        <div>
+                            <input type="text" className={`w-full bg-[#0f172a] border-2 p-4 md:p-5 rounded-xl outline-none font-bold text-xl md:text-2xl placeholder-slate-600 uppercase ${submitted ? (quiz?.choPhepXemDapAn ? (isQCorrect ? 'border-green-500 text-green-400' : 'border-red-500 text-red-400') : 'border-indigo-500 text-indigo-400') : 'border-slate-700 focus:border-indigo-500 text-white'}`} placeholder="NHẬP ĐÁP ÁN..." value={answers[q.id] || ''} onChange={(e) => handleAnswer(q.id, e.target.value)} disabled={submitted} />
+                            {submitted && quiz?.choPhepXemDapAn && !isQCorrect && (
+                                <div className="mt-3 text-base font-bold text-green-400 flex items-center gap-2 animate-pulse">
+                                    <Target size={20}/> 
+                                    <span>Đáp án đúng:</span> 
+                                    <span className="text-lg">{renderWithInlineImage(q.correct)}</span>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
             </div>
             );
         })}
-    </main>
+      </main>
 
       <div className="fixed bottom-0 left-0 right-0 p-3 md:p-4 bg-[#020617]/90 backdrop-blur border-t border-white/10 z-50">
         <div className="max-w-3xl mx-auto flex justify-between items-center gap-4">
