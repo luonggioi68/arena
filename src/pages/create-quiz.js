@@ -112,7 +112,7 @@ export default function CreateQuiz() {
   const [subject, setSubject] = useState('');
   const [assignedClass, setAssignedClass] = useState('');
   const [duration, setDuration] = useState(45);
-  const [scoreConfig, setScoreConfig] = useState({ p1: 6, p3: 1 });
+  const [scoreConfig, setScoreConfig] = useState({ p1: 0, p3: 0 });
   const [origin, setOrigin] = useState('LIBRARY');
   const [showFullPreview, setShowFullPreview] = useState(false);
 
