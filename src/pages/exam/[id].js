@@ -17,9 +17,8 @@ export default function ExamRoom() {
   const [submitted, setSubmitted] = useState(false);
   const [scoreData, setScoreData] = useState({ score: 0, detail: [] });
   
-  // State Thời gian & Gian lận
   const [timeLeft, setTimeLeft] = useState(0); 
-  const [endTime, setEndTime] = useState(null); // [CẬP NHẬT]: Thêm mốc thời gian kết thúc tuyệt đối
+  const [endTime, setEndTime] = useState(null); 
   const [violationCount, setViolationCount] = useState(0);
   const [isCheatDetected, setIsCheatDetected] = useState(false); 
   const MAX_VIOLATIONS = 3; 
@@ -27,14 +26,14 @@ export default function ExamRoom() {
   const violationsRef = useRef(0);
   const isSubmittingRef = useRef(false);
   const lastViolationTimeRef = useRef(0);
+  
+  const isSessionLoadedRef = useRef(false); 
 
-  // Khóa nhận diện phiên thi của từng học sinh (Dùng cho LocalStorage)
   const sessionKey = useMemo(() => {
       if (!id || !name) return null;
       return `arena_exam_${id}_${name}_${dob}`;
   }, [id, name, dob]);
 
-  // --- HÀM RENDER VĂN BẢN KÈM ẢNH INLINE ---
   const renderWithInlineImage = (text, imgUrl) => {
     if (!text) return null;
     if (text.includes('[img]') && imgUrl) {
@@ -55,7 +54,7 @@ export default function ExamRoom() {
     return <MathRender content={text} />;
   };
 
-  // 1. LOAD ĐỀ & PHỤC HỒI DỮ LIỆU TỪ LOCAL STORAGE
+  // 1. LOAD ĐỀ & PHỤC HỒI DỮ LIỆU
   useEffect(() => {
     if (!id || !sessionKey) return;
     
@@ -71,48 +70,67 @@ export default function ExamRoom() {
             
             setQuiz(data);
 
-            setQuestions(prev => {
-                if (prev.length > 0) return prev; 
-                
-                // [CẬP NHẬT]: KIỂM TRA BỘ NHỚ TRÌNH DUYỆT (CHỐNG F5)
+            if (!isSessionLoadedRef.current) {
                 const savedSession = localStorage.getItem(sessionKey);
                 let currentEndTime;
 
                 if (savedSession) {
-                    // Nếu đã có dữ liệu lưu (Học sinh vừa F5)
                     const parsed = JSON.parse(savedSession);
-                    currentEndTime = parsed.endTime;
                     
-                    // Phục hồi đáp án và vi phạm
-                    setAnswers(parsed.answers || {});
-                    setViolationCount(parsed.violationCount || 0);
-                    violationsRef.current = parsed.violationCount || 0;
+                    if (parsed.submitted) {
+                        if (parsed.violationCount >= MAX_VIOLATIONS) {
+                            alert(`⛔ BẠN ĐÃ BỊ ĐÌNH CHỈ THI TRƯỚC ĐÓ!\nĐiểm được ghi nhận: ${parsed.scoreData?.score} điểm.`);
+                            router.push('/');
+                            return; 
+                        }
+                        
+                        setAnswers(parsed.answers || {});
+                        setViolationCount(parsed.violationCount || 0);
+                        violationsRef.current = parsed.violationCount || 0;
+                        setScoreData(parsed.scoreData || { score: 0, detail: [] });
+                        setSubmitted(true);
+                        currentEndTime = parsed.endTime || Date.now();
+                    } else {
+                        currentEndTime = parsed.endTime;
+                        setAnswers(parsed.answers || {});
+                        setViolationCount(parsed.violationCount || 0);
+                        violationsRef.current = parsed.violationCount || 0;
+                    }
                 } else {
-                    // Lần đầu tiên vào thi
                     const durationMinutes = data.duration || 45;
                     currentEndTime = Date.now() + durationMinutes * 60 * 1000;
-                    
-                    // Khởi tạo bộ nhớ
                     localStorage.setItem(sessionKey, JSON.stringify({
                         endTime: currentEndTime,
                         violationCount: 0,
-                        answers: {}
+                        answers: {},
+                        submitted: false
                     }));
                 }
 
                 setEndTime(currentEndTime);
 
-                const formatQuestions = (qs) => qs.map(q => {
-                    if(q.type === 'TF') return { ...q, items: q.items.map(i => ({...i, img: i.img || ''})) };
-                    return q;
+                setQuestions(prev => {
+                    if (prev.length > 0) return prev; 
+                    
+                    // [CẬP NHẬT TRỘN Ý TF]: Gắn originalIndex và đảo ngẫu nhiên
+                    const formatQuestions = (qs) => qs.map(q => {
+                        if(q.type === 'TF') {
+                            const mappedItems = q.items.map((i, idx) => ({ ...i, img: i.img || '', originalIndex: idx }));
+                            const shuffledItems = mappedItems.sort(() => Math.random() - 0.5);
+                            return { ...q, items: shuffledItems };
+                        }
+                        return q;
+                    });
+
+                    const p1 = formatQuestions(data.questions.filter(q => q.type === 'MCQ')).sort(() => Math.random() - 0.5);
+                    const p2 = formatQuestions(data.questions.filter(q => q.type === 'TF')).sort(() => Math.random() - 0.5);
+                    const p3 = formatQuestions(data.questions.filter(q => q.type === 'SA')).sort(() => Math.random() - 0.5);
+                    
+                    return [...p1, ...p2, ...p3];
                 });
 
-                const p1 = formatQuestions(data.questions.filter(q => q.type === 'MCQ')).sort(() => Math.random() - 0.5);
-                const p2 = formatQuestions(data.questions.filter(q => q.type === 'TF')).sort(() => Math.random() - 0.5);
-                const p3 = formatQuestions(data.questions.filter(q => q.type === 'SA')).sort(() => Math.random() - 0.5);
-                
-                return [...p1, ...p2, ...p3];
-            });
+                isSessionLoadedRef.current = true;
+            }
             
             setLoading(false);
         }
@@ -124,14 +142,14 @@ export default function ExamRoom() {
     return () => unsubscribe();
   }, [id, submitted, router, sessionKey]);
 
-  // [CẬP NHẬT]: 1.5. ĐỒNG BỘ HÓA LIÊN TỤC VÀO LOCAL STORAGE
-  // Mỗi khi học sinh chọn đáp án hoặc vi phạm tăng lên, tự động lưu lại
+  // 1.5. ĐỒNG BỘ HÓA LIÊN TỤC VÀO BỘ NHỚ 
   useEffect(() => {
-      if (!sessionKey || !endTime || submitted) return;
+      if (!sessionKey || !endTime || submitted || !isSessionLoadedRef.current) return;
       localStorage.setItem(sessionKey, JSON.stringify({
           endTime: endTime,
           violationCount: violationCount,
-          answers: answers
+          answers: answers,
+          submitted: false
       }));
   }, [answers, violationCount, endTime, sessionKey, submitted]);
 
@@ -151,7 +169,6 @@ export default function ExamRoom() {
         setTimeout(() => setIsCheatDetected(false), 2000);
 
         if (violationsRef.current >= MAX_VIOLATIONS) {
-            alert(`⛔ VI PHẠM QUÁ ${MAX_VIOLATIONS} LẦN! TỰ ĐỘNG NỘP BÀI.`);
             handleSubmit(true, "Gian lận quá giới hạn");
         } else {
             alert(`⚠️ CẢNH BÁO (${violationsRef.current}/${MAX_VIOLATIONS}): ${reason}`);
@@ -179,28 +196,24 @@ export default function ExamRoom() {
     };
   }, [loading, submitted]);
 
-  // 3. ĐỒNG HỒ (Tính toán dựa trên EndTime tuyệt đối)
+  // 3. ĐỒNG HỒ 
   useEffect(() => {
     if (loading || submitted || !endTime) return;
-
     const timer = setInterval(() => {
         const now = Date.now();
         const remainingSeconds = Math.max(0, Math.floor((endTime - now) / 1000));
-        
         setTimeLeft(remainingSeconds);
-
         if (remainingSeconds <= 0) {
             clearInterval(timer);
             handleSubmit(true, "Hết giờ làm bài");
         }
     }, 1000);
-
     return () => clearInterval(timer);
   }, [loading, submitted, endTime]);
 
   const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
-  // 3.5 BẢO VỆ NÚT BACK VÀ F5 (CHỐNG MẤT BÀI)
+  // 3.5 BẢO VỆ NÚT BACK VÀ F5
   useEffect(() => {
     if (loading || submitted) return;
     const handleBeforeUnload = (e) => {
@@ -226,7 +239,7 @@ export default function ExamRoom() {
     };
   }, [loading, submitted, answers]);
 
-  // 4. LOGIC CHỌN ĐÁP ÁN
+  // 4. LOGIC TÍNH ĐIỂM VÀ NỘP BÀI
   const handleAnswer = (qId, value, subIndex = null) => {
     if (submitted) return;
     setAnswers(prev => {
@@ -257,7 +270,10 @@ export default function ExamRoom() {
         else if (q.type === 'TF') {
             let correctCount = 0;
             const userAns = answers[q.id] || {};
-            q.items.forEach((item, idx) => { if (String(userAns[idx]) === String(item.isTrue)) correctCount++; });
+            // [CẬP NHẬT]: Tính điểm dựa trên originalIndex thay vì index hiện tại
+            q.items.forEach((item) => { 
+                if (String(userAns[item.originalIndex]) === String(item.isTrue)) correctCount++; 
+            });
             if (correctCount === 1) earned = 0.1;
             else if (correctCount === 2) earned = 0.25;
             else if (correctCount === 3) earned = 0.5;
@@ -276,6 +292,7 @@ export default function ExamRoom() {
   };
 
   const handleSubmit = async (autoSubmit = false, reason = "Nộp chủ động") => {
+    if (submitted || isSubmittingRef.current) return;
     isSubmittingRef.current = true;
 
     if (!autoSubmit) {
@@ -289,10 +306,17 @@ export default function ExamRoom() {
     setScoreData({ score: result.totalScore, detail: result.detail });
     setSubmitted(true);
     
-    // [CẬP NHẬT] Xóa bộ nhớ LocalStorage sau khi đã nộp thành công
-    if (sessionKey) localStorage.removeItem(sessionKey);
+    if (sessionKey) {
+        localStorage.setItem(sessionKey, JSON.stringify({
+            endTime: endTime || Date.now(),
+            violationCount: violationsRef.current, 
+            answers: answers,
+            submitted: true, 
+            scoreData: { score: result.totalScore, detail: result.detail }
+        }));
+    }
 
-    if (result.totalScore >= 5 && violationCount < MAX_VIOLATIONS) {
+    if (result.totalScore >= 5 && violationsRef.current < MAX_VIOLATIONS) {
         const duration = 3000;
         const end = Date.now() + duration;
         (function frame() {
@@ -311,11 +335,18 @@ export default function ExamRoom() {
             score: result.totalScore,
             answers: answers, 
             detail: result.detail,
-            violations: violationCount, 
+            violations: violationsRef.current, 
             submitReason: reason, 
             submittedAt: serverTimestamp()
         });
     } catch (e) { console.error("Lỗi lưu điểm", e); }
+
+    if (violationsRef.current >= MAX_VIOLATIONS) {
+        setTimeout(() => {
+            alert(`⛔ BẠN ĐÃ BỊ ĐÌNH CHỈ THI!\n\nLý do: Vi phạm quy chế quá ${MAX_VIOLATIONS} lần.\nĐiểm số ghi nhận: ${result.totalScore} điểm.\n\nHệ thống sẽ tự động đưa bạn về Trang chủ.`);
+            router.push('/');
+        }, 100);
+    }
   };
 
   if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center text-white"><div className="animate-spin mr-3">⌛</div> Đang tải dữ liệu chiến trường...</div>;
@@ -483,15 +514,16 @@ export default function ExamRoom() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
+                                    {/* Dùng biến originalIndex để truy xuất đáp án thay vì idx */}
                                     {q.items.map((item, idx) => {
-                                        const userChoice = answers[q.id]?.[idx]; 
+                                        const userChoice = answers[q.id]?.[item.originalIndex]; 
                                         const trueKey = String(item.isTrue);
                                         const isRowCorrect = String(userChoice) === trueKey;
                                         let rowClass = "hover:bg-white/5";
                                         if (submitted && quiz?.choPhepXemDapAn) rowClass = isRowCorrect ? "bg-green-500/10" : "bg-red-500/10";
 
                                         return (
-                                            <tr key={idx} className={rowClass}>
+                                            <tr key={item.originalIndex} className={rowClass}>
                                                 <td className="px-3 py-4 font-medium text-slate-200 text-base md:text-lg">
                                                     <div className="flex flex-col gap-2">
                                                         <div className="flex gap-2">
@@ -504,10 +536,10 @@ export default function ExamRoom() {
                                                     </div>
                                                 </td>
                                                 <td className="text-center px-1 align-top pt-4">
-                                                    <button onClick={() => handleAnswer(q.id, "true", idx)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "true" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && quiz?.choPhepXemDapAn && item.isTrue === true ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "true" && <CheckCircle size={18} className="text-white"/>}</button>
+                                                    <button onClick={() => handleAnswer(q.id, "true", item.originalIndex)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "true" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && quiz?.choPhepXemDapAn && item.isTrue === true ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "true" && <CheckCircle size={18} className="text-white"/>}</button>
                                                 </td>
                                                 <td className="text-center px-1 align-top pt-4">
-                                                    <button onClick={() => handleAnswer(q.id, "false", idx)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "false" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && quiz?.choPhepXemDapAn && item.isTrue === false ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "false" && <CheckCircle size={18} className="text-white"/>}</button>
+                                                    <button onClick={() => handleAnswer(q.id, "false", item.originalIndex)} disabled={submitted} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg border-2 transition-all inline-flex items-center justify-center touch-manipulation ${userChoice === "false" ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'} ${submitted && quiz?.choPhepXemDapAn && item.isTrue === false ? 'ring-2 ring-green-400' : ''}`}>{userChoice === "false" && <CheckCircle size={18} className="text-white"/>}</button>
                                                 </td>
                                             </tr>
                                         );
