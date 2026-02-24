@@ -138,20 +138,24 @@ export default function ArenaHostController() {
   };
 
   // --- CÁC GIAO DIỆN VIEW MODE ---
-  const RacingView = () => (
+ const RacingView = () => (
       <div className="w-full h-full bg-slate-900/90 rounded-3xl p-4 md:p-6 border-2 border-orange-500/30 relative overflow-hidden flex flex-col justify-center shadow-[0_0_50px_rgba(249,115,22,0.1)]">
           <div className="absolute right-6 md:right-10 top-0 bottom-0 w-4 bg-yellow-400/20 z-0 flex items-center justify-center border-l-4 border-dashed border-yellow-400"><span className="rotate-90 text-[10px] md:text-xs font-black text-yellow-400 tracking-[0.5em] md:tracking-[1em] animate-pulse">FINISH</span></div>
-          <div className="space-y-4 relative z-10 overflow-y-auto max-h-full pr-2 md:pr-4 custom-scrollbar">
+          <div className="space-y-2 relative z-10 overflow-y-auto max-h-full pr-2 md:pr-4 custom-scrollbar">
               {players.sort((a,b) => b.score - a.score).map((p, idx) => {
                   const qLength = quiz?.questions?.length || 1;
                   const progress = Math.min(85, (p.score / (qLength * 100)) * 85);
                   return (
-                      <div key={p.id} className="relative h-12 md:h-14 bg-white/5 rounded-r-full flex items-center border-b border-white/10 mt-4 md:mt-0">
+                      <div key={p.id} className="relative h-16 md:h-20 bg-white/5 rounded-r-full flex items-center border-b border-white/10 mt-6">
                           <div className="absolute transition-all duration-1000 ease-out flex items-center z-10" style={{ left: `${progress}%`, transform: 'translateX(-100%)' }}>
-                              <div className="relative group">
-                                <div className="absolute -top-6 right-0 bg-black/80 text-white text-[8px] md:text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap border border-orange-500">{p.name} ({p.score})</div>
-                                <Car size={32} className={`text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] md:w-10 md:h-10 ${idx===0 ? 'text-yellow-400 scale-125' : ''}`} />
-                                {idx===0 && <Flame className="absolute top-0 md:top-1 -left-3 md:-left-4 text-orange-500 animate-bounce rotate-90 w-4 h-4 md:w-5 md:h-5" fill="currentColor"/>}
+                              <div className="relative flex justify-center">
+                                
+                                <div className="absolute -top-8 md:-top-10 left-1/2 -translate-x-1/2 bg-slate-950 text-white text-xs md:text-sm font-black px-3 py-1.5 rounded-lg whitespace-nowrap border border-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.8)] z-20 flex items-center gap-1.5">
+                                    {p.name} <span className="text-orange-400">({p.score})</span>
+                                </div>
+                                
+                                <Car size={32} className={`text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] md:w-10 md:h-10 relative z-10 ${idx===0 ? 'text-yellow-400 scale-125' : ''}`} />
+                                {idx===0 && <Flame className="absolute top-0 md:top-1 -left-3 md:-left-4 text-orange-500 animate-bounce rotate-90 w-4 h-4 md:w-5 md:h-5 z-0" fill="currentColor"/>}
                               </div>
                           </div>
                           <div className="h-1.5 md:h-2 bg-gradient-to-r from-transparent to-orange-600/50 w-full absolute top-1/2 -translate-y-1/2"></div>
@@ -161,7 +165,6 @@ export default function ArenaHostController() {
           </div>
       </div>
   );
-
   const GoldMinerView = () => (
     <div className="w-full h-full bg-[#3d2b1f] rounded-3xl p-4 md:p-6 border-4 border-[#8b5a2b] overflow-y-auto relative shadow-inner custom-scrollbar bg-[url('https://www.transparenttextures.com/patterns/dark-wood.png')]">
        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-2 md:gap-x-4 gap-y-10 md:gap-y-12 pt-8 md:pt-10">
