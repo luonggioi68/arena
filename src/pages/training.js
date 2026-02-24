@@ -403,7 +403,7 @@ export default function TrainingPage() {
               {/* LOGIN */}
               {authMode === 'LOGIN' && (
                   <form onSubmit={handleLogin} className="space-y-4">
-                      <div className="text-center mb-6"><LogIn size={48} className="mx-auto text-orange-500 mb-2"/><h3 className="text-2xl font-black text-white uppercase">ĐĂNG NHẬP</h3></div>
+                      <div className="text-center mb-6"><LogIn size={48} className="mx-auto text-orange-500 mb-2"/><h4 className="text-2xl font-black text-white uppercase">ĐĂNG NHẬP DÀNH CHO HỌC SINH</h4></div>
                       <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Phone size={18} className="text-slate-500"/><input name="phone" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Số điện thoại" type="tel"/></div>
                       <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Lock size={18} className="text-slate-500"/><input name="password" type={showPassword ? "text" : "password"} onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Mật khẩu"/><button type="button" onClick={() => setShowPassword(!showPassword)} className="text-slate-500 hover:text-white">{showPassword ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div>
                       
@@ -423,7 +423,7 @@ export default function TrainingPage() {
               {/* REGISTER */}
               {authMode === 'REGISTER' && (
                   <form onSubmit={handleRegister} className="space-y-4">
-                      <div className="text-center mb-6"><UserPlus size={48} className="mx-auto text-orange-500 mb-2"/><h3 className="text-2xl font-black text-white uppercase">ĐĂNG KÝ MỚI</h3></div>
+                      <div className="text-center mb-6"><UserPlus size={48} className="mx-auto text-orange-500 mb-2"/><h3 className="text-2xl font-black text-white uppercase">ĐĂNG KÝ MỚI DÀNH CHO HỌC SINH</h3></div>
                       <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><User size={18} className="text-slate-500"/><input name="fullName" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Họ và tên học sinh"/></div>
                       <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Phone size={18} className="text-slate-500"/><input name="phone" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Số điện thoại" type="tel"/></div>
                       <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Lock size={18} className="text-slate-500"/><input name="password" type="password" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Mật khẩu (min 6 số)"/></div>
