@@ -789,6 +789,42 @@ export default function Dashboard() {
                                     </select>
                                 </div>
                             </div>
+                            {/* --- BỔ SUNG: CẤU HÌNH THỜI GIAN GAME --- */}
+                            <div className="space-y-4">
+                                <h3 className="text-emerald-400 font-bold uppercase text-sm border-b border-white/10 pb-2 flex items-center gap-2">
+                                    <Clock size={16}/> Thời Gian Trả Lời (Chiến Binh Arena)
+                                </h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 mb-1">Trắc nghiệm (MCQ) - giây</label>
+                                        <input 
+                                            type="number" min="5" max="300"
+                                            value={userConfig.timeMCQ || 15} 
+                                            onChange={e => setUserConfig({...userConfig, timeMCQ: parseInt(e.target.value) || 15})} 
+                                            className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-emerald-500 font-mono text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 mb-1">Đúng/Sai (TF) - giây</label>
+                                        <input 
+                                            type="number" min="5" max="300"
+                                            value={userConfig.timeTF || 30} 
+                                            onChange={e => setUserConfig({...userConfig, timeTF: parseInt(e.target.value) || 30})} 
+                                            className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-emerald-500 font-mono text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 mb-1">Trả lời ngắn (SA) - giây</label>
+                                        <input 
+                                            type="number" min="5" max="300"
+                                            value={userConfig.timeSA || 30} 
+                                            onChange={e => setUserConfig({...userConfig, timeSA: parseInt(e.target.value) || 30})} 
+                                            className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-emerald-500 font-mono text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            {/* --- KẾT THÚC BỔ SUNG --- */}
                             <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition active:scale-95"><Save size={20}/> Lưu Cấu Hình</button>
                         </form>
                     </div>
