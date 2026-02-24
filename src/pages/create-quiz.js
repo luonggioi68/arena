@@ -77,7 +77,14 @@ const renderWithInlineImage = (text, imgUrl) => {
     // Mặc định trả về text chứa công thức toán
     return <MathRender content={text} />;
 };
-
+// --- [THÊM MỚI]: HÀM LÀM SẠCH THẺ HTML TỪ AI ---
+// (Chỉ biến thẻ HTML thành chữ, KHÔNG ảnh hưởng đến dấu < > trong công thức Toán học)
+const sanitizeHTMLTags = (text) => {
+    if (typeof text !== 'string') return text;
+    return text.replace(/<\/?\s*[a-zA-Z]+[^>]*>/g, (match) => {
+        return match.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    });
+};
 export default function CreateQuiz() {
   const router = useRouter();
   const { id, grade: queryGrade, subject: querySubject, from } = router.query;
@@ -549,12 +556,29 @@ const handleOpenPreview = () => {
     setShowFullPreview(true);
 };
 
-  const handleSave = async () => {
+ const handleSave = async () => {
     if (!title.trim()) return alert("Vui lòng nhập tên bài thi!");
     if (!subject) return alert("Vui lòng chọn Môn học!");
     setLoading(true);
     
-    const questionsForGame = questions.map(q => {
+    // [THÊM MỚI]: Rửa sạch toàn bộ mảng câu hỏi (lọc bỏ thẻ HTML) trước khi xử lý
+    const safeQuestions = questions.map(q => {
+        let cleanQ = { ...q };
+        if (cleanQ.q) cleanQ.q = sanitizeHTMLTags(cleanQ.q);
+        if (cleanQ.type === 'MCQ' && Array.isArray(cleanQ.a)) {
+            cleanQ.a = cleanQ.a.map(ans => sanitizeHTMLTags(ans));
+        }
+        else if (cleanQ.type === 'TF' && Array.isArray(cleanQ.items)) {
+            cleanQ.items = cleanQ.items.map(item => ({...item, text: sanitizeHTMLTags(item.text)}));
+        }
+        else if (cleanQ.type === 'SA' && cleanQ.correct) {
+            cleanQ.correct = sanitizeHTMLTags(String(cleanQ.correct));
+        }
+        return cleanQ;
+    });
+
+    // Ép kiểu Toán học cho mảng đã rửa sạch (Dùng safeQuestions thay vì questions)
+    const questionsForGame = safeQuestions.map(q => {
         const baseQ = {
             ...q,
             q: convertToMathML(q.q || ""), 
@@ -571,7 +595,19 @@ const handleOpenPreview = () => {
 
     try {
       const quizData = { 
-          title: title.trim(), examCode: examCode || "", grade: grade || "10", subject: subject || "", assignedClass: assignedClass || "", duration: parseInt(duration) || 45, scoreConfig: scoreConfig || { p1: 6, p3: 1 }, authorId: user.uid, questions: questionsForGame, rawQuestions: questions, status: 'OPEN', origin: origin, isPublic: origin === 'GAME_REPO' ? true : false 
+          title: title.trim(), 
+          examCode: examCode || "", 
+          grade: grade || "10", 
+          subject: subject || "", 
+          assignedClass: assignedClass || "", 
+          duration: parseInt(duration) || 45, 
+          scoreConfig: scoreConfig || { p1: 6, p3: 1 }, 
+          authorId: user.uid, 
+          questions: questionsForGame, 
+          rawQuestions: safeQuestions, // Lưu mảng đã rửa sạch vào Data gốc
+          status: 'OPEN', 
+          origin: origin, 
+          isPublic: origin === 'GAME_REPO' ? true : false 
       };
       
       const cleanData = JSON.parse(JSON.stringify(quizData));
