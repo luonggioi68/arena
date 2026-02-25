@@ -35,12 +35,11 @@ export default function BietDoiArenaHost() {
     const generatedPin = Math.floor(100000 + Math.random() * 900000).toString();
     setPin(generatedPin);
     
-    // Khởi tạo phòng với globalSolved rỗng
+    // [ĐÃ SỬA]: Xóa bỏ globalSolved để các đội không tranh giành/khóa câu hỏi của nhau nữa
     set(ref(db, `rooms/${generatedPin}`), { 
         status: 'LOBBY', 
         type: 'RACE', 
-        createdAt: Date.now(),
-        globalSolved: {} // Reset trạng thái khóa câu hỏi toàn cục
+        createdAt: Date.now()
     });
 
     return onValue(ref(db, `rooms/${generatedPin}/teams`), (snap) => {
@@ -77,7 +76,8 @@ export default function BietDoiArenaHost() {
       const totalTeams = teams.length;
 
       if (totalTeams > 0) {
-          if ((totalTeams === 1 && finishedCount === 1) || (totalTeams >= 2 && finishedCount >= 2)) {
+          // [ĐÃ SỬA]: Chỉ tự động kết thúc game khi TẤT CẢ các đội đều đã làm xong bài (isFinished)
+          if (finishedCount === totalTeams) {
               finishGame();
           }
       }
@@ -89,7 +89,7 @@ export default function BietDoiArenaHost() {
     const interval = setInterval(() => {
         setTimeLeft((prev) => {
             if (prev <= 1) {
-                finishGame(); 
+                finishGame(); // Vẫn tự động thu bài nếu hết giờ
                 return 0;
             }
             return prev - 1;
@@ -105,12 +105,12 @@ export default function BietDoiArenaHost() {
     setTimeLeft(durationInSeconds);
     setGameState('RACING');
     
+    // [ĐÃ SỬA]: Không khởi tạo globalSolved nữa
     update(ref(db, `rooms/${pin}`), { 
         status: 'RACING', 
         quizData: quiz.questions, 
         startTime: Date.now(),
-        duration: durationInSeconds,
-        globalSolved: {} 
+        duration: durationInSeconds
     });
   };
 

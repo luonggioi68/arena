@@ -15,7 +15,7 @@ export default function BietDoiArenaPlayer() {
   const [teamId, setTeamId] = useState(null);
   
   const [roomData, setRoomData] = useState(null);
-  const [forceEnd, setForceEnd] = useState(false); // State kích hoạt màn hình kết thúc
+  const [forceEnd, setForceEnd] = useState(false);
 
   // State Gameplay
   const [currentIdx, setCurrentIdx] = useState(null);
@@ -29,7 +29,6 @@ export default function BietDoiArenaPlayer() {
   const [isMuted, setIsMuted] = useState(false);
   const bgmRef = useRef(null);
 
-  // --- HỆ THỐNG ÂM THANH ---
   useEffect(() => {
       bgmRef.current = new Audio('/sounds/bgm.mp3');
       bgmRef.current.loop = true;
@@ -57,7 +56,6 @@ export default function BietDoiArenaPlayer() {
       setIsMuted(!isMuted);
   };
 
-  // --- HÀM RENDER VĂN BẢN KÈM ẢNH INLINE ---
   const renderWithInlineImage = (text, imgUrl) => {
     if (!text) return null;
     if (text.includes('[img]') && imgUrl) {
@@ -82,7 +80,6 @@ export default function BietDoiArenaPlayer() {
     return <MathRender content={text} />;
   };
 
-  // --- LOGIC GIA NHẬP ---
   const handleJoin = async (e) => {
     e.preventDefault();
     if (!pin || !teamName) return;
@@ -123,7 +120,7 @@ export default function BietDoiArenaPlayer() {
       router.push('/');
   };
 
-  // --- LOGIC GAMEPLAY & ĐỒNG BỘ ---
+  // --- LOGIC GAMEPLAY ĐỘC LẬP CHO TỪNG ĐỘI ---
   useEffect(() => {
     if (!joined || !pin) return;
     const roomRef = ref(db, `rooms/${pin}`);
@@ -133,36 +130,20 @@ export default function BietDoiArenaPlayer() {
         const data = snap.val();
         setRoomData(data);
 
-        // 1. Kiểm tra Global Lock khi đang làm bài
-        if (currentIdx !== null) {
-             const globalSolved = data.globalSolved || {};
-             if (globalSolved[currentIdx] && globalSolved[currentIdx] !== teamId) {
-                 alert("⚠️ Chậm chân rồi! Câu hỏi đã bị đội khác chiếm lĩnh!");
-                 setCurrentIdx(null);
-             }
-        }
-
-        // 2. Logic kiểm tra "Hết nước đi" (No Moves Left)
+        // Kiểm tra Hết câu hỏi (Chỉ dựa vào CÁ NHÂN, bỏ hoàn toàn Global Lock)
         if (teamId && data.teams && data.teams[teamId] && data.quizData) {
             const myTeam = data.teams[teamId];
-            const globalSolved = data.globalSolved || {};
             const mySolved = myTeam.solved || {};
             const totalQuestions = data.quizData.length;
 
             let hasAvailableMove = false;
             for (let i = 0; i < totalQuestions; i++) {
-                // Một câu hỏi còn "khả dụng" nếu:
-                // Chưa bị khóa Global bởi người khác VÀ Mình chưa trả lời (đúng hoặc sai)
-                const isGloballyLocked = globalSolved[i] && globalSolved[i] !== teamId;
-                const isLocallyLocked = mySolved[i]; // 'correct' or 'wrong'
-                
-                if (!isGloballyLocked && !isLocallyLocked) {
+                if (!mySolved[i]) {
                     hasAvailableMove = true;
                     break;
                 }
             }
 
-            // Nếu không còn nước đi nào và chưa đánh dấu finished -> Cập nhật lên DB
             if (!hasAvailableMove && !myTeam.isFinished) {
                 update(ref(db, `rooms/${pin}/teams/${teamId}`), { 
                     isFinished: true,
@@ -171,13 +152,12 @@ export default function BietDoiArenaPlayer() {
             }
         }
 
-        // 3. Logic Kết thúc Game (2 người trở lên hết câu hỏi)
+        // Logic Kết thúc Game
         if (data.teams) {
             const teamsArr = Object.values(data.teams);
             const finishedCount = teamsArr.filter(t => t.isFinished).length;
             const totalPlayers = teamsArr.length;
             
-            // Điều kiện kết thúc: Phòng đóng HOẶC (Có >= 2 người xong) HOẶC (Chơi 1 mình và đã xong)
             if (data.status === 'FINISHED' || (totalPlayers > 1 && finishedCount >= 2) || (totalPlayers === 1 && finishedCount === 1)) {
                 setForceEnd(true);
                 setCurrentIdx(null);
@@ -220,6 +200,7 @@ export default function BietDoiArenaPlayer() {
       }
   }, [roomData?.status, roomData?.startTime, roomData?.duration]);
 
+  // Bộ đếm lùi thời gian phạt
   useEffect(() => {
     if (freezeTime > 0) {
       const t = setInterval(() => setFreezeTime(f => f - 1), 1000);
@@ -238,21 +219,14 @@ export default function BietDoiArenaPlayer() {
       else setMultiplier(val);
   };
 
-  // --- XỬ LÝ NỘP BÀI ---
+  // --- LOGIC CHẤM VÀ TRỪ ĐIỂM HOÀN THIỆN ---
   const handleSubmitAnswer = (payload) => {
     if (!roomData?.quizData || currentIdx === null) return;
-    
-    // Check lần cuối xem có ai giải ĐÚNG chưa
-    if (roomData.globalSolved && roomData.globalSolved[currentIdx]) {
-        alert("Câu này vừa bị đội khác trả lời xong!");
-        setCurrentIdx(null);
-        return;
-    }
 
     const q = roomData.quizData[currentIdx];
     let basePoints = 0; 
 
-    // Logic chấm điểm
+    // Chấm điểm
     if (q.type === 'MCQ') {
         if (payload === q.correct) basePoints = 100;
     }
@@ -268,49 +242,40 @@ export default function BietDoiArenaPlayer() {
         else if (matches === 1) basePoints = 10;
     }
 
-    let finalDelta = 0;
     const team = roomData.teams[teamId];
     const updates = {};
-    const totalQuestions = roomData.quizData.length;
+    let solvedCount = team.solved ? Object.keys(team.solved).length : 0;
 
     if (basePoints > 0) {
-        // --- TRƯỜNG HỢP: TRẢ LỜI ĐÚNG ---
-        finalDelta = basePoints * multiplier; 
+        // --- TRẢ LỜI ĐÚNG ---
+        const finalPoints = basePoints * multiplier; 
         playSFX('correct'); 
         confetti({ particleCount: 150, spread: 100, origin: { y: 0.7 }, colors: ['#d946ef', '#22d3ee', '#facc15', '#f43f5e'], scalar: 1.2 });
 
-        updates[`teams/${teamId}/score`] = (team.score || 0) + finalDelta;
-        
-        let solvedCount = 0;
-        if(team.solved) {
-            solvedCount = Object.keys(team.solved).length;
-        }
+        updates[`teams/${teamId}/score`] = (team.score || 0) + finalPoints;
         updates[`teams/${teamId}/currentQ`] = solvedCount + 1;
-        
-        // Đánh dấu CÁ NHÂN: "correct"
         updates[`teams/${teamId}/solved/${currentIdx}`] = "correct";
-
-        // [QUAN TRỌNG] Đánh dấu TOÀN CỤC: Khóa câu hỏi với tất cả mọi người
-        updates[`globalSolved/${currentIdx}`] = teamId;
-
-    } else {
-        // --- TRƯỜNG HỢP: TRẢ LỜI SAI ---
-        playSFX('wrong'); 
         
-        // Đánh dấu CÁ NHÂN: "wrong" -> Để khóa bản thân không được trả lời lại
-        updates[`teams/${teamId}/solved/${currentIdx}`] = "wrong";
+    } else {
+        // --- TRẢ LỜI SAI ---
+        playSFX('wrong'); 
 
-        // Tăng số câu đã tương tác
-        let solvedCount = 0;
-        if(team.solved) {
-            solvedCount = Object.keys(team.solved).length;
+        // Nếu người chơi đánh cược rủi ro (Multiplier > 1) -> Trừ điểm và Phạt đóng băng lâu hơn
+        if (multiplier > 1) {
+            const penaltyPoints = 100 * multiplier; // X2 mất 200, X3 mất 300, X5 mất 500
+            updates[`teams/${teamId}/score`] = (team.score || 0) - penaltyPoints;
+            setFreezeTime(multiplier * 2); // Phạt X2 -> 4s, X5 -> 10s
+        } else {
+            // An toàn (X1) -> Không bị trừ điểm, chỉ phạt đóng băng nhẹ
+            setFreezeTime(2); 
         }
+
+        updates[`teams/${teamId}/solved/${currentIdx}`] = "wrong";
         updates[`teams/${teamId}/currentQ`] = solvedCount + 1;
     }
 
+    // Đẩy dữ liệu lên Firebase và thoát khỏi màn hình câu hỏi
     update(ref(db, `rooms/${pin}`), updates);
-    
-    // Đóng cửa sổ ngay lập tức để tìm câu khác
     setCurrentIdx(null);
   };
 
@@ -321,7 +286,6 @@ export default function BietDoiArenaPlayer() {
 
   if (!joined) return (
     <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4 relative overflow-hidden font-sans selection:bg-purple-500 selection:text-white">
-      {/* (Phần Login giữ nguyên) */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#222_1px,transparent_1px),linear-gradient(to_bottom,#222_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20"></div>
       <div className="bg-[#0a0a0a]/90 backdrop-blur-xl p-8 rounded-3xl border border-purple-500/50 shadow-[0_0_60px_rgba(168,85,247,0.3)] w-full max-w-md text-center relative z-10 animate-in zoom-in duration-500">
         <div className="w-24 h-24 bg-gradient-to-br from-purple-600 to-cyan-500 rounded-2xl mx-auto mb-6 flex items-center justify-center shadow-[0_0_30px_rgba(34,211,238,0.5)] rotate-3 hover:rotate-0 transition-all duration-500"><Shield size={48} className="text-white drop-shadow-md" strokeWidth={2.5}/></div>
@@ -423,12 +387,9 @@ export default function BietDoiArenaPlayer() {
             </h2>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 md:gap-4 w-full max-w-4xl px-2 overflow-y-auto max-h-[75vh] custom-scrollbar no-scrollbar">
               {questions.map((_, idx) => {
-                // LOGIC HIỂN THỊ MỚI
+                // CHỈ DỰA VÀO CÁ NHÂN ĐỂ KHÓA NÚT (Bỏ GlobalSolved)
                 const myStatus = team.solved ? team.solved[idx] : null; 
-                const isGlobalSolved = roomData.globalSolved && roomData.globalSolved[idx];
-                
-                // Bị khóa nếu: Đã có người trả lời đúng (bất kể ai) HOẶC mình đã làm sai
-                const isLocked = isGlobalSolved || myStatus;
+                const isLocked = !!myStatus; 
                 
                 let btnClass = "bg-gradient-to-br from-purple-900/40 to-slate-900 border-purple-500/50 text-white hover:border-cyan-400 hover:shadow-[0_0_20px_#22d3ee] hover:bg-purple-800/50 active:scale-95";
                 let Icon = null;
@@ -439,9 +400,6 @@ export default function BietDoiArenaPlayer() {
                 } else if (myStatus === "wrong") {
                     btnClass = "bg-red-900/20 border-red-800 text-red-500 cursor-not-allowed grayscale opacity-70";
                     Icon = <Ban size={32} className="mx-auto" />; 
-                } else if (isGlobalSolved) {
-                    btnClass = "bg-slate-900/50 border-slate-700 text-slate-600 cursor-not-allowed grayscale";
-                    Icon = <Lock size={32} className="mx-auto text-slate-500" />;
                 }
 
                 return (
@@ -539,12 +497,13 @@ export default function BietDoiArenaPlayer() {
         )}
       </main>
 
+      {/* MÀN HÌNH BỊ PHẠT HIỂN THỊ KHI TRẢ LỜI SAI HOẶC BỊ TRỪ ĐIỂM */}
       {freezeTime > 0 && (
         <div className="fixed inset-0 z-[100] bg-red-950/90 flex flex-col items-center justify-center text-center backdrop-blur-xl animate-in zoom-in px-4">
           <ShieldAlert size={80} className="text-red-500 mb-4 animate-bounce drop-shadow-[0_0_30px_red]" />
           <h2 className="text-4xl font-black text-white mb-2 italic uppercase">BỊ PHẠT!</h2>
           <div className="text-[8rem] font-black text-transparent bg-clip-text bg-gradient-to-b from-red-500 to-black leading-none font-mono">{freezeTime}</div>
-          <p className="text-sm text-red-400 mt-2 uppercase tracking-[0.5em] font-bold animate-pulse">Hãy chờ đợi...</p>
+          <p className="text-sm text-red-400 mt-2 uppercase tracking-[0.5em] font-bold animate-pulse">Bạn đã trả lời sai!</p>
         </div>
       )}
     </div>

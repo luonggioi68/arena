@@ -6,6 +6,10 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm'; 
+import rehypeRaw from 'rehype-raw'; 
+import remarkMath from 'remark-math'; // [THÊM MỚI]: Nhận diện công thức Toán
+import rehypeKatex from 'rehype-katex'; // [THÊM MỚI]: Render công thức Toán
+import 'katex/dist/katex.min.css'; // [THÊM MỚI]: CSS chuẩn cho Toán học hiển thị trên Web
 import mammoth from 'mammoth';
 import { 
     ArrowLeft, Sparkles, Download, Loader2, BookOpen, Settings, 
@@ -121,6 +125,7 @@ export default function LessonPlanner() {
    ${allowGroupWork ? `- Bắt buộc tổ chức THẢO LUẬN NHÓM (Căn cứ sĩ số ${studentCount} HS để chia nhóm phù hợp) trong phần "d) Tổ chức thực hiện" của Hoạt động 2.` : "- TUYỆT ĐỐI KHÔNG chia nhóm, chỉ làm việc cá nhân."}
    ${allowWorksheet ? `- Thiết kế và yêu cầu học sinh sử dụng PHIẾU HỌC TẬP trong Hoạt động 2 hoặc Hoạt động 3, đồng thời xuất chi tiết Phiếu ở phần Phụ lục.` : "- KHÔNG thiết kế và không dùng Phiếu học tập."}`;
 
+        // [SỬA LẠI PROMPT]: Ép AI dùng mã lệnh LaTeX chuẩn ($...$) để gói công thức Toán, Lý, Hóa
         const prompt = `
 Bạn là một Trợ lý Giáo viên ${subject} chuyên nghiệp, nhiệm vụ chính là chuẩn hóa và nâng cấp "Kế hoạch bài dạy" theo Công văn 5512 (GDPT 2018).
 
@@ -138,6 +143,7 @@ Bạn là một Trợ lý Giáo viên ${subject} chuyên nghiệp, nhiệm vụ 
 3. BỐI CẢNH: Lớp học có đúng ${studentCount} học sinh.
 4. BẢNG BIỂU (TABLE): Bắt buộc kẻ bảng Markdown nếu có nội dung dạng bảng.
 5. QUY TẮC CÁC MỤC A, B, C, D: KHÔNG SỬ DỤNG DẤU CHẤM TRÒN (BULLET) CHO CÁC MỤC a, b, c, d. Viết in đậm liền lề trái. Đảm bảo trước mỗi mục a, b, c, d luôn là 1 dòng trống.
+6. TOÁN HỌC / LÝ / HÓA HỌC: MỌI biểu thức chứa phân số, căn bậc 2, giới hạn (lim), logarit, tích phân... BẮT BUỘC phải được viết bằng mã lệnh LaTeX và kẹp trong cặp dấu $...$ (Ví dụ: $\\sqrt{x^2+1}$, $\\lim_{x \\to 0}$, $\\frac{a}{b}$).
 ${integrationRule}
 
 **TEMPLATE KHBD CẦN TUÂN THỦ (Định dạng Markdown):**
@@ -196,14 +202,12 @@ ${nlSoText}
         const result = await model.generateContent(apiContent);
         let textResult = result.response.text();
 
-        // 1. Chặn AI sinh tiêu đề thừa, cắt phần đầu lấy từ "I. MỤC TIÊU"
         const targetStart = "### **I. MỤC TIÊU**";
         const startIndex = textResult.indexOf(targetStart);
         if (startIndex !== -1) {
             textResult = textResult.substring(startIndex);
         }
 
-        // 2. Xóa các dấu chấm tròn (bullet *, -) phía trước mục a,b,c,d để nó đứng sát lề
         textResult = textResult.replace(/^\s*[\*\-]\s*\*\*(a\)|b\)|c\)|d\))\s*(.*?)\*\*/gm, '**$1 $2**');
         textResult = textResult.replace(/([^\n])\s*\n?\*\*(a\)|b\)|c\)|d\))\s*(.*?)\*\*/g, '$1\n\n**$2 $3**');
 
@@ -217,26 +221,32 @@ ${nlSoText}
     }
   };
 
-  // HÀM XUẤT FILE WORD - ĐÃ THÊM MSO TAGS ĐỂ ÉP MARGINS CHUẨN XÁC 100%
   const exportToWord = () => {
       if (!resultMarkdown) return;
+      
+      // [BÍ QUYẾT XỬ LÝ TOÁN HỌC]: Tạo một bản sao của khung hiển thị ẩn
+      const exportNode = document.getElementById("markdown-export-area").cloneNode(true);
+      
+      // Xóa toàn bộ các thẻ HTML rác do KaTeX sinh ra, CHỈ GIỮ LẠI THẺ <math> (MathML)
+      // Điều này khiến MS Word tự động nhận diện thẻ <math> và chuyển nó thành công thức (Equation) chuẩn
+      const katexHtmlElements = exportNode.querySelectorAll('.katex-html');
+      katexHtmlElements.forEach(el => el.remove());
+
       const header = `
           <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
           <head>
               <meta charset='utf-8'>
               <title>Giao An</title>
               <style>
-                  /* ÉP BUỘC WORD NHẬN DIỆN KHỔ A4 VÀ MARGINS BẰNG MSO TAGS */
                   @page Section1 {
-                      size: 595.3pt 841.9pt; /* Kích thước chuẩn A4 */
-                      margin: 42.5pt 42.5pt 42.5pt 56.7pt; /* Top: 1.5cm, Right: 1.5cm, Bottom: 1.5cm, Left: 2cm */
+                      size: 595.3pt 841.9pt; /* A4 */
+                      margin: 42.5pt 42.5pt 42.5pt 56.7pt; /* Lề: Trên,Phải,Dưới 1.5cm - Trái 2.0cm */
                       mso-header-margin: 35.4pt;
                       mso-footer-margin: 35.4pt;
                       mso-paper-source: 0;
                   }
                   div.Section1 { page: Section1; }
                   
-                  /* Font Times New Roman 12pt, Dãn dòng Single (line-height: 1) */
                   body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1; text-align: justify; }
                   
                   h2 { font-size: 12pt; font-weight: bold; text-align: center; text-transform: uppercase; margin-top: 12pt; margin-bottom: 6pt; }
@@ -258,7 +268,7 @@ ${nlSoText}
       `;
       const footer = "</div></body></html>";
       
-      const htmlContent = document.getElementById("markdown-export-area").innerHTML;
+      const htmlContent = exportNode.innerHTML;
       const sourceHTML = header + htmlContent + footer;
       
       const source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
@@ -279,8 +289,8 @@ ${nlSoText}
          <div className="flex items-center gap-4">
              <button onClick={() => router.push('/dashboard')} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl transition"><ArrowLeft size={20}/></button>
              <div>
-                <h1 className="text-xl font-black text-white uppercase italic tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">AI SOẠN KẾ HOẠCH BÀI DẠY (CHUẨN 5512)</h1>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Khơi nguồn mọi tri thức!</p>
+                <h1 className="text-xl font-black text-white uppercase italic tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">AI SOẠN KHBD</h1>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Hỗ trợ Căn bậc 2, Giới hạn, Tích phân siêu chuẩn</p>
              </div>
          </div>
          {resultMarkdown && (
@@ -314,7 +324,7 @@ ${nlSoText}
 
                   <div>
                       <label className="block text-xs font-bold text-slate-400 mb-1">Tên bài học</label>
-                      <input value={lessonName} onChange={e=>setLessonName(e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2.5 rounded-xl outline-none focus:border-emerald-500 text-white font-bold" placeholder="VD: Bài 15: Tạo màu cho chữ..."/>
+                      <input value={lessonName} onChange={e=>setLessonName(e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2.5 rounded-xl outline-none focus:border-emerald-500 text-white font-bold" placeholder="VD: Bài 15: Phép tính giới hạn..."/>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -328,7 +338,6 @@ ${nlSoText}
                       </div>
                   </div>
 
-                  {/* CHỈ NHẬP NĂNG LỰC SỐ */}
                   <div>
                       <label className="block text-xs font-bold text-slate-400 mb-1 flex items-center gap-1">
                           <Target size={14}/> Năng lực số (Bỏ trống nếu không dùng)
@@ -342,7 +351,6 @@ ${nlSoText}
                       />
                   </div>
 
-                  {/* KHUNG NẠP DỮ LIỆU ĐA NGUỒN */}
                   <div className="bg-slate-900/50 p-4 rounded-xl border border-blue-500/30 space-y-4">
                       <label className="block text-xs font-black text-blue-400 uppercase flex items-center gap-1">
                           <BookOpen size={16}/> Nguồn dữ liệu (Chọn 1 trong 3)
@@ -379,7 +387,6 @@ ${nlSoText}
                       </div>
                   </div>
 
-                  {/* KHUNG TÙY CHỌN SƯ PHẠM */}
                   <div className="bg-slate-800/50 border border-slate-700 p-4 rounded-xl">
                       <label className="block text-xs font-bold text-slate-300 mb-3 uppercase tracking-widest">Quy định Sư phạm</label>
                       
@@ -398,11 +405,6 @@ ${nlSoText}
                               </button>
                           </div>
                       </div>
-
-                      <div className="mt-4 pt-4 border-t border-white/10">
-                          <label className="block text-xs font-bold text-slate-400 mb-2">Bổ sung Thiết bị/Học liệu</label>
-                          <input value={additionalEquipment} onChange={e=>setAdditionalEquipment(e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2.5 rounded-xl outline-none focus:border-emerald-500 text-white text-sm" placeholder="VD: Loa, Bảng phụ..."/>
-                      </div>
                   </div>
 
                   <button onClick={handleGenerateLessonPlan} disabled={loading} className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white py-4 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center gap-2 mt-4">
@@ -411,7 +413,7 @@ ${nlSoText}
               </div>
           </div>
 
-          {/* CỘT PHẢI: HIỂN THỊ KẾT QUẢ VỚI HEADER VÀ CSS CHUẨN XÁC MỚI */}
+          {/* CỘT PHẢI: HIỂN THỊ KẾT QUẢ TÍCH HỢP REMARK-MATH VÀ REHYPE-KATEX */}
           <div className="flex-1 bg-slate-300 overflow-y-auto relative p-4 md:p-8 custom-scrollbar">
               {loading ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-500">
@@ -420,14 +422,13 @@ ${nlSoText}
                           <BrainCircuit size={80} className="text-emerald-600 relative z-10 animate-bounce"/>
                       </div>
                       <h3 className="text-2xl font-black uppercase tracking-widest text-slate-700 mb-2">AI Đang thực thi</h3>
-                      <p className="text-sm font-bold">Đang ép lề chuẩn A4 (Trái 2cm, Các lề khác 1.5cm)...</p>
+                      <p className="text-sm font-bold">Đang dàn trang chuẩn 5512 và Render công thức Toán...</p>
                   </div>
               ) : resultMarkdown ? (
                   <div 
                       className="bg-white p-8 md:p-14 rounded shadow-2xl max-w-4xl mx-auto min-h-full text-black" 
                       id="markdown-export-area"
                   >
-                      {/* HEADER TĨNH CHUẨN XÁC THEO HÌNH ẢNH YÊU CẦU MỚI (KHÔNG CẦN NHẬP) */}
                       <div id="static-header" style={{ fontFamily: "'Times New Roman', serif", fontSize: '12pt', marginBottom: '16pt' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16pt', border: 'none' }}>
                               <tbody>
@@ -458,8 +459,10 @@ ${nlSoText}
                       </div>
 
                       <div style={{ fontFamily: "'Times New Roman', serif" }}>
+                          {/* SỬ DỤNG REMARK-MATH VÀ REHYPE-KATEX ĐỂ RENDER TOÁN TRÊN WEB */}
                           <ReactMarkdown 
-                              remarkPlugins={[remarkGfm]}
+                              remarkPlugins={[remarkGfm, remarkMath]}
+                              rehypePlugins={[rehypeRaw, rehypeKatex]} 
                               components={{
                                   h3: ({node, ...props}) => <h3 style={{fontSize: '12pt', fontWeight: 'bold', textTransform: 'uppercase', marginTop: '12pt', marginBottom: '6pt'}} {...props}/>,
                                   h4: ({node, ...props}) => <h4 style={{fontSize: '12pt', fontWeight: 'bold', fontStyle: 'italic', marginTop: '12pt', marginBottom: '6pt'}} {...props}/>,
