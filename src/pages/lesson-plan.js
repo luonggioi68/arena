@@ -279,8 +279,8 @@ ${nlSoText}
          <div className="flex items-center gap-4">
              <button onClick={() => router.push('/dashboard')} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl transition"><ArrowLeft size={20}/></button>
              <div>
-                <h1 className="text-xl font-black text-white uppercase italic tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">AI SOẠN KHBD</h1>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Format Word Chuẩn Hành Chính (Trái 2cm, Khác 1.5cm)</p>
+                <h1 className="text-xl font-black text-white uppercase italic tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">AI SOẠN KẾ HOẠCH BÀI DẠY (CHUẨN 5512)</h1>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Khơi nguồn mọi tri thức!</p>
              </div>
          </div>
          {resultMarkdown && (
