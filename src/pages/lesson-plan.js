@@ -7,13 +7,13 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm'; 
 import rehypeRaw from 'rehype-raw'; 
-import remarkMath from 'remark-math'; // [THÊM MỚI]: Nhận diện công thức Toán
-import rehypeKatex from 'rehype-katex'; // [THÊM MỚI]: Render công thức Toán
-import 'katex/dist/katex.min.css'; // [THÊM MỚI]: CSS chuẩn cho Toán học hiển thị trên Web
+import remarkMath from 'remark-math'; 
+import rehypeKatex from 'rehype-katex'; 
+import 'katex/dist/katex.min.css'; 
 import mammoth from 'mammoth';
 import { 
     ArrowLeft, Sparkles, Download, Loader2, BookOpen, Settings, 
-    CheckSquare, Square, FileText, Target, BrainCircuit, Upload, Link as LinkIcon, Users
+    CheckSquare, Square, FileText, Target, BrainCircuit, Link as LinkIcon, Users, Monitor
 } from 'lucide-react';
 
 const SUBJECTS = ["Tin học", "Toán học", "Ngữ văn", "Tiếng Anh", "Vật lí", "Hóa học", "Sinh học", "Lịch sử", "Địa lí", "GDCD", "Công nghệ"];
@@ -30,17 +30,17 @@ export default function LessonPlanner() {
   const [duration, setDuration] = useState(2);
   const [studentCount, setStudentCount] = useState(35); 
 
+  // [MỚI]: State cho Thiết bị / Học liệu
+  const [equipment, setEquipment] = useState('');
+
   // Năng lực, Nội dung & Tệp đính kèm
   const [competencies, setCompetencies] = useState(''); 
   const [lessonLink, setLessonLink] = useState(''); 
   const [sgkContent, setSgkContent] = useState('');
   
-  const [pdfData, setPdfData] = useState(null);
-  const [pdfName, setPdfName] = useState('');
   const [wordName, setWordName] = useState('');
 
   // Tùy biến GV
-  const [additionalEquipment, setAdditionalEquipment] = useState('');
   const [allowGroupWork, setAllowGroupWork] = useState(true);
   const [allowWorksheet, setAllowWorksheet] = useState(true);
   
@@ -56,31 +56,13 @@ export default function LessonPlanner() {
     return () => unsubscribe();
   }, [router]);
 
-  const handlePdfUpload = (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      if (file.type !== "application/pdf") return alert("Hệ thống chỉ hỗ trợ đọc file PDF!");
-      if (file.size > 10 * 1024 * 1024) return alert("Dung lượng file không được vượt quá 10MB!");
-
-      setPdfName(file.name);
-      setWordName(''); 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-          const base64String = reader.result.split(',')[1];
-          setPdfData({ inlineData: { data: base64String, mimeType: "application/pdf" } });
-      };
-      reader.readAsDataURL(file);
-  };
-
+  // HÀM ĐỌC FILE WORD
   const handleWordUpload = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
       if (!file.name.endsWith('.docx')) return alert("Hệ thống chỉ hỗ trợ file Word định dạng .docx!");
       
       setWordName(file.name);
-      setPdfName(''); 
-      setPdfData(null);
-
       const reader = new FileReader();
       reader.onload = async (event) => {
           const arrayBuffer = event.target.result;
@@ -96,7 +78,7 @@ export default function LessonPlanner() {
 
   const handleGenerateLessonPlan = async () => {
     if (!lessonName.trim()) return alert("Vui lòng nhập Tên bài học!");
-    if (!sgkContent.trim() && !pdfData && !lessonLink.trim()) return alert("Vui lòng cung cấp Nguồn dữ liệu!");
+    if (!sgkContent.trim() && !lessonLink.trim()) return alert("Vui lòng cung cấp Nguồn dữ liệu (Giáo án Word hoặc Link bài học)!");
 
     setLoading(true);
     setResultMarkdown('');
@@ -113,8 +95,9 @@ export default function LessonPlanner() {
         const selectedModel = config.geminiModel || "gemini-1.5-pro";
         const model = genAI.getGenerativeModel({ model: selectedModel });
 
-        const defaultEquipment = "Máy tính, máy chiếu, SGK.";
-        const finalEquipment = additionalEquipment ? `${defaultEquipment}, ${additionalEquipment}` : defaultEquipment;
+        // Tích hợp Thiết bị dạy học
+        const defaultEquipment = "Máy tính, máy chiếu, SGK";
+        const finalEquipment = equipment.trim() ? `${defaultEquipment}, ${equipment.trim()}` : defaultEquipment;
 
         const hasCompetencies = competencies.trim().length > 0;
         const nlSoText = hasCompetencies ? `* **Năng lực số:** ${competencies.trim()}` : "";
@@ -125,7 +108,6 @@ export default function LessonPlanner() {
    ${allowGroupWork ? `- Bắt buộc tổ chức THẢO LUẬN NHÓM (Căn cứ sĩ số ${studentCount} HS để chia nhóm phù hợp) trong phần "d) Tổ chức thực hiện" của Hoạt động 2.` : "- TUYỆT ĐỐI KHÔNG chia nhóm, chỉ làm việc cá nhân."}
    ${allowWorksheet ? `- Thiết kế và yêu cầu học sinh sử dụng PHIẾU HỌC TẬP trong Hoạt động 2 hoặc Hoạt động 3, đồng thời xuất chi tiết Phiếu ở phần Phụ lục.` : "- KHÔNG thiết kế và không dùng Phiếu học tập."}`;
 
-        // [SỬA LẠI PROMPT]: Ép AI dùng mã lệnh LaTeX chuẩn ($...$) để gói công thức Toán, Lý, Hóa
         const prompt = `
 Bạn là một Trợ lý Giáo viên ${subject} chuyên nghiệp, nhiệm vụ chính là chuẩn hóa và nâng cấp "Kế hoạch bài dạy" theo Công văn 5512 (GDPT 2018).
 
@@ -135,11 +117,11 @@ Bạn là một Trợ lý Giáo viên ${subject} chuyên nghiệp, nhiệm vụ 
 - Năng lực số: """${competencies}"""
 - Thiết bị dạy học và Học liệu: """${finalEquipment}"""
 - Link tham khảo: """${lessonLink}"""
-- **NỘI DUNG GỐC (SGK/PDF HOẶC KHBD cũ):** """\n${sgkContent}\n"""
+- **NỘI DUNG GỐC (Link HOẶC KHBD cũ):** """\n${sgkContent}\n"""
 
 **QUY TẮC SỐNG CÒN (BẮT BUỘC TUÂN THỦ 100%):**
 1. KẾT QUẢ BẮT BUỘC PHẢI BẮT ĐẦU NGAY bằng dòng "### **I. MỤC TIÊU**". Tuyệt đối không chào hỏi, không sinh ra Tên bài học ở đầu.
-2. XỬ LÝ NỘI DUNG GỐC: Nếu đầu vào là Giáo án cũ, hãy giữ nguyên chuyên môn. Nếu là SGK/Link, hãy copy y xì đúc tên các mục lớn làm Hoạt động 2.1, 2.2 và copy nguyên văn bài tập vào phần Luyện tập/Vận dụng.
+2. XỬ LÝ NỘI DUNG GỐC: Nếu đầu vào là Giáo án cũ, hãy giữ nguyên chuyên môn. Nếu là Link, hãy copy y xì đúc tên các mục lớn làm Hoạt động 2.1, 2.2 và copy nguyên văn bài tập vào phần Luyện tập/Vận dụng.
 3. BỐI CẢNH: Lớp học có đúng ${studentCount} học sinh.
 4. BẢNG BIỂU (TABLE): Bắt buộc kẻ bảng Markdown nếu có nội dung dạng bảng.
 5. QUY TẮC CÁC MỤC A, B, C, D: KHÔNG SỬ DỤNG DẤU CHẤM TRÒN (BULLET) CHO CÁC MỤC a, b, c, d. Viết in đậm liền lề trái. Đảm bảo trước mỗi mục a, b, c, d luôn là 1 dòng trống.
@@ -196,10 +178,7 @@ ${nlSoText}
 *(Chỉ hiển thị nếu được yêu cầu thiết kế)*
         `;
 
-        const apiContent = [prompt];
-        if (pdfData) apiContent.push(pdfData);
-
-        const result = await model.generateContent(apiContent);
+        const result = await model.generateContent(prompt);
         let textResult = result.response.text();
 
         const targetStart = "### **I. MỤC TIÊU**";
@@ -224,11 +203,8 @@ ${nlSoText}
   const exportToWord = () => {
       if (!resultMarkdown) return;
       
-      // [BÍ QUYẾT XỬ LÝ TOÁN HỌC]: Tạo một bản sao của khung hiển thị ẩn
       const exportNode = document.getElementById("markdown-export-area").cloneNode(true);
       
-      // Xóa toàn bộ các thẻ HTML rác do KaTeX sinh ra, CHỈ GIỮ LẠI THẺ <math> (MathML)
-      // Điều này khiến MS Word tự động nhận diện thẻ <math> và chuyển nó thành công thức (Equation) chuẩn
       const katexHtmlElements = exportNode.querySelectorAll('.katex-html');
       katexHtmlElements.forEach(el => el.remove());
 
@@ -239,8 +215,8 @@ ${nlSoText}
               <title>Giao An</title>
               <style>
                   @page Section1 {
-                      size: 595.3pt 841.9pt; /* A4 */
-                      margin: 42.5pt 42.5pt 42.5pt 56.7pt; /* Lề: Trên,Phải,Dưới 1.5cm - Trái 2.0cm */
+                      size: 595.3pt 841.9pt; 
+                      margin: 42.5pt 42.5pt 42.5pt 56.7pt; 
                       mso-header-margin: 35.4pt;
                       mso-footer-margin: 35.4pt;
                       mso-paper-source: 0;
@@ -290,7 +266,7 @@ ${nlSoText}
              <button onClick={() => router.push('/dashboard')} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl transition"><ArrowLeft size={20}/></button>
              <div>
                 <h1 className="text-xl font-black text-white uppercase italic tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">AI SOẠN KHBD</h1>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Hỗ trợ Căn bậc 2, Giới hạn, Tích phân siêu chuẩn</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Tối ưu Nguồn cấp - Dễ dàng thao tác</p>
              </div>
          </div>
          {resultMarkdown && (
@@ -338,6 +314,21 @@ ${nlSoText}
                       </div>
                   </div>
 
+                  {/* THIẾT BỊ DẠY HỌC BỔ SUNG */}
+                  <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-1 flex items-center gap-1">
+                          <Monitor size={14}/> Thiết bị & Học liệu bổ sung
+                      </label>
+                      <textarea 
+                          value={equipment} 
+                          onChange={e=>setEquipment(e.target.value)} 
+                          rows={2} 
+                          className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl outline-none focus:border-emerald-500 text-white text-sm" 
+                          placeholder="VD: Loa, Bảng phụ, Tranh ảnh, Phiếu học tập..."
+                      />
+                  </div>
+
+                  {/* CHỈ NHẬP NĂNG LỰC SỐ */}
                   <div>
                       <label className="block text-xs font-bold text-slate-400 mb-1 flex items-center gap-1">
                           <Target size={14}/> Năng lực số (Bỏ trống nếu không dùng)
@@ -351,9 +342,10 @@ ${nlSoText}
                       />
                   </div>
 
+                  {/* KHUNG NẠP DỮ LIỆU ĐÃ LƯỢC BỎ PDF */}
                   <div className="bg-slate-900/50 p-4 rounded-xl border border-blue-500/30 space-y-4">
                       <label className="block text-xs font-black text-blue-400 uppercase flex items-center gap-1">
-                          <BookOpen size={16}/> Nguồn dữ liệu (Chọn 1 trong 3)
+                          <BookOpen size={16}/> Nguồn dữ liệu (Chọn 1 trong 2)
                       </label>
 
                       <div>
@@ -365,19 +357,11 @@ ${nlSoText}
                       </div>
 
                       <div className="flex items-center gap-2 opacity-30">
-                          <div className="flex-1 h-px bg-slate-700"></div><span className="text-[9px] font-bold">HOẶC DÙNG SGK</span><div className="flex-1 h-px bg-slate-700"></div>
+                          <div className="flex-1 h-px bg-slate-700"></div><span className="text-[9px] font-bold">HOẶC DÙNG INTERNET</span><div className="flex-1 h-px bg-slate-700"></div>
                       </div>
 
                       <div>
-                          <label className="text-[10px] font-bold text-slate-400 flex items-center gap-1 mb-1.5"><Upload size={12}/> 2. Soạn mới: Tải trang sách PDF SGK</label>
-                          <input type="file" id="pdfUpload" accept="application/pdf" onChange={handlePdfUpload} className="hidden" />
-                          <label htmlFor="pdfUpload" className="flex items-center justify-center gap-2 w-full bg-[#020617] border border-blue-900 hover:border-blue-500 text-blue-400 py-2 rounded-lg cursor-pointer transition text-sm">
-                              {pdfName ? 'Đã tải SGK: ' + pdfName : 'Bấm để chọn file PDF (< 10MB)'}
-                          </label>
-                      </div>
-
-                      <div>
-                          <label className="text-[10px] font-bold text-slate-400 flex items-center gap-1 mb-1.5"><LinkIcon size={12}/> 3. Soạn mới: Dán Link bài học</label>
+                          <label className="text-[10px] font-bold text-slate-400 flex items-center gap-1 mb-1.5"><LinkIcon size={12}/> 2. Soạn mới: Dán Link bài học</label>
                           <input 
                               value={lessonLink} 
                               onChange={e=>setLessonLink(e.target.value)} 
@@ -387,9 +371,9 @@ ${nlSoText}
                       </div>
                   </div>
 
+                  {/* KHUNG TÙY CHỌN SƯ PHẠM */}
                   <div className="bg-slate-800/50 border border-slate-700 p-4 rounded-xl">
                       <label className="block text-xs font-bold text-slate-300 mb-3 uppercase tracking-widest">Quy định Sư phạm</label>
-                      
                       <div className="space-y-3">
                           <div className="flex items-center justify-between">
                               <span className="text-sm font-bold text-slate-300">Tổ chức Hoạt động Nhóm</span>
