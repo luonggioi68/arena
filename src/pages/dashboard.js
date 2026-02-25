@@ -4,7 +4,7 @@ import useAuthStore from '@/store/useAuthStore';
 import { auth, firestore } from '@/lib/firebase';
 import { onAuthStateChanged, signOut, updatePassword } from 'firebase/auth'; 
 import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, orderBy, addDoc, serverTimestamp, setDoc, getDoc } from 'firebase/firestore';
-import { Flag, Plus, Trash2, LogOut, Edit, Loader2, Shield, Gamepad2, FileText, BarChart3, Download, Search, Swords, Lock, Unlock, RefreshCw, MessageSquare, ExternalLink, Settings, UserPlus, CheckCircle, Save, Key, Users, GraduationCap, Clock, Image, LayoutTemplate, Upload, X, Hash, Link as LinkIcon, FolderOpen, QrCode, CheckSquare, Zap, UserCog, Calendar, AlertTriangle, Layers, Database, Eye, EyeOff, Archive, ArrowRightCircle, Menu } from 'lucide-react';
+import { BookOpen,Flag, Plus, Trash2, LogOut, Edit, Loader2, Shield, Gamepad2, FileText, BarChart3, Download, Search, Swords, Lock, Unlock, RefreshCw, MessageSquare, ExternalLink, Settings, UserPlus, CheckCircle, Save, Key, Users, GraduationCap, Clock, Image, LayoutTemplate, Upload, X, Hash, Link as LinkIcon, FolderOpen, QrCode, CheckSquare, Zap, UserCog, Calendar, AlertTriangle, Layers, Database, Eye, EyeOff, Archive, ArrowRightCircle, Menu } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ExpiryAlert from '@/components/ExpiryAlert';
 
@@ -372,7 +372,7 @@ export default function Dashboard() {
             <button onClick={() => {setActiveTab('RESULTS'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'RESULTS' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' : 'text-slate-400 hover:bg-white/5'}`}><BarChart3 size={18}/>ARENA QUẢN LÝ THI</button>
             <button onClick={() => {setActiveTab('ASSIGNMENTS'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'ASSIGNMENTS' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:bg-white/5'}`}><FolderOpen size={18}/>ARENA CHẤM BÀI</button>
             <button onClick={() => {setActiveTab('SETTINGS'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'SETTINGS' ? 'bg-slate-700 text-white border border-white/20 shadow-lg' : 'text-slate-400 hover:bg-white/5'}`}><Settings size={18}/>ARENA CẤU HÌNH</button>
-            
+            <button onClick={() => router.push('/lesson-plan')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm text-emerald-400 hover:bg-white/5 border border-emerald-900/50 hover:border-emerald-500/50 mt-4"><BookOpen size={18}/> AI SOẠN GIÁO ÁN</button>
             {MASTER_EMAILS.includes(user?.email) && (
                 <button onClick={() => {setActiveTab('USERS'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm mt-4 border-t border-white/10 pt-4 ${activeTab === 'USERS' ? 'bg-pink-600 text-white shadow-lg shadow-pink-500/20' : 'text-pink-500/70 hover:bg-white/5'}`}>
                     <UserCog size={18}/> QUẢN LÝ NGƯỜI DÙNG
