@@ -296,9 +296,51 @@ export default function HomePage() {
               </div>
           </div>
       )}
-   
+        
       {/* 2. BODY CONTENT */}
       <div className="flex-1 w-full 2xl:max-w-[70%] mx-auto flex flex-col px-4 md:px-8 pt-4 pb-2 justify-between overflow-hidden">
+        {/* --- BẮT ĐẦU: MENU 8 Ô RỰC LỬA 3D --- */}
+          <div className="w-full grid grid-cols-4 md:grid-cols-8 gap-2 md:gap-3 mb-4 shrink-0 relative z-20">
+              {[...Array(8)].map((_, index) => {
+                  const isKHBD = index === 0;
+                  const isTest = index === 1;
+                  const title = isKHBD ? "Soạn KHBD" : isTest ? "Soạn Đề Kiểm Tra" : "";
+
+                  // Xử lý sự kiện click: Chỉ tác dụng với 2 ô đầu
+                  const handleMenuClick = () => {
+                      if (isKHBD || isTest) {
+                          if (!user) {
+                              setShowAuthModal(true);
+                              setAuthMode('LOGIN');
+                          } else {
+                              if (isKHBD) router.push('/lesson-plan');
+                              if (isTest) router.push('/create-test');
+                          }
+                      }
+                  };
+
+                  return (
+                      <button 
+                          key={index}
+                          onClick={handleMenuClick}
+                          className="relative group h-12 md:h-14 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest text-white transition-all duration-300 transform outline-none cursor-pointer border-x border-t border-orange-400 border-b-4 border-b-red-900 shadow-[0_8px_20px_rgba(220,38,38,0.6)] hover:-translate-y-1.5 hover:shadow-[0_15px_30px_rgba(239,68,68,0.8)] active:translate-y-0 active:border-b active:shadow-inner"
+                      >
+                          {/* Nền bốc lửa áp dụng cho TẤT CẢ các ô */}
+                          <div className="absolute inset-0 bg-gradient-to-br from-red-600 via-orange-600 to-yellow-500 rounded-lg"></div>
+                          {/* Hiệu ứng sáng lướt qua khi hover */}
+                          <div className="absolute inset-0 bg-gradient-to-t from-yellow-300/0 to-yellow-200/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg"></div>
+                          {/* Hiệu ứng đổ bóng nổi 3D (Glossy) ở viền trên */}
+                          <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/30 to-transparent rounded-t-lg"></div>
+                          
+                          {/* Chữ hiển thị */}
+                          <span className="relative z-10 drop-shadow-[0_2px_3px_rgba(0,0,0,0.9)] leading-tight px-1 flex items-center justify-center text-center h-full w-full">
+                              {title}
+                          </span>
+                      </button>
+                  );
+              })}
+          </div>
+          {/* --- KẾT THÚC: MENU 8 Ô RỰC LỬA 3D --- */}
             {/* NAV LUYỆN TẬP */}
             <div className="shrink-0 w-full bg-black/80 backdrop-blur-xl border-2 border-red-600/50 rounded-2xl flex flex-col md:flex-row overflow-hidden shadow-[0_0_50px_rgba(220,38,38,0.4)] animate-in fade-in slide-in-from-top-4 relative z-20 min-h-[110px] md:h-[90px]">
                 <div className="bg-gradient-to-br from-red-700 to-orange-800 p-2 w-full md:w-40 flex flex-row md:flex-col items-center justify-center text-center shrink-0 relative overflow-hidden group cursor-default z-20 shadow-2xl border-b border-red-500/30 md:border-b-0 md:border-r">

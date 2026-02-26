@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { auth, firestore } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -12,22 +12,22 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css'; 
 import { 
     ArrowLeft, Sparkles, Download, Loader2, Settings, 
-    FileText, Target, BrainCircuit, Clock, PenTool, LayoutTemplate, AlertCircle, BookOpen
+    FileText, Target, BrainCircuit, Clock, PenTool, LayoutTemplate, AlertCircle,
+    UploadCloud, FileSearch // <-- Thêm icon cho phần upload
 } from 'lucide-react';
 
 const SUBJECTS = ["Tin học", "Toán học", "Ngữ văn", "Tiếng Anh", "Vật lí", "Hóa học", "Sinh học", "Lịch sử", "Địa lí", "GDCD", "Công nghệ"];
 const GRADES = ["12", "11", "10", "9", "8", "7", "6"];
-const TEXTBOOKS = ["Kết nối tri thức", "Chân trời sáng tạo", "Cánh diều", "Khác"];
 
-export default function FullTestGenerator() {
+export default function ReverseGenerator() {
   const router = useRouter();
+  const fileInputRef = useRef(null);
   const [user, setUser] = useState(null);
   
-  const [subject, setSubject] = useState('Tin học');
+  const [subject, setSubject] = useState('Toán học'); // Đổi default phù hợp test
   const [grade, setGrade] = useState('12');
-  const [textbook, setTextbook] = useState('Kết nối tri thức');
   const [testTitle, setTestTitle] = useState('ĐỀ KIỂM TRA GIỮA HỌC KÌ 1');
-  const [duration, setDuration] = useState(45);
+  const [duration, setDuration] = useState(90);
   const [testScope, setTestScope] = useState(''); 
   
   const [matrix, setMatrix] = useState({
@@ -38,6 +38,7 @@ export default function FullTestGenerator() {
   });
 
   const [loading, setLoading] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false); // State mới cho việc AI bóc tách
   const [resultMarkdown, setResultMarkdown] = useState('');
 
   useEffect(() => {
@@ -57,6 +58,7 @@ export default function FullTestGenerator() {
       }));
   };
 
+  // --- CÁC HÀM TÍNH TOÁN CŨ GIỮ NGUYÊN ---
   const getTotalQ_Normal = (type) => matrix[type].b + matrix[type].h + matrix[type].vd;
   const totalTF_Y = matrix.tf.b + matrix.tf.h + matrix.tf.vd; 
   const totalTF_Q = totalTF_Y / 4; 
@@ -80,16 +82,92 @@ export default function FullTestGenerator() {
   const percentH = sumScores > 0 ? Math.round((totalH_Score / sumScores) * 100) : 0;
   const percentVD = sumScores > 0 ? Math.round((totalVD_Score / sumScores) * 100) : 0;
 
-  const mcqScore = getTotalQ_Normal('mcq') * matrix.mcq.point;
-  const tfScore = totalTF_Q * matrix.tf.point;
-  const saScore = getTotalQ_Normal('sa') * matrix.sa.point;
-  const essayScore = getTotalQ_Normal('essay') * matrix.essay.point;
+  // --- HÀM MỚI: CHUYỂN FILE SANG BASE64 CHO GEMINI ---
+  const fileToGenerativePart = async (file) => {
+    const base64EncodedDataPromise = new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(file);
+    });
+    return {
+      inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
+    };
+  };
 
-  const mcqPercent = sumScores > 0 ? Math.round((mcqScore / sumScores) * 100) : 0;
-  const tfPercent = sumScores > 0 ? Math.round((tfScore / sumScores) * 100) : 0;
-  const saPercent = sumScores > 0 ? Math.round((saScore / sumScores) * 100) : 0;
-  const essayPercent = sumScores > 0 ? Math.round((essayScore / sumScores) * 100) : 0;
+  // --- HÀM MỚI: AI ĐỌC VÀ BÓC TÁCH ĐỀ GỐC ---
+  const handleAnalyzeFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Chỉ chấp nhận PDF (Gemini Vision đọc PDF rất tốt)
+    if (file.type !== "application/pdf") {
+        return alert("Vui lòng tải lên file định dạng PDF để AI đọc chuẩn xác nhất.");
+    }
 
+    setIsAnalyzing(true);
+    try {
+        const userConfigDoc = await getDoc(doc(firestore, "user_configs", user.uid));
+        if (!userConfigDoc.exists() || !userConfigDoc.data().geminiKey) {
+            throw new Error("Chưa cấu hình Gemini API Key trong menu Cấu Hình!");
+        }
+        
+        const config = userConfigDoc.data();
+        const genAI = new GoogleGenerativeAI(config.geminiKey);
+        // Bắt buộc dùng model PRO để đọc file PDF phức tạp
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+
+        const filePart = await fileToGenerativePart(file);
+        
+        const prompt = `
+            Bạn là chuyên gia phân tích đề thi. Hãy đọc kỹ file PDF đề thi đính kèm.
+            Nhiệm vụ: Trích xuất cấu trúc ma trận điểm và tóm tắt phạm vi kiến thức.
+            BẮT BUỘC TRẢ VỀ DUY NHẤT 1 CHUỖI JSON HỢP LỆ (Không có markdown block \`\`\`json).
+            Cấu trúc JSON yêu cầu:
+            {
+              "testScope": "Tóm tắt ngắn gọn các chủ đề/chương có trong đề thi này (VD: Hàm số, Khảo sát đồ thị, Dãy số...)",
+              "matrix": {
+                "mcq": { "b": [số câu Nhận biết], "h": [số câu Thông hiểu], "vd": [số câu Vận dụng/VDC] },
+                "tf": { "b": [số Ý Nhận biết], "h": [số Ý Thông hiểu], "vd": [số Ý Vận dụng/VDC] },
+                "sa": { "b": [số câu Nhận biết], "h": [số câu Thông hiểu], "vd": [số câu Vận dụng/VDC] }
+              }
+            }
+            Lưu ý: 
+            - Phần Trắc nghiệm Đúng/Sai (tf): Tính theo số LƯỢNG Ý (mỗi câu có 4 ý a,b,c,d), hãy đếm tổng số ý và phân loại vào b, h, vd sao cho tổng ý chia hết cho 4.
+            - Nếu không có phần Tự luận, bỏ qua 'essay' trong JSON.
+        `;
+
+        const result = await model.generateContent([prompt, filePart]);
+        let textResult = result.response.text();
+        
+        // Làm sạch dữ liệu JSON phòng trường hợp AI trả về thừa markdown
+        textResult = textResult.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        
+        const parsedData = JSON.parse(textResult);
+        
+        // Tự động điền dữ liệu vào State
+        if (parsedData.testScope) setTestScope(parsedData.testScope);
+        if (parsedData.matrix) {
+            setMatrix(prev => ({
+                ...prev,
+                mcq: { ...prev.mcq, ...parsedData.matrix.mcq },
+                tf: { ...prev.tf, ...parsedData.matrix.tf },
+                sa: { ...prev.sa, ...parsedData.matrix.sa }
+            }));
+        }
+        
+        alert("✨ Đã bóc tách thành công! Cấu hình Ma trận đã được tự động cập nhật.");
+
+    } catch (error) {
+        console.error(error);
+        alert("Lỗi bóc tách đề: " + error.message);
+    } finally {
+        setIsAnalyzing(false);
+        // Reset input để có thể upload lại cùng 1 file nếu cần
+        if(fileInputRef.current) fileInputRef.current.value = ""; 
+    }
+  };
+
+  // --- HÀM TẠO ĐỀ CŨ (GIỮ NGUYÊN 100% CỦA BẠN) ---
   const handleGenerateTest = async () => {
     if (!testTitle.trim()) return alert("Vui lòng nhập Tiêu đề bài kiểm tra!");
     if (!testScope.trim()) return alert("Vui lòng nhập Phạm vi kiểm tra (VD: Từ bài 1 đến bài 4)!");
@@ -134,21 +212,17 @@ Bạn là một Chuyên gia Khảo thí giáo dục. Hãy tạo một Bộ Đề
 
 **THÔNG TIN ĐỀ THI:**
 - Môn: ${subject} - Lớp: ${grade}
-- Sách giáo khoa: ${textbook}
 - Tiêu đề: ${testTitle}
 - Thời gian: ${duration} phút
 - PHẠM VI KIẾN THỨC: """${testScope}"""
 
-**QUY TẮC SÁCH GIÁO KHOA VÀ NỘI DUNG (SỐNG CÒN - KHÔNG ĐƯỢC LÀM SAI):**
-1. LẤY CHÍNH XÁC TÊN BÀI: Dựa vào "Phạm vi kiến thức" được giao, BẮT BUỘC phải tra cứu và sử dụng ĐÚNG TÊN BÀI HỌC CÓ THẬT trong sách giáo khoa "${textbook}" môn ${subject} lớp ${grade}. TUYỆT ĐỐI KHÔNG BỊA TÊN BÀI, KHÔNG THÊM TỪ NGỮ LINH TINH VÀO TÊN BÀI.
-2. BÁM SÁT KIẾN THỨC 100%: Mọi câu hỏi (trắc nghiệm, đúng sai, trả lời ngắn, tự luận) BẮT BUỘC phải nằm hoàn toàn trong nội dung kiến thức của các bài học thuộc bộ sách "${textbook}" này. Tuyệt đối không hỏi kiến thức ngoài chương trình, không lấy dữ liệu từ sách khác.
-
 **CẤU TRÚC MA TRẬN YÊU CẦU:**
 1. Phần I. Trắc nghiệm nhiều lựa chọn: Tổng ${getTotalQ_Normal('mcq')} câu (Biết: ${matrix.mcq.b}, Hiểu: ${matrix.mcq.h}, Vận dụng: ${matrix.mcq.vd}).
-    - Câu hỏi bám sát sách giáo khoa nhưng có tình huống thực tế, hoặc câu hỏi mở rộng để đánh giá đúng năng lực. Không trả lời kiểu tất cả đều đúng.
+    - Câu hỏi không kiểu theo sách giáo khoa, theo bảng phân phối, hay theo thứ tự kiến thức. Hãy sáng tạo câu hỏi bám sát sách giáo khoa nhưng có tình huống thực tế, hoặc câu hỏi mở rộng để đánh giá đúng năng lực học sinh ở từng mức độ.
+    - Không trả lời kiểu tất cả đều đúng, A và B đúng, v.v... Mỗi câu chỉ có duy nhất 1 đáp án đúng.
 2. Phần II. Trắc nghiệm Đúng/Sai: Gồm tổng cộng ${totalTF_Q} câu. (Mỗi câu bắt buộc có 4 ý a, b, c, d). Phân bổ số ý: Biết ${matrix.tf.b} ý, Hiểu ${matrix.tf.h} ý, Vận dụng ${matrix.tf.vd} ý.
-   - Bắt buộc TRỘN LẪN các mức độ nhận thức (Biết, Hiểu, Vận dụng) vào 4 ý của cùng một câu hỏi.
-   - Tổng số lượng các ý phân bổ toàn phần II phải khớp chính xác.
+   - ĐIỀU KIỆN SỐNG CÒN 1: Bắt buộc TRỘN LẪN các mức độ nhận thức (Biết, Hiểu, Vận dụng) vào 4 ý của cùng một câu hỏi. (Ví dụ: Câu 1 có 2 ý Biết, 1 ý Hiểu, 1 ý Vận dụng). Tuyệt đối không đánh giá độ khó chung cho cả 1 câu.
+   - ĐIỀU KIỆN SỐNG CÒN 2: Tổng số lượng các ý phân bổ toàn phần II phải khớp chính xác: Biết ${matrix.tf.b} ý, Hiểu ${matrix.tf.h} ý, Vận dụng ${matrix.tf.vd} ý.
    - LỜI DẪN LÀ MỘT TÌNH HUỐNG TRONG THỰC TẾ BÁM SÁT NỘI DUNG BÀI HỌC CÓ ĐỘ DÀI KHOẢNG 2-3 DÒNG.
 3. Phần III. Trả lời ngắn: Tổng ${getTotalQ_Normal('sa')} câu (Biết: ${matrix.sa.b}, Hiểu: ${matrix.sa.h}, Vận dụng: ${matrix.sa.vd}).
 4. Phần IV. Tự luận: Tổng ${getTotalQ_Normal('essay')} câu (Biết: ${matrix.essay.b}, Hiểu: ${matrix.essay.h}, Vận dụng: ${matrix.essay.vd}).
@@ -156,36 +230,19 @@ Bạn là một Chuyên gia Khảo thí giáo dục. Hãy tạo một Bộ Đề
 **QUY TẮC ĐỒNG BỘ MA TRẬN VÀ ĐẶC TẢ (SỐNG CÒN - NGHIÊM CẤM LÀM SAI):**
 1. TUYỆT ĐỐI KHÔNG GỘP CHUNG VÀO 1 HÀNG: Phải phân tách "Phạm vi kiến thức" thành ít nhất 2 đến 4 "Chủ đề/Chương" (hàng) khác nhau. Hãy rải đều số lượng câu hỏi vào các hàng này.
 2. ĐỒNG BỘ 100%: Nội dung của Cột "Chủ đề/Chương" và Cột "Nội dung/đơn vị kiến thức" ở BẢNG MA TRẬN (Phần 1) BẮT BUỘC PHẢI GIỐNG HỆT 100% với BẢNG ĐẶC TẢ (Phần 2). Không được sai lệch dù chỉ 1 chữ.
-3. TÊN BÀI CHÍNH XÁC: Nếu phạm vi kiến thức chứa tên bài, BẮT BUỘC lấy đúng tên bài đó (trong sách giáo khoa), TUYỆT ĐỐI KHÔNG bịa thêm hay sửa tên bài.
 
-**QUY TẮC TÍNH ĐIỂM (NGHIÊM CẤM TỰ TÍNH):**
-Tại bảng Ma trận Phần 1, phần TỔNG ĐIỂM của mỗi cột, bạn TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ TÍNH. Hãy điền các chuỗi sau đây vào ô tương ứng (Hệ thống sẽ tự động thay thế bằng số chính xác):
-- Cột MCQ (Biết): ##DIEM_MCQ_B##
-- Cột MCQ (Hiểu): ##DIEM_MCQ_H##
-- Cột MCQ (Vận dụng): ##DIEM_MCQ_VD##
-- Cột Đúng Sai (Biết): ##DIEM_TF_B##
-- Cột Đúng Sai (Hiểu): ##DIEM_TF_H##
-- Cột Đúng Sai (Vận dụng): ##DIEM_TF_VD##
-- Cột Trả lời ngắn (Biết): ##DIEM_SA_B##
-- Cột Trả lời ngắn (Hiểu): ##DIEM_SA_H##
-- Cột Trả lời ngắn (Vận dụng): ##DIEM_SA_VD##
-- Cột Tự luận (Biết): ##DIEM_ES_B##
-- Cột Tự luận (Hiểu): ##DIEM_ES_H##
-- Cột Tự luận (Vận dụng): ##DIEM_ES_VD##
-
-**QUY TẮC ĐỊNH DẠNG CÂU HỎI & ĐÁP ÁN (SỐNG CÒN):**
-- SỐ THỨ TỰ CÂU: MỖI PHẦN (Trắc nghiệm, Đúng/Sai, Trả lời ngắn, Tự luận) BẮT BUỘC PHẢI ĐÁNH SỐ LẠI TỪ CÂU 1. TUYỆT ĐỐI KHÔNG đánh số nối tiếp từ phần này sang phần khác.
-- ĐÁP ÁN TRẮC NGHIỆM: Thêm ký tự sao (*) viết liền trước đáp án/ý ĐÚNG (VD: *A. hoặc *B. ).
-- ĐÁP ÁN CÂU ĐÚNG/SAI: BẮT BUỘC thêm ký tự sao (*) viết liền trước chữ cái của phát biểu đúng (Ví dụ phát biểu a đúng thì viết là *a) ). KHÔNG thêm dấu (*) vào trước chữ Đ/S ở bảng đáp án.
+**QUY TẮC ĐỊNH DẠNG CÂU HỎI & ĐÁP ÁN (NGHIÊM CẤM LÀM SAI):**
+- ĐÁP ÁN CÂU NHIỀU LỰA CHỌN: Bắt buộc thêm ký tự sao (*) viết liền trước đáp án đúng (VD: *A. hoặc *B. ).
+- ĐÁP ÁN CÂU ĐÚNG/SAI: Ý nào có phát biểu ĐÚNG, bắt buộc phải thêm ký tự sao (*) viết liền trước chữ cái (VD: *a) hoặc *c) ).
 - TIÊU ĐỀ CÂU ĐÚNG/SAI: Tuyệt đối KHÔNG ghi các từ (Biết), (Hiểu), (Vận dụng) cạnh tiêu đề Câu 1, Câu 2 của phần Đúng/Sai. Hãy để ngầm định.
 - ÉP BUỘC XUỐNG DÒNG: Các phương án (A, B, C, D) và (a, b, c, d) PHẢI xuống dòng (Enter 2 lần).
-- TRẢ LỜI NGẮN: Dưới mỗi câu hỏi Trả lời ngắn, ghi: "Key: đáp án". TUYỆT ĐỐI KHÔNG dùng dấu ngoặc vuông.
-- MÃ CODE LẬP TRÌNH: TRONG PHẦN ĐỀ THI, BẮT BUỘC bọc code bằng \`\`\`python (hoặc C++) để tạo hộp. Không đưa chữ tiếng Việt hay Code vào trong thẻ $...$.
-- TOÁN HỌC/LÝ/HÓA: 
-    +Công thức PHỨC TẠP NHƯ: CĂN BẬC HAI,BA, GIỚI HẠN, MŨ, LUỸ THỪA,LOG,...BẮT BUỘC dùng LaTeX kẹp trong $...$. BẮT BUỘC gõ khoảng trắng (space) TRƯỚC và SAU mỗi công thức $...$. KHÔNG dùng dấu nháy hay backtick bao quanh công thức.
-    +Công thức đơn giản như biểu thức, phương trình bậc nhất,.. không bắt buộc phải dùng LaTeX, có thể viết trực tiếp trong câu hỏi.Ví dụ: x=2, 2x+4=0,... Nhưng nếu dùng LaTeX thì vẫn phải tuân thủ quy tắc có khoảng trắng trước và sau công thức.
-    - BẮT ĐẦU VĂN BẢN TỪ "### **PHẦN 1: MA TRẬN ĐỀ KIỂM TRA**", TUYỆT ĐỐI KHÔNG CHÀO HỎI.
-
+- TRẢ LỜI NGẮN: Dưới mỗi câu hỏi Trả lời ngắn, ghi: "Key: [đáp án]".
+- MÃ CODE LẬP TRÌNH (PYTHON/C++): BẮT BUỘC đặt các đoạn mã code lập trình vào trong cặp dấu 3 gạch ngược (\`\`\`python ... \`\`\`) để tạo thành một hộp code. TUYỆT ĐỐI KHÔNG được đặt code vào trong thẻ $...$ của toán học.
+- TOÁN HỌC/LÝ/HÓA: Công thức BẮT BUỘC dùng LaTeX kẹp trong $...$. BẮT BUỘC gõ khoảng trắng (space) TRƯỚC và SAU mỗi công thức $...$. TUYỆT ĐỐI KHÔNG dùng dấu nháy đơn (' '), nháy kép (" ") hay backtick (\` \`) bao quanh công thức.
+- BẮT ĐẦU VĂN BẢN TỪ "### **PHẦN 1: MA TRẬN ĐỀ KIỂM TRA**", TUYỆT ĐỐI KHÔNG CHÀO HỎI.
+**QUY TẮC ĐÚNG THEO CÁC BÀI TRONG SÁCH GIÁO KHOA:**
+- CHỦ ĐỀ/CHƯƠNG: Dựa trên mục lục sách giáo khoa, tách thành các chủ đề/chương khác nhau. Ví dụ: Toán 11 có thể tách thành "Hàm số & PT Lượng giác", "Dãy số, Cấp số cộng/nhân", "Tích phân", v.v...
+- CÁC BÀI HỌC: Dựa trên từng bài học trong sách giáo khoa, tạo thành các đơn vị kiến thức cụ thể. Ví dụ: "Hàm số & PT Lượng giác" có thể tách thành "Hàm số bậc nhất", "Hàm số bậc hai", "Phương trình lượng giác cơ bản", v.v...
 **BẠN PHẢI TRẢ VỀ ĐÚNG 4 PHẦN THEO THỨ TỰ DƯỚI ĐÂY:**
 
 ### **PHẦN 1: MA TRẬN ĐỀ KIỂM TRA**
@@ -221,11 +278,7 @@ BẮT BUỘC copy y nguyên khối HTML dưới đây để tạo bảng. Không
     </tr>
     <tr style="font-weight:bold;">
       <td colspan="3">Tổng số điểm</td>
-      <td>##DIEM_MCQ_B##</td><td>##DIEM_MCQ_H##</td><td>##DIEM_MCQ_VD##</td>
-      <td>##DIEM_TF_B##</td><td>##DIEM_TF_H##</td><td>##DIEM_TF_VD##</td>
-      <td>##DIEM_SA_B##</td><td>##DIEM_SA_H##</td><td>##DIEM_SA_VD##</td>
-      <td>##DIEM_ES_B##</td><td>##DIEM_ES_H##</td><td>##DIEM_ES_VD##</td>
-      <td>${totalB_Score}</td><td>${totalH_Score}</td><td>${totalVD_Score}</td><td>${sumScores}</td>
+      <td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>${totalB_Score}</td><td>${totalH_Score}</td><td>${totalVD_Score}</td><td>${sumScores}</td>
     </tr>
     <tr style="font-weight:bold;">
       <td colspan="3">Tỉ lệ %</td>
@@ -236,12 +289,12 @@ BẮT BUỘC copy y nguyên khối HTML dưới đây để tạo bảng. Không
 
 ### **PHẦN 2: BẢN ĐẶC TẢ ĐỀ KIỂM TRA**
 BẮT BUỘC copy y nguyên khối HTML dưới đây để tạo bảng Đặc tả. Thêm \`style="text-align: left;"\` vào \`<td>\` cột 2, 3, 4.
-**QUY TẮC ĐIỀN DỮ LIỆU ĐẶC TẢ:**
-1. Các hàng ở cột "Chủ đề/Chương" và "Nội dung" BẮT BUỘC phải copy y hệt như trên bảng Ma trận ở Phần 1. Nhắc lại: PHẢI GIỮ ĐÚNG TÊN BÀI THEO SÁCH GIÁO KHOA NẾU CÓ.
+**QUY TẮC ĐIỀN DỮ LIỆU ĐẶC TẢ (CỰC KỲ QUAN TRỌNG VỀ LIÊN KẾT CÂU HỎI):**
+1. Các hàng ở cột "Chủ đề/Chương" và "Nội dung" BẮT BUỘC phải copy y hệt như trên bảng Ma trận ở Phần 1.
 2. Cột "Yêu cầu cần đạt", dùng thẻ <br> để chia rõ 3 mức độ: + Biết: [...] <br> + Hiểu: [...] <br> + Vận dụng: [...]
 3. Cột điền Số câu hỏi: BẮT BUỘC ghi số lượng câu, KÈM THEO VỊ TRÍ CÂU HỎI TRONG ĐỀ THI (để trong ngoặc đơn) và Mã năng lực đặc thù bên dưới (dùng thẻ <br>).
-   *Ví dụ mẫu:* 2 (câu 1, 2) <br> (NLa) hoặc 4 (ý a,b câu 1) <br> (TH).
-   *LƯU Ý: ${competencyGuidance}*
+   *Ví dụ mẫu:* 2 (câu 1, 2) <br> (NLa) hoặc 1 (câu 3) <br> (NT) hoặc 4 (ý a,b câu 1) <br> (TH).
+   *LƯU Ý: Tên câu (câu 1, câu 2...) phải khớp chính xác với số thứ tự câu tương ứng sẽ được tạo ra ở Phần 3 (Đề kiểm tra). ${competencyGuidance}*
 
 <table border="1" cellpadding="5" cellspacing="0" style="width:100%; border-collapse:collapse; text-align:center; font-size: 11pt;">
   <thead>
@@ -273,20 +326,6 @@ BẮT BUỘC copy y nguyên khối HTML dưới đây để tạo bảng Đặc 
       <td colspan="4">Tổng số câu</td>
       <td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td>
     </tr>
-    <tr style="font-weight:bold;">
-      <td colspan="4">Tổng số điểm</td>
-      <td colspan="3">${mcqScore}</td>
-      <td colspan="3">${tfScore}</td>
-      <td colspan="3">${saScore}</td>
-      <td colspan="3">${essayScore}</td>
-    </tr>
-    <tr style="font-weight:bold;">
-      <td colspan="4">Tỉ lệ %</td>
-      <td colspan="3">${mcqPercent}%</td>
-      <td colspan="3">${tfPercent}%</td>
-      <td colspan="3">${saPercent}%</td>
-      <td colspan="3">${essayPercent}%</td>
-    </tr>
   </tbody>
 </table>
 
@@ -296,19 +335,17 @@ BẮT BUỘC copy y nguyên khối HTML dưới đây để tạo bảng Đặc 
 (Nội dung các câu hỏi...)
 
 **PHẦN II. Câu trắc nghiệm đúng sai.** Thí sinh trả lời từ câu 1 đến câu ${totalTF_Q}. Trong mỗi ý a), b), c), d) ở mỗi câu, thí sinh chọn đúng hoặc sai.
-**Câu 1:** Lời dẫn tình huống... 
+**Câu 1:** Lời dẫn tình huống... (Tuyệt đối KHÔNG ghi chữ Biết, Hiểu, Vận dụng ở đây).
 a) Nội dung ý...
 b) Nội dung ý...
+(Các câu khác tương tự)
 
-${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời ngắn.** Thí sinh trả lời từ câu 1 đến câu ${getTotalQ_Normal('sa')}.
-(Nội dung các câu hỏi... Nhớ thêm Key: đáp án, TUYỆT ĐỐI KHÔNG dùng ngoặc vuông)
-
-**PHẦN IV. Tự luận.**` : `**PHẦN III. Tự luận.**`}
-(Nội dung các câu hỏi Tự luận. LƯU Ý SỐNG CÒN: Đánh số câu Tự luận phải RESET BẮT ĐẦU LẠI TỪ Câu 1, Câu 2... TUYỆT ĐỐI KHÔNG nối tiếp số thứ tự của các phần trước).
+**PHẦN III. Câu trắc nghiệm trả lời ngắn.** Thí sinh trả lời từ câu 1 đến câu ${getTotalQ_Normal('sa')}.
+(Nội dung các câu hỏi... Nhớ thêm Key: đáp án)
 
 ### **PHẦN 4: ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM**
 1. Bảng đáp án Phần I và Phần II (Dùng bảng Markdown).
-2. Bảng Hướng dẫn chấm Phần Tự luận / Trả lời ngắn: BẮT BUỘC DÙNG BẢNG MARKDOWN DƯỚI ĐÂY.
+2. Bảng Hướng dẫn chấm Phần Tự luận / Trả lời ngắn: BẮT BUỘC DÙNG BẢNG MARKDOWN DƯỚI ĐÂY (Tuyệt đối không dùng bảng HTML).
 | Câu | Nội dung đáp án / Code / Công thức | Điểm |
 |:---:|---|:---:|
 | 1 | Lời giải dòng 1 <br> Lời giải dòng 2 | 1.0 |
@@ -320,22 +357,6 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
         const result = await model.generateContent(prompt);
         let textResult = result.response.text();
 
-        textResult = textResult.replace('##DIEM_MCQ_B##', matrix.mcq.b === 0 ? '0' : (matrix.mcq.b * matrix.mcq.point).toString());
-        textResult = textResult.replace('##DIEM_MCQ_H##', matrix.mcq.h === 0 ? '0' : (matrix.mcq.h * matrix.mcq.point).toString());
-        textResult = textResult.replace('##DIEM_MCQ_VD##', matrix.mcq.vd === 0 ? '0' : (matrix.mcq.vd * matrix.mcq.point).toString());
-        
-        textResult = textResult.replace('##DIEM_TF_B##', matrix.tf.b === 0 ? '0' : (matrix.tf.b * (matrix.tf.point / 4)).toString());
-        textResult = textResult.replace('##DIEM_TF_H##', matrix.tf.h === 0 ? '0' : (matrix.tf.h * (matrix.tf.point / 4)).toString());
-        textResult = textResult.replace('##DIEM_TF_VD##', matrix.tf.vd === 0 ? '0' : (matrix.tf.vd * (matrix.tf.point / 4)).toString());
-
-        textResult = textResult.replace('##DIEM_SA_B##', matrix.sa.b === 0 ? '0' : (matrix.sa.b * matrix.sa.point).toString());
-        textResult = textResult.replace('##DIEM_SA_H##', matrix.sa.h === 0 ? '0' : (matrix.sa.h * matrix.sa.point).toString());
-        textResult = textResult.replace('##DIEM_SA_VD##', matrix.sa.vd === 0 ? '0' : (matrix.sa.vd * matrix.sa.point).toString());
-
-        textResult = textResult.replace('##DIEM_ES_B##', matrix.essay.b === 0 ? '0' : (matrix.essay.b * matrix.essay.point).toString());
-        textResult = textResult.replace('##DIEM_ES_H##', matrix.essay.h === 0 ? '0' : (matrix.essay.h * matrix.essay.point).toString());
-        textResult = textResult.replace('##DIEM_ES_VD##', matrix.essay.vd === 0 ? '0' : (matrix.essay.vd * matrix.essay.point).toString());
-
         const targetStart = "### **PHẦN 1";
         const startIndex = textResult.indexOf(targetStart);
         if (startIndex !== -1) {
@@ -343,14 +364,13 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
         }
 
         textResult = textResult.replace(/```html\n?/g, '');
-        textResult = textResult.replace(/```markdown\n?/g, '');
-        textResult = textResult.replace(/```\s*$/g, '');
+        textResult = textResult.replace(/```\n?/g, '');
 
         let splitParts = textResult.split("### **PHẦN 4:");
         let part123 = splitParts[0];
         let part4 = splitParts.length > 1 ? "\n### **PHẦN 4:" + splitParts[1] : "";
 
-        part4 = part4.replace(/```[a-zA-Z]*\n?/g, '<br>'); 
+        part4 = part4.replace(/```[a-z]*\n?/gi, '<br> *[Code]* <br>'); 
         part4 = part4.replace(/```/g, '<br>');
 
         part123 = part123.replace(/a\),\s*b\),\s*c\),\s*d\)/g, '@@ABCD_LOWER@@');
@@ -364,20 +384,14 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
 
         textResult = part123 + part4;
 
-        textResult = textResult.replace(/Key:\s*\[([^\]]+)\]/gi, 'Key: $1');
-
         textResult = textResult.replace(/\n\n\*([A-D]\.)/g, '\n\n\\*$1');
         textResult = textResult.replace(/\n\n\*([a-d]\))/g, '\n\n\\*$1');
         textResult = textResult.replace(/^\*([A-D]\.)/gm, '\\*$1');
         textResult = textResult.replace(/^\*([a-d]\))/gm, '\\*$1');
 
-        textResult = textResult.replace(/\\\((.*?)\\\)/g, '$$$1$$');
-        textResult = textResult.replace(/\\\[(.*?)\\\]/gs, '$$$$$1$$$$');
-        textResult = textResult.replace(/\\begin\{align\}/g, '\\begin{aligned}');
-        textResult = textResult.replace(/\\end\{align\}/g, '\\end{aligned}');
-        textResult = textResult.replace(/\$([^$\n]+?)\$/g, (match, p1) => '$' + p1.trim() + '$');
         textResult = textResult.replace(/\$([^$\n]+?)\$([\p{L}\p{N}])/gu, '$$$1$$ $2');
         textResult = textResult.replace(/([\p{L}\p{N}])\$([^$\n]+?)\$/gu, '$1 $$$2$$');
+
         textResult = textResult.replace(/['"`](\$[^$\n]+?\$)['"`]/g, '$1');
 
         setResultMarkdown(textResult);
@@ -398,7 +412,7 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
       katexHtmlElements.forEach(el => el.remove());
 
       const header = `
-          <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='[http://www.w3.org/TR/REC-html40](http://www.w3.org/TR/REC-html40)'>
+          <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
           <head>
               <meta charset='utf-8'>
               <title>De Kiem Tra Landscape</title>
@@ -472,13 +486,13 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
          <div className="flex items-center gap-4">
              <button onClick={() => router.push('/dashboard')} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl transition"><ArrowLeft size={20}/></button>
              <div>
-                 <h1 className="text-xl font-black text-white uppercase italic tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-orange-400">AI SOẠN ĐỀ FULL</h1>
-                 <p className="text-[10px] font-bold text-slate-400 uppercase">Ma trận - Bản đặc tả - Đề thi - Đáp án</p>
+                 <h1 className="text-xl font-black text-white uppercase italic tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-orange-400">AI SOẠN ĐỀ FULL & TƯ DUY NGƯỢC</h1>
+                 <p className="text-[10px] font-bold text-slate-400 uppercase">Tự động đọc PDF & Liên kết Số Câu Hỏi</p>
              </div>
          </div>
          {resultMarkdown && (
              <button onClick={exportToWord} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg transition">
-                 <Download size={16}/> Tải Bản Word
+                 <Download size={16}/> Tải Bản Word Ngang
              </button>
          )}
       </header>
@@ -488,6 +502,41 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
           <div className="w-full lg:w-[460px] bg-[#020617] border-r border-white/10 overflow-y-auto p-4 custom-scrollbar shrink-0">
               
               <div className="space-y-4">
+                  {/* --- KHU VỰC MỚI: UPLOAD FILE ĐỂ BÓC TÁCH --- */}
+                  <div className="bg-slate-800/80 p-4 rounded-xl border border-indigo-500/30 shadow-inner relative overflow-hidden">
+                      <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
+                      <h3 className="text-xs font-black text-indigo-400 uppercase flex items-center gap-2 mb-2">
+                          <FileSearch size={16}/> Phân Tích Ma Trận Từ File Gốc
+                      </h3>
+                      <p className="text-[10px] text-slate-400 mb-3">Tải lên đề thi (PDF) để AI tự động đếm số lượng câu hỏi và phân mức độ Nhận biết, Thông hiểu...</p>
+                      
+                      <div 
+                          className="border-2 border-dashed border-slate-600 hover:border-indigo-400 bg-slate-900/50 rounded-lg p-4 text-center cursor-pointer transition relative"
+                          onClick={() => !isAnalyzing && fileInputRef.current.click()}
+                      >
+                          <input 
+                              type="file" 
+                              accept=".pdf" 
+                              className="hidden" 
+                              ref={fileInputRef}
+                              onChange={handleAnalyzeFile}
+                              disabled={isAnalyzing || loading}
+                          />
+                          {isAnalyzing ? (
+                              <div className="flex flex-col items-center justify-center text-indigo-400">
+                                  <Loader2 className="animate-spin mb-2" size={24}/>
+                                  <span className="text-xs font-bold uppercase">AI Đang bóc tách đề...</span>
+                              </div>
+                          ) : (
+                              <div className="flex flex-col items-center justify-center text-slate-400 hover:text-indigo-300">
+                                  <UploadCloud size={24} className="mb-2"/>
+                                  <span className="text-xs font-bold">Click để tải lên file PDF</span>
+                              </div>
+                          )}
+                      </div>
+                  </div>
+                  {/* --- KẾT THÚC KHU VỰC MỚI --- */}
+
                   <div className="grid grid-cols-2 gap-2">
                       <div>
                           <label className="block text-[10px] font-bold text-slate-400 mb-1">Khối lớp</label>
@@ -503,36 +552,28 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
                       </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2">
-                      <div className="col-span-2">
-                          <label className="block text-[10px] font-bold text-slate-400 mb-1 flex items-center gap-1"><BookOpen size={12}/> Sách giáo khoa</label>
-                          <select value={textbook} onChange={e=>setTextbook(e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-lg outline-none focus:border-red-500 text-white font-bold text-sm">
-                              {TEXTBOOKS.map(t => <option key={t} value={t}>{t}</option>)}
-                          </select>
-                      </div>
-                      <div className="col-span-1">
-                          <label className="block text-[10px] font-bold text-slate-400 mb-1">Thời gian (Phút)</label>
-                          <input type="number" min="15" value={duration} onChange={e=>setDuration(e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-lg outline-none focus:border-red-500 text-white font-bold text-sm text-center"/>
-                      </div>
-                  </div>
-
                   <div>
                       <label className="block text-[10px] font-bold text-slate-400 mb-1">Tiêu đề Bài kiểm tra</label>
                       <input value={testTitle} onChange={e=>setTestTitle(e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-lg outline-none focus:border-red-500 text-white font-bold text-sm" placeholder="VD: ĐỀ KIỂM TRA GIỮA KÌ 1"/>
                   </div>
 
-                  <div className="bg-slate-900/50 p-3 rounded-lg border border-red-500/30">
-                      <label className="block text-[10px] font-black text-red-400 mb-1 uppercase">Phạm vi kiến thức(Để chính xác nhập tên từng bài)</label>
+                  <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1">Thời gian làm bài (Phút)</label>
+                      <input type="number" min="15" value={duration} onChange={e=>setDuration(e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-lg outline-none focus:border-red-500 text-white font-bold text-sm"/>
+                  </div>
+
+                  <div className={`p-3 rounded-lg border transition-all ${isAnalyzing ? 'bg-indigo-900/30 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.5)]' : 'bg-slate-900/50 border-red-500/30'}`}>
+                      <label className={`block text-[10px] font-black mb-1 uppercase ${isAnalyzing ? 'text-indigo-400' : 'text-red-400'}`}>Phạm vi kiến thức</label>
                       <textarea 
                           value={testScope} 
                           onChange={e=>setTestScope(e.target.value)} 
                           rows={3} 
                           className="w-full bg-[#020617] border border-red-900 p-2 rounded-md outline-none focus:border-red-500 text-slate-200 text-xs" 
-                          placeholder="VD: Bài 1:..."
+                          placeholder="VD: Từ bài 21 đến bài 28..."
                       />
                   </div>
 
-                  <div className="bg-slate-800/80 p-3 rounded-xl border border-orange-500/30 shadow-inner">
+                  <div className={`p-3 rounded-xl border shadow-inner transition-all ${isAnalyzing ? 'bg-indigo-900/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.5)]' : 'bg-slate-800/80 border-orange-500/30'}`}>
                       <div className="flex justify-between items-center mb-2">
                           <label className="block text-[10px] font-black text-orange-400 uppercase flex items-center gap-1"><LayoutTemplate size={14}/> Cấu hình Ma trận</label>
                           {totalTF_Y % 4 !== 0 && <div className="text-[9px] text-red-400 font-bold flex items-center gap-1 animate-pulse"><AlertCircle size={10}/> Lỗi ý Đ/S</div>}
@@ -612,7 +653,7 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
                       </div>
                   </div>
 
-                  <button onClick={handleGenerateTest} disabled={loading} className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white py-3 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-red-500/20 active:scale-95 transition flex items-center justify-center gap-2 mt-2">
+                  <button onClick={handleGenerateTest} disabled={loading || isAnalyzing} className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white py-3 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-red-500/20 active:scale-95 transition flex items-center justify-center gap-2 mt-2 disabled:opacity-50">
                       {loading ? <Loader2 className="animate-spin"/> : <Sparkles size={20}/>} {loading ? 'ĐANG TẠO ĐỀ...' : 'KHAI HOẢ TẠO ĐỀ'}
                   </button>
               </div>
@@ -626,7 +667,7 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
                           <BrainCircuit size={80} className="text-red-600 relative z-10 animate-bounce"/>
                       </div>
                       <h3 className="text-2xl font-black uppercase tracking-widest text-slate-700 mb-2">AI Đang thực thi</h3>
-                      <p className="text-sm font-bold">Anh/chị cứ ngồi chơi để em làm...</p>
+                      <p className="text-sm font-bold">Anh/chị cứ ngồi chơi để thư ký xinh gái em làm...</p>
                   </div>
               ) : resultMarkdown ? (
                   <div 
@@ -638,7 +679,7 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
                               {testTitle}
                           </h2>
                           <h5 style={{ fontSize: '12pt', fontWeight: 'bold', textAlign: 'center', marginTop: 0, marginBottom: '24pt' }}>
-                              Môn: {subject} {grade} ({textbook}) - Thời gian: {duration} phút
+                              Môn: {subject} {grade} - Thời gian: {duration} phút
                           </h5>
                       </div>
 
@@ -658,7 +699,7 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
                                   table: ({node, ...props}) => <div style={{overflowX: 'auto'}}><table style={{width: '100%', borderCollapse: 'collapse', marginTop: '10pt', marginBottom: '10pt', fontSize: '11pt'}} {...props}/></div>,
                                   th: ({node, ...props}) => <th style={{border: '1px solid black', padding: '6pt', backgroundColor: '#f8fafc', fontWeight: 'bold', textAlign: 'center', verticalAlign: 'middle'}} {...props}/>,
                                   td: ({node, ...props}) => <td style={{border: '1px solid black', padding: '6pt', verticalAlign: 'top'}} {...props}/>,
-                                  pre: ({node, ...props}) => <pre style={{backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '10pt', borderRadius: '4pt', overflowX: 'auto', fontFamily: "'Courier New', Courier, monospace", fontSize: '11pt', margin: '8pt 0'}} {...props}/>,
+                                  pre: ({node, ...props}) => <pre style={{backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', padding: '10pt', borderRadius: '4pt', overflowX: 'auto', fontFamily: "'Courier New', Courier, monospace", fontSize: '11pt', margin: '8pt 0'}} {...props}/>,
                                   code: ({node, inline, ...props}) => inline ? <code style={{backgroundColor: '#f1f5f9', padding: '2px 4px', borderRadius: '3px', fontFamily: "'Courier New', Courier, monospace", color: '#e11d48'}} {...props}/> : <code style={{fontFamily: "'Courier New', Courier, monospace"}} {...props}/>,
                               }}
                           >
