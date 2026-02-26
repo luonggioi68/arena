@@ -263,10 +263,10 @@ ${nlSoText}
       
       <header className="h-[70px] bg-[#1e293b]/90 backdrop-blur border-b border-white/10 px-6 flex justify-between items-center shrink-0">
          <div className="flex items-center gap-4">
-             <button onClick={() => router.push('/dashboard')} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl transition"><ArrowLeft size={20}/></button>
+             <button onClick={() => router.push('/')} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl transition"><ArrowLeft size={20}/></button>
              <div>
-                <h1 className="text-xl font-black text-white uppercase italic tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">AI SOẠN KHBD</h1>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Tối ưu Nguồn cấp - Dễ dàng thao tác</p>
+                <h1 className="text-xl font-black text-white uppercase italic tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">AI SOẠN KẾ HOẠCH BÀI DẠY (cv5512)</h1>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Dễ dàng thao tác</p>
              </div>
          </div>
          {resultMarkdown && (
@@ -338,7 +338,7 @@ ${nlSoText}
                           onChange={e=>setCompetencies(e.target.value)} 
                           rows={2} 
                           className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl outline-none focus:border-emerald-500 text-emerald-300 text-sm font-medium" 
-                          placeholder="Dán mã Năng lực số vào đây..."
+                          placeholder="Dán mã và nội dung Năng lực số vào đây..."
                       />
                   </div>
 
@@ -349,7 +349,7 @@ ${nlSoText}
                       </label>
 
                       <div>
-                          <label className="text-[10px] font-bold text-emerald-400 flex items-center gap-1 mb-1.5"><FileText size={12}/> 1. Nâng cấp: Tải Giáo án Word (Bơm Năng lực)</label>
+                          <label className="text-[10px] font-bold text-emerald-400 flex items-center gap-1 mb-1.5"><FileText size={12}/> 1. Nâng cấp: Tải khbd Word Cũ (soạn chính xác nội dung)</label>
                           <input type="file" id="wordUpload" accept=".docx" onChange={handleWordUpload} className="hidden" />
                           <label htmlFor="wordUpload" className="flex items-center justify-center gap-2 w-full bg-[#020617] border border-emerald-900 hover:border-emerald-500 text-emerald-400 py-2 rounded-lg cursor-pointer transition text-sm font-bold shadow-[0_0_15px_rgba(16,185,129,0.1)]">
                               {wordName ? 'Đã tải KHBD cũ: ' + wordName : 'Chọn KHBD Word chưa có Năng lực số'}
@@ -361,7 +361,7 @@ ${nlSoText}
                       </div>
 
                       <div>
-                          <label className="text-[10px] font-bold text-slate-400 flex items-center gap-1 mb-1.5"><LinkIcon size={12}/> 2. Soạn mới: Dán Link bài học</label>
+                          <label className="text-[10px] font-bold text-slate-400 flex items-center gap-1 mb-1.5"><LinkIcon size={12}/> 2. Soạn mới: Dán Link bài học(độ chính xác không cao)</label>
                           <input 
                               value={lessonLink} 
                               onChange={e=>setLessonLink(e.target.value)} 

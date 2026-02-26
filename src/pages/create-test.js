@@ -470,7 +470,7 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
       
       <header className="h-[70px] bg-[#1e293b]/90 backdrop-blur border-b border-white/10 px-6 flex justify-between items-center shrink-0">
          <div className="flex items-center gap-4">
-             <button onClick={() => router.push('/dashboard')} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl transition"><ArrowLeft size={20}/></button>
+             <button onClick={() => router.push('/')} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl transition"><ArrowLeft size={20}/></button>
              <div>
                  <h1 className="text-xl font-black text-white uppercase italic tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-orange-400">AI SOẠN ĐỀ FULL</h1>
                  <p className="text-[10px] font-bold text-slate-400 uppercase">Ma trận - Bản đặc tả - Đề thi - Đáp án</p>
