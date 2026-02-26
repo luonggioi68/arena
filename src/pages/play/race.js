@@ -152,13 +152,9 @@ export default function BietDoiArenaPlayer() {
             }
         }
 
-        // Logic Kết thúc Game
+        // [ĐÃ SỬA] Logic Kết thúc Game: Chỉ nghe lệnh "FINISHED" từ Giáo viên
         if (data.teams) {
-            const teamsArr = Object.values(data.teams);
-            const finishedCount = teamsArr.filter(t => t.isFinished).length;
-            const totalPlayers = teamsArr.length;
-            
-            if (data.status === 'FINISHED' || (totalPlayers > 1 && finishedCount >= 2) || (totalPlayers === 1 && finishedCount === 1)) {
+            if (data.status === 'FINISHED') {
                 setForceEnd(true);
                 setCurrentIdx(null);
                 if (bgmRef.current) bgmRef.current.pause();
@@ -387,7 +383,7 @@ export default function BietDoiArenaPlayer() {
             </h2>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 md:gap-4 w-full max-w-4xl px-2 overflow-y-auto max-h-[75vh] custom-scrollbar no-scrollbar">
               {questions.map((_, idx) => {
-                // CHỈ DỰA VÀO CÁ NHÂN ĐỂ KHÓA NÚT (Bỏ GlobalSolved)
+                // CHỈ DỰA VÀO CÁ NHÂN ĐỂ KHÓA NÚT
                 const myStatus = team.solved ? team.solved[idx] : null; 
                 const isLocked = !!myStatus; 
                 
