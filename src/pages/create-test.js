@@ -669,7 +669,7 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
               ) : (
                   <div className="h-full flex flex-col items-center justify-center text-slate-500 opacity-50">
                       <FileText size={100} className="mb-4"/>
-                      <p className="text-xl font-bold uppercase tracking-widest">Khu vực hiển thị Đề kiểm tra</p>
+                      <p className="text-xl font-bold uppercase tracking-widest">AI SOẠN ĐỀ CẦN KIỂM TRA KỸ KHI ÁP DỤNG CHO HS THI</p>
                   </div>
               )}
           </div>
