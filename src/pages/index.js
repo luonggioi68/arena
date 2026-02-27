@@ -17,7 +17,8 @@ import {
 export default function HomePage() {
   const router = useRouter();
   const { user, setUser } = useAuthStore();
-  // lấy ngày
+  
+  // TÍNH TOÁN NGÀY HẾT HẠN (MẶC ĐỊNH 6 THÁNG)
   const expireDate6Months = new Date();
   expireDate6Months.setMonth(expireDate6Months.getMonth() + 6);
   const expireDateString = expireDate6Months.toISOString().split('T')[0]; // Trả về dạng YYYY-MM-DD
@@ -84,7 +85,8 @@ export default function HomePage() {
                   role: 'teacher',
                   status: 'active',
                   createdAt: serverTimestamp(),
-                  expireDate: "2027-12-31"
+                  // [ĐÃ SỬA LỖI] Sử dụng biến expireDateString (6 tháng) thay vì "2027-12-31"
+                  expireDate: expireDateString 
               });
           }
           router.push('/dashboard');
@@ -106,12 +108,7 @@ export default function HomePage() {
               const user = userCredential.user;
               await updateProfile(user, { displayName: authData.name });
 
-              // 2. Tính toán ngày hết hạn (6 tháng từ hôm nay)
-              const expireDate6Months = new Date();
-              expireDate6Months.setMonth(expireDate6Months.getMonth() + 6);
-              const expireDateString = expireDate6Months.toISOString().split('T')[0];
-
-              // 3. Ghi vào Firestore - ĐÂY LÀ BƯỚC QUAN TRỌNG ĐỂ KÍCH HOẠT
+              // 2. Ghi vào Firestore
               await setDoc(doc(firestore, 'users', user.uid), {
                   name: authData.name,
                   email: authData.email,
@@ -122,7 +119,7 @@ export default function HomePage() {
                   createdAt: serverTimestamp()
               });
 
-              // 4. Đăng nhập thành công, đóng modal và vào thẳng Dashboard
+              // 3. Đăng nhập thành công, đóng modal và vào thẳng Dashboard
               setShowAuthModal(false);
               router.push('/dashboard'); 
 

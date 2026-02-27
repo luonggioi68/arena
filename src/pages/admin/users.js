@@ -5,7 +5,7 @@ import { collection, getDocs, updateDoc, doc, deleteDoc } from 'firebase/firesto
 import { 
     Users, Search, Plus, Edit, Trash2, Save, X, 
     Calendar, CheckCircle, AlertTriangle, Clock, 
-    GraduationCap, Briefcase, Shield, Star
+    GraduationCap, Briefcase, Shield, Star, Lock, Unlock, Timer
 } from 'lucide-react';
 
 export default function AdminUserManagement() {
@@ -18,21 +18,31 @@ export default function AdminUserManagement() {
         id: '', name: '', email: '', role: 'teacher', expireDate: '', status: 'active', grade: ''
     });
 
-    // 1. LẤY DỮ LIỆU ĐỘNG THEO TAB
+    // --- HÀM HỖ TRỢ SẮP XẾP NGÀY MỚI NHẤT ---
+    const sortUsersByNewest = (usersList) => {
+        return usersList.sort((a, b) => {
+            const timeA = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+            const timeB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+            return timeB - timeA; // Chiều giảm dần (mới nhất lên đầu)
+        });
+    };
+
+    // 1. LẤY DỮ LIỆU ĐỘNG THEO TAB VÀ SẮP XẾP
     const fetchUsers = async () => {
         setLoading(true);
-        setAllUsers([]); // Xóa list cũ trước khi tải list mới
+        setAllUsers([]); 
         try {
             if (activeTab === 'TEACHER') {
-                // Đọc từ bảng users cho Giáo viên
                 const querySnapshot = await getDocs(collection(firestore, 'users'));
-                const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setAllUsers(data.filter(u => u.role === 'teacher' || !u.role));
+                let data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                data = data.filter(u => u.role === 'teacher' || !u.role);
+                // Áp dụng sắp xếp
+                setAllUsers(sortUsersByNewest(data));
             } else {
-                // Đọc từ bảng student_profiles cho Học sinh
                 const querySnapshot = await getDocs(collection(firestore, 'student_profiles'));
-                const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setAllUsers(data);
+                let data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // Áp dụng sắp xếp
+                setAllUsers(sortUsersByNewest(data));
             }
         } catch (error) {
             console.error("Lỗi lấy dữ liệu:", error);
@@ -49,7 +59,7 @@ export default function AdminUserManagement() {
         return () => unsubscribe();
     }, [activeTab]);
 
-    // 2. HÀM XÓA (Gọi API Backend để xóa tận gốc)
+    // 2. HÀM XÓA 
     const handleDelete = async (id) => {
         if (window.confirm("Bạn có chắc chắn muốn XÓA TẬN GỐC tài khoản này không? Toàn bộ dữ liệu đăng nhập và hồ sơ sẽ bốc hơi và không thể khôi phục!")) {
             setLoading(true);
@@ -65,10 +75,7 @@ export default function AdminUserManagement() {
                 });
 
                 const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.message || "Xóa thất bại");
-                }
+                if (!response.ok) throw new Error(data.message || "Xóa thất bại");
 
                 alert("✅ Đã xóa tận gốc thành công!");
                 fetchUsers(); 
@@ -81,7 +88,31 @@ export default function AdminUserManagement() {
         }
     };
 
-    // 3. HÀM LƯU / CẬP NHẬT 
+    // 3. HÀM KHÓA/MỞ KHÓA TÀI KHOẢN
+    const handleToggleLock = async (id, currentStatus) => {
+        const isCurrentlyLocked = currentStatus === 'locked';
+        const newStatus = isCurrentlyLocked ? 'active' : 'locked';
+        const confirmMsg = isCurrentlyLocked 
+            ? "MỞ KHÓA tài khoản này để người dùng có thể tiếp tục sử dụng?"
+            : "KHÓA tài khoản này? Người dùng sẽ không thể truy cập các chức năng của hệ thống.";
+
+        if (!window.confirm(confirmMsg)) return;
+
+        setLoading(true);
+        try {
+            const targetCollection = activeTab === 'TEACHER' ? 'users' : 'student_profiles';
+            const userRef = doc(firestore, targetCollection, id);
+
+            await updateDoc(userRef, { status: newStatus });
+            setAllUsers(prev => prev.map(u => u.id === id ? { ...u, status: newStatus } : u));
+        } catch (error) {
+            alert("Lỗi khi cập nhật trạng thái: " + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // 4. HÀM LƯU / CẬP NHẬT 
     const handleSave = async () => {
         if (!currentUser.name) return alert("Vui lòng nhập tên!");
         setLoading(true);
@@ -93,14 +124,15 @@ export default function AdminUserManagement() {
                 await updateDoc(userRef, {
                     name: currentUser.name,
                     expireDate: currentUser.expireDate || "",
-                    status: 'active',
+                    status: currentUser.status || 'active', 
                     role: 'teacher'
                 });
             } else {
                 await updateDoc(userRef, {
                     fullName: currentUser.name,
                     nickname: currentUser.name,
-                    grade: currentUser.grade || "10"
+                    grade: currentUser.grade || "10",
+                    status: currentUser.status || 'active'
                 });
             }
             
@@ -158,109 +190,192 @@ export default function AdminUserManagement() {
 
             {/* TABLE */}
             <div className="max-w-7xl mx-auto bg-slate-900/30 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-xl">
-                <table className="w-full text-left">
-                    <thead>
-                        <tr className="bg-slate-900/50 border-b border-slate-800">
-                            <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Người dùng</th>
-                            <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">
-                                {activeTab === 'TEACHER' ? 'Trạng thái & Thời hạn' : 'Thông tin Học tập'}
-                            </th>
-                            <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase text-right">Thao tác</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/50">
-                        {loading ? (
-                            <tr><td colSpan="3" className="px-6 py-12 text-center text-slate-500">Đang kiểm tra bảo mật và tải dữ liệu...</td></tr>
-                        ) : filteredUsers.length === 0 ? (
-                            <tr><td colSpan="3" className="px-6 py-12 text-center text-slate-500">Không tìm thấy tài khoản nào</td></tr>
-                        ) : filteredUsers.map((user) => {
-                            
-                            // LOGIC KIỂM TRA HẾT HẠN (Sẽ chạy với mỗi user)
-                            let isExpired = false;
-                            if (activeTab === 'TEACHER' && user.expireDate) {
-                                const exp = new Date(user.expireDate);
-                                const now = new Date();
-                                exp.setHours(0,0,0,0);
-                                now.setHours(0,0,0,0);
-                                isExpired = now > exp;
-                            }
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="bg-slate-900/50 border-b border-slate-800">
+                                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase w-16 text-center">TT</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Người dùng</th>
+                                
+                                {/* CỘT NGÀY ĐĂNG KÝ */}
+                                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase text-center">Ngày đăng ký</th>
+                                
+                                {/* CỘT THỜI GIAN CÒN LẠI (Chỉ hiển thị ở tab Giáo viên) */}
+                                {activeTab === 'TEACHER' && (
+                                    <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase text-center">Thời gian còn lại</th>
+                                )}
 
-                            return (
-                                <tr key={user.id} className="hover:bg-slate-800/30 transition group">
-                                    <td className="px-6 py-4">
-                                        <div className="font-bold text-white flex items-center gap-2">
-                                            {activeTab === 'STUDENT' && user.photoURL && <img src={user.photoURL} className="w-6 h-6 rounded-full border border-slate-600"/>}
-                                            {user.name || user.fullName || 'Chưa cập nhật'}
-                                        </div>
-                                        <div className="text-xs text-slate-500 font-mono mt-1">{user.email || user.phone}</div>
-                                    </td>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">
+                                    {activeTab === 'TEACHER' ? 'Trạng thái & Thời hạn' : 'Thông tin Học tập'}
+                                </th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase text-center w-28">Khóa TK</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase text-right">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/50">
+                            {loading ? (
+                                <tr><td colSpan={activeTab === 'TEACHER' ? 7 : 6} className="px-6 py-12 text-center text-slate-500">Đang tải và sắp xếp dữ liệu mới nhất...</td></tr>
+                            ) : filteredUsers.length === 0 ? (
+                                <tr><td colSpan={activeTab === 'TEACHER' ? 7 : 6} className="px-6 py-12 text-center text-slate-500">Không tìm thấy tài khoản nào</td></tr>
+                            ) : filteredUsers.map((user, index) => {
+                                
+                                // LOGIC KIỂM TRA HẾT HẠN & SỐ NGÀY CÒN LẠI
+                                let isExpired = false;
+                                let remainingDays = null;
+
+                                if (activeTab === 'TEACHER' && user.expireDate) {
+                                    const exp = new Date(user.expireDate);
+                                    const now = new Date();
                                     
-                                    <td className="px-6 py-4">
-                                        {activeTab === 'TEACHER' ? (
-                                            // CỘT HIỂN THỊ CỦA GIÁO VIÊN
-                                            <>
-                                                {user.status !== 'active' ? (
-                                                    <span className="text-amber-400 text-[10px] font-black bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20 flex items-center gap-1 w-fit">
-                                                        <Clock size={10}/> CHỜ GIA HẠN
-                                                    </span>
-                                                ) : isExpired ? (
-                                                    <span className="text-red-400 text-[10px] font-black bg-red-500/10 px-2 py-1 rounded-lg border border-red-500/20 flex items-center gap-1 w-fit animate-pulse shadow-[0_0_10px_rgba(248,113,113,0.2)]">
-                                                        <AlertTriangle size={10}/> ĐÃ HẾT HẠN
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-emerald-400 text-[10px] font-black bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20 flex items-center gap-1 w-fit">
-                                                        <CheckCircle size={10}/> ĐÃ KÍCH HOẠT
-                                                    </span>
-                                                )}
-                                                
-                                                <div className={`text-[10px] mt-1 flex items-center gap-1 ${isExpired ? 'text-red-400 font-bold' : 'text-slate-500'}`}>
-                                                    <Calendar size={10}/> {user.expireDate || 'Vô thời hạn'}
-                                                </div>
-                                            </>
-                                        ) : (
-                                            // CỘT HIỂN THỊ CỦA HỌC SINH
-                                            <>
-                                                <span className="text-cyan-400 text-[10px] font-black bg-cyan-500/10 px-2 py-1 rounded-lg border border-cyan-500/20 flex items-center gap-1 w-fit mb-1">
-                                                    <CheckCircle size={10}/> TÀI KHOẢN ACTIVE
-                                                </span>
-                                                <div className="text-[11px] text-slate-400 font-bold uppercase flex items-center gap-2">
-                                                    <span>LỚP {user.grade || '10'}</span> 
-                                                    <span className="text-slate-600">|</span> 
-                                                    <span className="text-yellow-500 flex items-center gap-1"><Star size={10} fill="currentColor"/> {user.totalScore || 0} XP</span>
-                                                </div>
-                                            </>
-                                        )}
-                                    </td>
+                                    exp.setHours(0,0,0,0);
+                                    now.setHours(0,0,0,0);
+                                    
+                                    const diffTime = exp - now;
+                                    remainingDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                    isExpired = remainingDays < 0;
+                                }
 
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex justify-end gap-2">
+                                const isLocked = user.status === 'locked';
+
+                                // XỬ LÝ FORMAT NGÀY ĐĂNG KÝ
+                                let regDate = '---';
+                                if (user.createdAt) {
+                                    if (user.createdAt.seconds) {
+                                        regDate = new Date(user.createdAt.seconds * 1000).toLocaleDateString('vi-VN');
+                                    } else {
+                                        const d = new Date(user.createdAt);
+                                        if (!isNaN(d)) regDate = d.toLocaleDateString('vi-VN');
+                                    }
+                                }
+
+                                return (
+                                    <tr key={user.id} className={`hover:bg-slate-800/30 transition group ${isLocked ? 'opacity-60 grayscale-[50%]' : ''}`}>
+                                        <td className="px-6 py-4 text-center text-slate-500 font-mono font-bold text-sm">
+                                            {index + 1}
+                                        </td>
+
+                                        <td className="px-6 py-4">
+                                            <div className="font-bold text-white flex items-center gap-2">
+                                                {activeTab === 'STUDENT' && user.photoURL && <img src={user.photoURL} className="w-6 h-6 rounded-full border border-slate-600"/>}
+                                                {user.name || user.fullName || 'Chưa cập nhật'}
+                                            </div>
+                                            <div className="text-xs text-slate-500 font-mono mt-1">{user.email || user.phone}</div>
+                                        </td>
+
+                                        {/* HIỂN THỊ NGÀY ĐĂNG KÝ */}
+                                        <td className="px-6 py-4 text-center">
+                                            <span className="text-xs text-slate-400 font-mono bg-slate-800/50 px-2 py-1 rounded-md border border-slate-700/50 inline-block">
+                                                {regDate}
+                                            </span>
+                                        </td>
+                                        
+                                        {activeTab === 'TEACHER' && (
+                                            <td className="px-6 py-4 text-center">
+                                                {user.status !== 'active' && !isLocked ? (
+                                                    <span className="text-slate-500 text-xs italic">Chưa kích hoạt</span>
+                                                ) : remainingDays !== null ? (
+                                                    remainingDays > 0 ? (
+                                                        <span className="text-emerald-400 font-bold text-xs bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20 flex items-center justify-center gap-1 w-fit mx-auto">
+                                                            <Timer size={12}/> Còn {remainingDays} ngày
+                                                        </span>
+                                                    ) : remainingDays === 0 ? (
+                                                        <span className="text-orange-400 font-bold text-xs bg-orange-500/10 px-3 py-1.5 rounded-full border border-orange-500/20 flex items-center justify-center gap-1 w-fit mx-auto animate-pulse">
+                                                            <Timer size={12}/> Hết hạn hôm nay
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-red-400 font-bold text-xs bg-red-500/10 px-3 py-1.5 rounded-full border border-red-500/20 flex items-center justify-center gap-1 w-fit mx-auto">
+                                                            <AlertTriangle size={12}/> Quá hạn {Math.abs(remainingDays)} ngày
+                                                        </span>
+                                                    )
+                                                ) : (
+                                                    <span className="text-slate-500 text-xs italic">Vô thời hạn</span>
+                                                )}
+                                            </td>
+                                        )}
+
+                                        <td className="px-6 py-4">
+                                            {isLocked ? (
+                                                <span className="text-red-500 text-[10px] font-black bg-red-500/10 px-2 py-1 rounded-lg border border-red-500/20 flex items-center gap-1 w-fit">
+                                                    <Lock size={10}/> ĐÃ BỊ KHÓA
+                                                </span>
+                                            ) : activeTab === 'TEACHER' ? (
+                                                <>
+                                                    {user.status !== 'active' ? (
+                                                        <span className="text-amber-400 text-[10px] font-black bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20 flex items-center gap-1 w-fit">
+                                                            <Clock size={10}/> CHỜ GIA HẠN
+                                                        </span>
+                                                    ) : isExpired ? (
+                                                        <span className="text-red-400 text-[10px] font-black bg-red-500/10 px-2 py-1 rounded-lg border border-red-500/20 flex items-center gap-1 w-fit animate-pulse shadow-[0_0_10px_rgba(248,113,113,0.2)]">
+                                                            <AlertTriangle size={10}/> ĐÃ HẾT HẠN
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-emerald-400 text-[10px] font-black bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20 flex items-center gap-1 w-fit">
+                                                            <CheckCircle size={10}/> ĐÃ KÍCH HOẠT
+                                                        </span>
+                                                    )}
+                                                    
+                                                    <div className={`text-[10px] mt-1 flex items-center gap-1 ${isExpired ? 'text-red-400 font-bold' : 'text-slate-500'}`}>
+                                                        <Calendar size={10}/> {user.expireDate || 'Vô thời hạn'}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="text-cyan-400 text-[10px] font-black bg-cyan-500/10 px-2 py-1 rounded-lg border border-cyan-500/20 flex items-center gap-1 w-fit mb-1">
+                                                        <CheckCircle size={10}/> TÀI KHOẢN ACTIVE
+                                                    </span>
+                                                    <div className="text-[11px] text-slate-400 font-bold uppercase flex items-center gap-2">
+                                                        <span>LỚP {user.grade || '10'}</span> 
+                                                        <span className="text-slate-600">|</span> 
+                                                        <span className="text-yellow-500 flex items-center gap-1"><Star size={10} fill="currentColor"/> {user.totalScore || 0} XP</span>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </td>
+
+                                        <td className="px-6 py-4 text-center">
                                             <button 
-                                                onClick={() => { 
-                                                    setCurrentUser({
-                                                        ...user,
-                                                        name: user.name || user.fullName || ''
-                                                    }); 
-                                                    setIsModalOpen(true); 
-                                                }}
-                                                className="p-2 hover:bg-indigo-500/20 text-indigo-400 rounded-lg transition"
-                                                title="Chỉnh sửa / Gia hạn"
+                                                onClick={() => handleToggleLock(user.id, user.status)}
+                                                className={`p-2 rounded-xl border transition-all ${
+                                                    isLocked 
+                                                        ? 'bg-red-500/20 border-red-500/50 text-red-500 hover:bg-red-500/30' 
+                                                        : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20'
+                                                }`}
+                                                title={isLocked ? 'Tài khoản đang khóa. Bấm để MỞ KHÓA' : 'Bấm để KHÓA tài khoản'}
                                             >
-                                                <Edit size={18} />
+                                                {isLocked ? <Lock size={16} /> : <Unlock size={16} />}
                                             </button>
-                                            <button 
-                                                onClick={() => handleDelete(user.id)}
-                                                className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition"
-                                                title="Xóa vĩnh viễn"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
+                                        </td>
+
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button 
+                                                    onClick={() => { 
+                                                        setCurrentUser({
+                                                            ...user,
+                                                            name: user.name || user.fullName || ''
+                                                        }); 
+                                                        setIsModalOpen(true); 
+                                                    }}
+                                                    className="p-2 hover:bg-indigo-500/20 text-indigo-400 rounded-lg transition"
+                                                    title="Chỉnh sửa / Gia hạn"
+                                                >
+                                                    <Edit size={18} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDelete(user.id)}
+                                                    className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition"
+                                                    title="Xóa vĩnh viễn"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {/* MODAL SỬA THÔNG TIN */}
@@ -287,6 +402,7 @@ export default function AdminUserManagement() {
                                         type="date" value={currentUser.expireDate} onChange={e => setCurrentUser({...currentUser, expireDate: e.target.value})}
                                         className="w-full bg-slate-800 border border-indigo-500/30 rounded-xl p-3 outline-none focus:border-indigo-500 text-white font-mono"
                                     />
+                                    <p className="text-[10px] text-slate-500 mt-1 italic">* Chọn ngày giới hạn tài khoản, hoặc để trống nếu vô thời hạn.</p>
                                 </div>
                             ) : (
                                 <div>
