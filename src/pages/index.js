@@ -304,17 +304,19 @@ export default function HomePage() {
               {[...Array(8)].map((_, index) => {
                   const isKHBD = index === 0;
                   const isTest = index === 1;
-                  const title = isKHBD ? "Soạn KHBD" : isTest ? "Soạn Đề Kiểm Tra" : "";
+                  const isMixer = index === 2; // Thêm biến nhận diện ô số 3 là Trộn Đề
+                  const title = isKHBD ? "Soạn KHBD" : isTest ? "Soạn Đề Kiểm Tra" : isMixer ? "Trộn Đề" : "";
 
-                  // Xử lý sự kiện click: Chỉ tác dụng với 2 ô đầu
+                  // Xử lý sự kiện click: Yêu cầu đăng nhập cho cả 3 ô
                   const handleMenuClick = () => {
-                      if (isKHBD || isTest) {
+                      if (isKHBD || isTest || isMixer) {
                           if (!user) {
                               setShowAuthModal(true);
                               setAuthMode('LOGIN');
                           } else {
                               if (isKHBD) router.push('/lesson-plan');
                               if (isTest) router.push('/create-test');
+                              if (isMixer) router.push('/mixer'); // Chuyển hướng sang trang Trộn Đề
                           }
                       }
                   };
@@ -383,14 +385,14 @@ export default function HomePage() {
                     {[...Array(8)].map((_, index) => {
                         const isSpin = index === 0;
                         const isVote = index === 1;
-                        const isMixer = index === 2;
+                        const isPracticeBox = index === 2; // Đổi ô Mixer cũ thành ô Practice
                         const isGrade = index >= 3 && index <= 7;
                         const gradeNum = isGrade ? index - 2 : null;
 
                         const handleClick = () => {
                             if (isSpin) router.push('/bottom/SpinWheel');
                             else if (isVote) router.push('/bottom/VoteArena');
-                            else if (isMixer) router.push('/mixer');
+                           
                             else if (isGrade) router.push(`/training?grade=${gradeNum}`);
                         };
 
@@ -398,7 +400,8 @@ export default function HomePage() {
                             <button key={index} onClick={handleClick} className={`group relative w-full h-full flex flex-col items-center justify-center transition-all duration-300 border-r border-cyan-900/30 last:border-r-0 overflow-hidden cursor-pointer ${isGrade ? 'hover:flex-[1.1]' : ''}`}>
                                 
                                 {/* Nền hover cho Vòng Xoay, Vote và Trộn Đề */}
-                                {(isSpin || isVote || isMixer) && <div className="absolute inset-0 bg-gradient-to-b from-cyan-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500"></div>}
+                              {/* Nền hover cho Vòng Xoay, Vote và Luyện Tập */}
+{(isSpin || isVote || isPracticeBox) && <div className="absolute inset-0 bg-gradient-to-b from-cyan-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500"></div>}
                                 
                                 {/* Nền hover rực lửa cho Luyện Tập */}
                                 {isGrade && (
@@ -413,10 +416,10 @@ export default function HomePage() {
                                         <><Disc size={20} className="text-cyan-300 group-hover:rotate-180 transition-transform duration-700"/><span className="text-[9px] font-black uppercase text-cyan-100 tracking-wider leading-none text-center mt-1">Vòng Xoay</span></>
                                     ) : isVote ? (
                                         <><BarChart2 size={20} className="text-cyan-300 group-hover:scale-110 transition-transform duration-300"/><span className="text-[9px] font-black uppercase text-cyan-100 tracking-wider leading-none text-center mt-1">Vote</span></>
-                                    ) : isMixer ? (
-                                        <><Zap size={20} className="text-orange-400 group-hover:scale-125 group-hover:text-yellow-300 transition-all duration-300"/><span className="text-[9px] font-black uppercase text-orange-200 group-hover:text-yellow-100 tracking-wider leading-none text-center mt-1">Trộn Đề</span></>
+                                    ) : isPracticeBox ? (
+                                        <><Target size={20} className="text-emerald-400 group-hover:scale-125 group-hover:text-yellow-300 transition-all duration-300"/><span className="text-[15px] font-black uppercase text-emerald-200 group-hover:text-yellow-100 tracking-wider leading-none text-center mt-1">Luyện Tập</span></>
                                     ) : isGrade ? (
-                                        <><span className="text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none mb-0.5">Luyện Tập</span><span className="text-2xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:text-white drop-shadow-md leading-none">{gradeNum}</span><span className="text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none mb-0.5">Lớp</span></>
+                                        <><span className="text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none mb-0.5"></span><span className="text-2xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:text-white drop-shadow-md leading-none">{gradeNum}</span><span className="text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none mb-0.5">Lớp</span></>
                                     ) : null}
                                 </div>
                             </button>
