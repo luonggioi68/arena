@@ -10,9 +10,11 @@ import rehypeRaw from 'rehype-raw';
 import remarkMath from 'remark-math'; 
 import rehypeKatex from 'rehype-katex'; 
 import 'katex/dist/katex.min.css'; 
+import * as mammoth from 'mammoth'; // THƯ VIỆN ĐỌC DOCX
 import { 
     ArrowLeft, Sparkles, Download, Loader2, Settings, 
-    FileText, Target, BrainCircuit, Clock, PenTool, LayoutTemplate, AlertCircle, BookOpen
+    FileText, Target, BrainCircuit, Clock, PenTool, LayoutTemplate, AlertCircle, BookOpen,
+    Upload, X // THÊM ICON UPLOAD VÀ XÓA
 } from 'lucide-react';
 
 const SUBJECTS = ["Tin học", "Toán học", "Ngữ văn", "Tiếng Anh", "Vật lí", "Hóa học", "Sinh học", "Lịch sử", "Địa lí", "GDCD", "Công nghệ"];
@@ -30,6 +32,11 @@ export default function FullTestGenerator() {
   const [duration, setDuration] = useState(45);
   const [testScope, setTestScope] = useState(''); 
   
+  // STATE CHO FILE UPLOAD
+  const [uploadedText, setUploadedText] = useState('');
+  const [uploadedFileName, setUploadedFileName] = useState('');
+  const [isExtracting, setIsExtracting] = useState(false);
+
   const [matrix, setMatrix] = useState({
       mcq: { b: 4, h: 4, vd: 4, point: 0.25 }, 
       tf: { b: 8, h: 4, vd: 4, point: 1.0 },   
@@ -47,6 +54,54 @@ export default function FullTestGenerator() {
     });
     return () => unsubscribe();
   }, [router]);
+
+  // HÀM XỬ LÝ ĐỌC FILE (.txt, .docx)
+  const handleFileUpload = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const fileType = file.name.split('.').pop().toLowerCase();
+      if (fileType !== 'txt' && fileType !== 'docx') {
+          return alert("Hệ thống hiện tại chỉ hỗ trợ file .txt và .docx!");
+      }
+
+      setUploadedFileName(file.name);
+      setIsExtracting(true);
+
+      try {
+          const reader = new FileReader();
+          
+          if (fileType === 'txt') {
+              reader.onload = (event) => {
+                  setUploadedText(event.target.result);
+                  setIsExtracting(false);
+              };
+              reader.readAsText(file);
+          } 
+          else if (fileType === 'docx') {
+              reader.onload = async (event) => {
+                  const arrayBuffer = event.target.result;
+                  const result = await mammoth.extractRawText({ arrayBuffer });
+                  setUploadedText(result.value);
+                  setIsExtracting(false);
+              };
+              reader.readAsArrayBuffer(file);
+          }
+      } catch (error) {
+          console.error("Lỗi đọc file:", error);
+          alert("Có lỗi xảy ra khi đọc file!");
+          setIsExtracting(false);
+          setUploadedFileName('');
+      }
+      
+      // Reset input để có thể chọn lại cùng một file nếu cần
+      e.target.value = null;
+  };
+
+  const clearUploadedFile = () => {
+      setUploadedText('');
+      setUploadedFileName('');
+  };
 
   const handleMatrixChange = (type, level, value) => {
       let val = parseFloat(value);
@@ -92,7 +147,11 @@ export default function FullTestGenerator() {
 
   const handleGenerateTest = async () => {
     if (!testTitle.trim()) return alert("Vui lòng nhập Tiêu đề bài kiểm tra!");
-    if (!testScope.trim()) return alert("Vui lòng nhập Phạm vi kiểm tra (VD: Từ bài 1 đến bài 4)!");
+    
+    // Đã cập nhật kiểm tra lỗi: Cần nhập phạm vi HOẶC tải file lên
+    if (!testScope.trim() && !uploadedText.trim()) {
+        return alert("Vui lòng nhập Phạm vi kiểm tra (VD: Từ bài 1 đến bài 4) hoặc Tải tệp Đề cương lên!");
+    }
     
     if (totalTF_Y % 4 !== 0) {
         return alert(`CẢNH BÁO: Phần Đúng/Sai đang có tổng cộng ${totalTF_Y} ý.\nTheo quy định, mỗi câu phải có 4 ý (a,b,c,d).\nVui lòng điều chỉnh lại số lượng B, H, VD sao cho tổng chia hết cho 4!`);
@@ -129,6 +188,11 @@ export default function FullTestGenerator() {
         const selectedModel = config.geminiModel || "gemini-1.5-pro";
         const model = genAI.getGenerativeModel({ model: selectedModel });
 
+        // TẠO NGỮ LIỆU BẮT BUỘC TỪ FILE UPLOAD
+        const contextPrompt = uploadedText 
+            ? `\n**NGỮ LIỆU ĐẦU VÀO CỦA GIÁO VIÊN (SỐNG CÒN):**\n"""\n${uploadedText}\n"""\n\n**QUY TẮC BÁM SÁT NGỮ LIỆU (CHỐNG ẢO GIÁC):**\n1. Bạn BẮT BUỘC phải dựa 100% vào nội dung văn bản "NGỮ LIỆU ĐẦU VÀO" được cung cấp ở trên để tạo câu hỏi và ma trận.\n2. Mọi câu hỏi Trắc nghiệm, Đúng/Sai, Trả lời ngắn, Tự luận TUYỆT ĐỐI không được sử dụng kiến thức, số liệu hay thuật ngữ nằm ngoài văn bản này.\n3. Nếu có dữ liệu mâu thuẫn giữa kiến thức chung của bạn và "Ngữ liệu đầu vào", BẮT BUỘC phải tuân theo "Ngữ liệu đầu vào".\n`
+            : "";
+
         const prompt = `
 Bạn là một Chuyên gia Khảo thí giáo dục. Hãy tạo một Bộ Đề Kiểm Tra đầy đủ 4 phần chuẩn form cấu trúc 2025 của Bộ GD&ĐT.
 
@@ -137,11 +201,12 @@ Bạn là một Chuyên gia Khảo thí giáo dục. Hãy tạo một Bộ Đề
 - Sách giáo khoa: ${textbook}
 - Tiêu đề: ${testTitle}
 - Thời gian: ${duration} phút
-- PHẠM VI KIẾN THỨC: """${testScope}"""
+- PHẠM VI KIẾN THỨC BỔ SUNG: """${testScope}"""
+${contextPrompt}
 
 **QUY TẮC SÁCH GIÁO KHOA VÀ NỘI DUNG (SỐNG CÒN - KHÔNG ĐƯỢC LÀM SAI):**
-1. LẤY CHÍNH XÁC TÊN BÀI: Dựa vào "Phạm vi kiến thức" được giao, BẮT BUỘC phải tra cứu và sử dụng ĐÚNG TÊN BÀI HỌC CÓ THẬT trong sách giáo khoa "${textbook}" môn ${subject} lớp ${grade}. TUYỆT ĐỐI KHÔNG BỊA TÊN BÀI, KHÔNG THÊM TỪ NGỮ LINH TINH VÀO TÊN BÀI.
-2. BÁM SÁT KIẾN THỨC 100%: Mọi câu hỏi (trắc nghiệm, đúng sai, trả lời ngắn, tự luận) BẮT BUỘC phải nằm hoàn toàn trong nội dung kiến thức của các bài học thuộc bộ sách "${textbook}" này. Tuyệt đối không hỏi kiến thức ngoài chương trình, không lấy dữ liệu từ sách khác.
+1. LẤY CHÍNH XÁC TÊN BÀI: Dựa vào "Phạm vi kiến thức" hoặc "Ngữ liệu" được giao, BẮT BUỘC phải tra cứu và sử dụng ĐÚNG TÊN BÀI HỌC. TUYỆT ĐỐI KHÔNG BỊA TÊN BÀI.
+2. BÁM SÁT KIẾN THỨC 100%: Mọi câu hỏi (trắc nghiệm, đúng sai, trả lời ngắn, tự luận) BẮT BUỘC phải nằm hoàn toàn trong nội dung kiến thức của bộ sách "${textbook}" hoặc Ngữ liệu đã cho.
 
 **CẤU TRÚC MA TRẬN YÊU CẦU:**
 1. Phần I. Trắc nghiệm nhiều lựa chọn: Tổng ${getTotalQ_Normal('mcq')} câu (Biết: ${matrix.mcq.b}, Hiểu: ${matrix.mcq.h}, Vận dụng: ${matrix.mcq.vd}).
@@ -521,14 +586,44 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
                       <input value={testTitle} onChange={e=>setTestTitle(e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-lg outline-none focus:border-red-500 text-white font-bold text-sm" placeholder="VD: ĐỀ KIỂM TRA GIỮA KÌ 1"/>
                   </div>
 
+                  {/* KHỐI GIAO DIỆN UPLOAD VÀ NHẬP PHẠM VI */}
                   <div className="bg-slate-900/50 p-3 rounded-lg border border-red-500/30">
-                      <label className="block text-[10px] font-black text-red-400 mb-1 uppercase">Phạm vi kiến thức(Để chính xác nhập tên từng bài)</label>
+                      <div className="flex justify-between items-end mb-2">
+                          <label className="block text-[10px] font-black text-red-400 uppercase">Phạm vi (Nhập tay hoặc tải tệp)</label>
+                          
+                          {/* NÚT UPLOAD FILE */}
+                          <input 
+                              type="file" 
+                              id="file-upload" 
+                              accept=".txt, .docx" 
+                              onChange={handleFileUpload} 
+                              className="hidden" 
+                          />
+                          <label htmlFor="file-upload" className="cursor-pointer flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-[10px] text-blue-400 px-2 py-1 rounded border border-blue-500/30 transition">
+                              {isExtracting ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                              {isExtracting ? 'Đang đọc...' : 'Tải Đề cương (.docx/.txt)'}
+                          </label>
+                      </div>
+
+                      {/* HIỂN THỊ TRẠNG THÁI FILE ĐÃ TẢI LÊN */}
+                      {uploadedFileName && (
+                          <div className="flex justify-between items-center bg-blue-900/20 border border-blue-500/50 p-2 mb-2 rounded text-xs text-blue-300">
+                              <div className="flex items-center gap-2 truncate">
+                                  <FileText size={14} className="text-blue-400 shrink-0" />
+                                  <span className="truncate">Đã tải: <strong>{uploadedFileName}</strong></span>
+                              </div>
+                              <button onClick={clearUploadedFile} className="text-red-400 hover:text-red-300 bg-red-400/10 p-1 rounded transition shrink-0">
+                                  <X size={14} />
+                              </button>
+                          </div>
+                      )}
+
                       <textarea 
                           value={testScope} 
                           onChange={e=>setTestScope(e.target.value)} 
-                          rows={3} 
+                          rows={2} 
                           className="w-full bg-[#020617] border border-red-900 p-2 rounded-md outline-none focus:border-red-500 text-slate-200 text-xs" 
-                          placeholder="VD: Bài 1:..."
+                          placeholder="VD: Bài 1:... (Nếu đã tải tệp lên, có thể ghi chú thêm hoặc bỏ trống)"
                       />
                   </div>
 
