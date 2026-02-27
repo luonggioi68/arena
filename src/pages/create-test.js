@@ -28,7 +28,7 @@ export default function FullTestGenerator() {
   const [subject, setSubject] = useState('Tin học');
   const [grade, setGrade] = useState('12');
   const [textbook, setTextbook] = useState('Kết nối tri thức');
-  const [testTitle, setTestTitle] = useState('ĐỀ KIỂM TRA GIỮA HỌC KÌ 1');
+  const [testTitle, setTestTitle] = useState('ĐỀ KIỂM TRA GIỮA HỌC KÌ 2');
   const [duration, setDuration] = useState(45);
   const [testScope, setTestScope] = useState(''); 
   
@@ -38,9 +38,9 @@ export default function FullTestGenerator() {
   const [isExtracting, setIsExtracting] = useState(false);
 
   const [matrix, setMatrix] = useState({
-      mcq: { b: 4, h: 4, vd: 4, point: 0.25 }, 
+      mcq: { b: 8, h: 2, vd: 2, point: 0.25 }, 
       tf: { b: 8, h: 4, vd: 4, point: 1.0 },   
-      sa: { b: 0, h: 0, vd: 0, point: 0.25 },  
+      sa: { b: 0, h: 0, vd: 0, point: 0.5 },  
       essay: { b: 0, h: 1, vd: 1, point: 1.5 } 
   });
 
@@ -623,7 +623,8 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
                           onChange={e=>setTestScope(e.target.value)} 
                           rows={2} 
                           className="w-full bg-[#020617] border border-red-900 p-2 rounded-md outline-none focus:border-red-500 text-slate-200 text-xs" 
-                          placeholder="VD: Bài 1:... (Nếu đã tải tệp lên, có thể ghi chú thêm hoặc bỏ trống)"
+                          placeholder="Nội dung càng chi tiết đề càng chính xác. VD: Bài 1:... (Nếu đã tải tệp lên, có thể ghi chú thêm hoặc bỏ trống)"
+                          
                       />
                   </div>
 
