@@ -4,7 +4,7 @@ import useAuthStore from '@/store/useAuthStore';
 import { auth, firestore } from '@/lib/firebase';
 import { onAuthStateChanged, signOut, updatePassword } from 'firebase/auth'; 
 import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, orderBy, addDoc, serverTimestamp, setDoc, getDoc } from 'firebase/firestore';
-import { BookOpen,Flag, Plus, Trash2, LogOut, Edit, Loader2, Shield, Gamepad2, FileText, BarChart3, Download, Search, Swords, Lock, Unlock, RefreshCw, MessageSquare, ExternalLink, Settings, UserPlus, CheckCircle, Save, Key, Users, GraduationCap, Clock, Image, LayoutTemplate, Upload, X, Hash, Link as LinkIcon, FolderOpen, QrCode, CheckSquare, Zap, UserCog, Calendar, AlertTriangle, Layers, Database, Eye, EyeOff, Archive, ArrowRightCircle, Menu } from 'lucide-react';
+import { FileCheck,BookOpen,Flag, Plus, Trash2, Home,LogOut, Edit, Loader2, Shield, Gamepad2, FileText, BarChart3, Download, Search, Swords, Lock, Unlock, RefreshCw, MessageSquare, ExternalLink, Settings, UserPlus, CheckCircle, Save, Key, Users, GraduationCap, Clock, Image, LayoutTemplate, Upload, X, Hash, Link as LinkIcon, FolderOpen, QrCode, CheckSquare, Zap, UserCog, Calendar, AlertTriangle, Layers, Database, Eye, EyeOff, Archive, ArrowRightCircle, Menu } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ExpiryAlert from '@/components/ExpiryAlert';
 
@@ -364,10 +364,14 @@ export default function Dashboard() {
                 <X size={24}/>
             </button>
         </div>
+{/* Header Sidebar */}
+      
 
+            
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
             <button onClick={() => {setActiveTab('LIBRARY'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'LIBRARY' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:bg-white/5'}`}><Gamepad2 size={18}/> ARENA KHO VŨ KHÍ</button>
             <button onClick={() => {setActiveTab('GAME_REPO'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'GAME_REPO' ? 'bg-rose-600 text-white shadow-lg shadow-rose-500/20' : 'text-slate-400 hover:bg-white/5'}`}><Database size={18}/> ARENA KHO GAME</button>
+           <button onClick={() => router.push('/pdf-manager')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm mt-1 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-900/40 shadow-[0_0_15px_rgba(6,182,212,0.15)]`}><FileCheck size={18}/> ARENA ÔN THI PDF</button>
             <button onClick={() => {setActiveTab('INTERACTIVE'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'INTERACTIVE' ? 'bg-orange-600 text-white shadow-lg shadow-orange-500/20' : 'text-slate-400 hover:bg-white/5'}`}><MessageSquare size={18}/> ARENA TƯƠNG TÁC</button>
             <button onClick={() => {setActiveTab('RESULTS'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'RESULTS' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' : 'text-slate-400 hover:bg-white/5'}`}><BarChart3 size={18}/>ARENA QUẢN LÝ THI</button>
             <button onClick={() => {setActiveTab('ASSIGNMENTS'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'ASSIGNMENTS' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:bg-white/5'}`}><FolderOpen size={18}/>ARENA CHẤM BÀI</button>
@@ -384,7 +388,28 @@ export default function Dashboard() {
             <button onClick={() => {signOut(auth); router.push('/')}} className="w-full flex items-center justify-center gap-2 text-red-400 hover:bg-red-500/10 py-3 rounded-xl font-bold uppercase text-xs transition-colors">
                 <LogOut size={16}/> Đăng xuất
             </button>
+              <button onClick={() => router.push('/')} className="w-full flex items-center justify-center gap-2 bg-slate-800/50 hover:bg-slate-700 text-slate-300 hover:text-white py-2.5 rounded-xl text-xs font-bold transition-all border border-slate-700 hover:border-slate-500 shadow-sm">
+                    <Home size={16} /> VỀ TRANG CHỦ
+                </button>
         </div>
+        {/* --- BẮT ĐẦU PHẦN THÊM MỚI: THÔNG TIN USER & TRANG CHỦ --- */}
+            <div className="px-4 py-5 border-b border-slate-800 shrink-0">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center text-white font-black shrink-0 border border-slate-700 shadow-md">
+                        {user?.displayName ? user.displayName.charAt(0).toUpperCase() : user?.email?.charAt(0).toUpperCase() || 'U'}
+                    </div>
+                    <div className="overflow-hidden">
+                        <div className="text-sm font-bold text-white truncate" title={user?.displayName || 'Quản trị viên'}>
+                            {user?.displayName || 'Quản trị viên'}
+                        </div>
+                        <div className="text-[10px] text-slate-400 truncate" title={user?.email}>
+                            {user?.email}
+                        </div>
+                    </div>
+                </div>
+              
+            </div>
+            {/* --- KẾT THÚC PHẦN THÊM MỚI --- */}
       </aside>
 
       {/* KHUNG NỘI DUNG CHÍNH (MAIN) - Đã tối ưu padding cho Mobile */}

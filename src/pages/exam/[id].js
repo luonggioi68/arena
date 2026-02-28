@@ -29,6 +29,9 @@ export default function ExamRoom() {
   
   const isSessionLoadedRef = useRef(false); 
 
+  // [VÁ LỖI]: Khởi tạo ref để lưu trữ phiên bản mới nhất của hàm handleSubmit
+  const handleSubmitRef = useRef();
+
   const sessionKey = useMemo(() => {
       if (!id || !name) return null;
       return `arena_exam_${id}_${name}_${dob}`;
@@ -169,7 +172,8 @@ export default function ExamRoom() {
         setTimeout(() => setIsCheatDetected(false), 2000);
 
         if (violationsRef.current >= MAX_VIOLATIONS) {
-            handleSubmit(true, "Gian lận quá giới hạn");
+            // [VÁ LỖI]: Gọi qua ref để luôn lấy đáp án mới nhất
+            if (handleSubmitRef.current) handleSubmitRef.current(true, "Gian lận quá giới hạn");
         } else {
             alert(`⚠️ CẢNH BÁO (${violationsRef.current}/${MAX_VIOLATIONS}): ${reason}`);
         }
@@ -205,7 +209,8 @@ export default function ExamRoom() {
         setTimeLeft(remainingSeconds);
         if (remainingSeconds <= 0) {
             clearInterval(timer);
-            handleSubmit(true, "Hết giờ làm bài");
+            // [VÁ LỖI]: Gọi qua ref để luôn lấy đáp án mới nhất
+            if (handleSubmitRef.current) handleSubmitRef.current(true, "Hết giờ làm bài");
         }
     }, 1000);
     return () => clearInterval(timer);
@@ -225,8 +230,10 @@ export default function ExamRoom() {
     const handleRouteChangeStart = (url) => {
         if (!isSubmittingRef.current) {
             const confirmLeave = window.confirm("⛔ CẢNH BÁO: Bạn đang trong thời gian làm bài!\n\nNếu bạn rời khỏi trang này, bài làm của bạn sẽ TỰ ĐỘNG ĐƯỢC NỘP với số điểm hiện tại. Bạn có chắc chắn muốn thoát?");
-            if (confirmLeave) handleSubmit(true, "Thoát trang đột ngột");
-            else {
+            // [VÁ LỖI]: Gọi qua ref để luôn lấy đáp án mới nhất
+            if (confirmLeave) {
+                if (handleSubmitRef.current) handleSubmitRef.current(true, "Thoát trang đột ngột");
+            } else {
                 router.events.emit('routeChangeError');
                 throw 'Hủy chuyển trang để bảo vệ bài thi.';
             }
@@ -348,6 +355,11 @@ export default function ExamRoom() {
         }, 100);
     }
   };
+
+  // [VÁ LỖI]: Luôn cập nhật ref với phiên bản mới nhất của handleSubmit mỗi khi component render (khi người dùng chọn đáp án mới)
+  useEffect(() => {
+    handleSubmitRef.current = handleSubmit;
+  });
 
   if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center text-white"><div className="animate-spin mr-3">⌛</div> Đang tải dữ liệu chiến trường...</div>;
 

@@ -13,7 +13,7 @@ import 'katex/dist/katex.min.css';
 import mammoth from 'mammoth';
 import { 
     ArrowLeft, Sparkles, Download, Loader2, BookOpen, Settings, 
-    CheckSquare, Square, FileText, Target, BrainCircuit, Link as LinkIcon, Users, Monitor
+    CheckSquare, Square, FileText, Target, BrainCircuit, Link as LinkIcon, Users, Monitor, AlignLeft
 } from 'lucide-react';
 
 const SUBJECTS = ["Tin học", "Toán học", "Ngữ văn", "Tiếng Anh", "Vật lí", "Hóa học", "Sinh học", "Lịch sử", "Địa lí", "GDCD", "Công nghệ"];
@@ -30,14 +30,16 @@ export default function LessonPlanner() {
   const [duration, setDuration] = useState(2);
   const [studentCount, setStudentCount] = useState(35); 
 
-  // [MỚI]: State cho Thiết bị / Học liệu
+  // State cho Thiết bị / Học liệu
   const [equipment, setEquipment] = useState('');
 
   // Năng lực, Nội dung & Tệp đính kèm
   const [competencies, setCompetencies] = useState(''); 
-  const [lessonLink, setLessonLink] = useState(''); 
-  const [sgkContent, setSgkContent] = useState('');
   
+  // [MỚI] State lưu nội dung kiến thức được dán vào (thay cho link)
+  const [rawKnowledge, setRawKnowledge] = useState(''); 
+  
+  const [sgkContent, setSgkContent] = useState('');
   const [wordName, setWordName] = useState('');
 
   // Tùy biến GV
@@ -78,7 +80,11 @@ export default function LessonPlanner() {
 
   const handleGenerateLessonPlan = async () => {
     if (!lessonName.trim()) return alert("Vui lòng nhập Tên bài học!");
-    if (!sgkContent.trim() && !lessonLink.trim()) return alert("Vui lòng cung cấp Nguồn dữ liệu (Giáo án Word hoặc Link bài học)!");
+    
+    // [ĐÃ SỬA] Validate check nội dung dán vào hoặc file Word
+    if (!sgkContent.trim() && !rawKnowledge.trim()) {
+        return alert("Vui lòng cung cấp Nguồn dữ liệu (Giáo án Word cũ HOẶC Dán nội dung kiến thức)!");
+    }
 
     setLoading(true);
     setResultMarkdown('');
@@ -108,6 +114,7 @@ export default function LessonPlanner() {
    ${allowGroupWork ? `- Bắt buộc tổ chức THẢO LUẬN NHÓM (Căn cứ sĩ số ${studentCount} HS để chia nhóm phù hợp) trong phần "d) Tổ chức thực hiện" của Hoạt động 2.` : "- TUYỆT ĐỐI KHÔNG chia nhóm, chỉ làm việc cá nhân."}
    ${allowWorksheet ? `- Thiết kế và yêu cầu học sinh sử dụng PHIẾU HỌC TẬP trong Hoạt động 2 hoặc Hoạt động 3, đồng thời xuất chi tiết Phiếu ở phần Phụ lục.` : "- KHÔNG thiết kế và không dùng Phiếu học tập."}`;
 
+        // [ĐÃ SỬA] Cập nhật Prompt cho phù hợp với nội dung Text được dán
         const prompt = `
 Bạn là một Trợ lý Giáo viên ${subject} chuyên nghiệp, nhiệm vụ chính là chuẩn hóa và nâng cấp "Kế hoạch bài dạy" theo Công văn 5512 (GDPT 2018).
 
@@ -116,12 +123,14 @@ Bạn là một Trợ lý Giáo viên ${subject} chuyên nghiệp, nhiệm vụ 
 - Tên bài học: ${lessonName}
 - Năng lực số: """${competencies}"""
 - Thiết bị dạy học và Học liệu: """${finalEquipment}"""
-- Link tham khảo: """${lessonLink}"""
-- **NỘI DUNG GỐC (Link HOẶC KHBD cũ):** """\n${sgkContent}\n"""
+- **NỘI DUNG KIẾN THỨC LÝ THUYẾT/BÀI TẬP:** """\n${rawKnowledge}\n"""
+- **NỘI DUNG GIÁO ÁN GỐC (nếu có tải lên):** """\n${sgkContent}\n"""
 
 **QUY TẮC SỐNG CÒN (BẮT BUỘC TUÂN THỦ 100%):**
 1. KẾT QUẢ BẮT BUỘC PHẢI BẮT ĐẦU NGAY bằng dòng "### **I. MỤC TIÊU**". Tuyệt đối không chào hỏi, không sinh ra Tên bài học ở đầu.
-2. XỬ LÝ NỘI DUNG GỐC: Nếu đầu vào là Giáo án cũ, hãy giữ nguyên chuyên môn. Nếu là Link, hãy copy y xì đúc tên các mục lớn làm Hoạt động 2.1, 2.2 và copy nguyên văn bài tập vào phần Luyện tập/Vận dụng.
+2. XỬ LÝ NỘI DUNG GỐC: 
+   - Nếu GV cung cấp "NỘI DUNG KIẾN THỨC LÝ THUYẾT/BÀI TẬP", hãy bóc tách các ý chính trong đó để tạo thành các tiểu mục Hoạt động 2.1, 2.2... Các bài tập đi kèm hãy đưa vào Hoạt động 3 (Luyện tập) và Hoạt động 4 (Vận dụng).
+   - Nếu GV cung cấp "NỘI DUNG GIÁO ÁN GỐC", hãy chuẩn hóa nó theo khung 5512, giữ nguyên vẹn nội dung chuyên môn của GV.
 3. BỐI CẢNH: Lớp học có đúng ${studentCount} học sinh.
 4. BẢNG BIỂU (TABLE): Bắt buộc kẻ bảng Markdown nếu có nội dung dạng bảng.
 5. QUY TẮC CÁC MỤC A, B, C, D: KHÔNG SỬ DỤNG DẤU CHẤM TRÒN (BULLET) CHO CÁC MỤC a, b, c, d. Viết in đậm liền lề trái. Đảm bảo trước mỗi mục a, b, c, d luôn là 1 dòng trống.
@@ -342,7 +351,7 @@ ${nlSoText}
                       />
                   </div>
 
-                  {/* KHUNG NẠP DỮ LIỆU ĐÃ LƯỢC BỎ PDF */}
+                  {/* KHUNG NẠP DỮ LIỆU [ĐÃ SỬA] */}
                   <div className="bg-slate-900/50 p-4 rounded-xl border border-blue-500/30 space-y-4">
                       <label className="block text-xs font-black text-blue-400 uppercase flex items-center gap-1">
                           <BookOpen size={16}/> Nguồn dữ liệu (Chọn 1 trong 2)
@@ -357,16 +366,20 @@ ${nlSoText}
                       </div>
 
                       <div className="flex items-center gap-2 opacity-30">
-                          <div className="flex-1 h-px bg-slate-700"></div><span className="text-[9px] font-bold">HOẶC DÙNG INTERNET</span><div className="flex-1 h-px bg-slate-700"></div>
+                          <div className="flex-1 h-px bg-slate-700"></div><span className="text-[9px] font-bold">HOẶC SOẠN MỚI</span><div className="flex-1 h-px bg-slate-700"></div>
                       </div>
 
+                      {/* GIAO DIỆN TEXTAREA MỚI THAY CHO Ô DÁN LINK */}
                       <div>
-                          <label className="text-[10px] font-bold text-slate-400 flex items-center gap-1 mb-1.5"><LinkIcon size={12}/> 2. Soạn mới: Dán Link bài học(độ chính xác không cao)</label>
-                          <input 
-                              value={lessonLink} 
-                              onChange={e=>setLessonLink(e.target.value)} 
-                              className="w-full bg-[#020617] border border-blue-900 p-2.5 rounded-lg outline-none focus:border-blue-500 text-blue-300 text-sm placeholder:text-slate-600" 
-                              placeholder="Dán link Vietjack, Loigiaihay..."
+                          <label className="text-[10px] font-bold text-slate-400 flex items-center gap-1 mb-1.5">
+                              <AlignLeft size={12}/> 2. Soạn mới: Dán nội dung kiến thức (Độ chính xác cao)
+                          </label>
+                          <textarea 
+                              value={rawKnowledge} 
+                              onChange={e=>setRawKnowledge(e.target.value)} 
+                              rows={5}
+                              className="w-full bg-[#020617] border border-blue-900 p-3 rounded-lg outline-none focus:border-blue-500 text-blue-300 text-sm placeholder:text-slate-600 custom-scrollbar" 
+                              placeholder="Copy đoạn văn bản lý thuyết, ví dụ, bài tập từ SGK PDF hoặc trang web và dán vào đây để AI chia hoạt động chính xác nhất..."
                           />
                       </div>
                   </div>
@@ -443,7 +456,6 @@ ${nlSoText}
                       </div>
 
                       <div style={{ fontFamily: "'Times New Roman', serif" }}>
-                          {/* SỬ DỤNG REMARK-MATH VÀ REHYPE-KATEX ĐỂ RENDER TOÁN TRÊN WEB */}
                           <ReactMarkdown 
                               remarkPlugins={[remarkGfm, remarkMath]}
                               rehypePlugins={[rehypeRaw, rehypeKatex]} 
