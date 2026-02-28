@@ -65,7 +65,7 @@ export default function HomePage() {
       return onSnapshot(statsRef, (doc) => { if (doc.exists()) setRealVisitorCount(doc.data().count || 0); });
   }, []);
 
-  const handleGoogleLogin = async () => {
+ const handleGoogleLogin = async () => {
       try {
           const result = await signInWithPopup(auth, googleProvider);
           const user = result.user;
@@ -73,6 +73,7 @@ export default function HomePage() {
           const userSnap = await getDoc(userRef);
 
           if (!userSnap.exists()) {
+              // NẾU TÀI KHOẢN MỚI -> LƯU VÀO DB VÀ ĐẨY SANG SETUP-CONFIG
               await setDoc(userRef, {
                   name: user.displayName,
                   email: user.email,
@@ -81,8 +82,13 @@ export default function HomePage() {
                   createdAt: serverTimestamp(),
                   expireDate: expireDateString 
               });
+              setShowAuthModal(false);
+              router.push('/setup-config'); 
+          } else {
+              // NẾU TÀI KHOẢN ĐÃ CÓ -> ĐẨY THẲNG VÀO DASHBOARD
+              setShowAuthModal(false);
+              router.push('/dashboard');
           }
-          router.push('/dashboard');
       } catch (error) {
           console.error(error);
       }
@@ -111,7 +117,7 @@ export default function HomePage() {
               });
 
               setShowAuthModal(false);
-              router.push('/dashboard'); 
+              router.push('/setup-config'); 
 
           } else if (authMode === 'LOGIN') {
               await signInWithEmailAndPassword(auth, authData.email, authData.password);
