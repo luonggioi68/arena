@@ -23,18 +23,22 @@ export default function ArenaOnThi() {
     const [searchTeacher, setSearchTeacher] = useState('');
 
     useEffect(() => {
+        // 1. Lắng nghe trạng thái auth chỉ để hiển thị giao diện góc phải (Đăng nhập / Tên User)
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
             setUser(currentUser);
         });
 
+        // 2. Tải dữ liệu Đề thi và Bảng xếp hạng TRỰC TIẾP (Không cần chờ đăng nhập)
         const fetchData = async () => {
             try {
+                // Tải toàn bộ Đề thi
                 const qExams = query(collection(firestore, "pdf_exams"), where("status", "==", "OPEN"));
                 const snapExams = await getDocs(qExams);
                 const examsData = snapExams.docs.map(d => ({ id: d.id, ...d.data() }));
                 examsData.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
                 setExams(examsData);
 
+                // Tải & Tính toán Bảng Xếp Hạng
                 const snapResults = await getDocs(collection(firestore, "pdf_exam_results"));
                 const scoresMap = {};
                 
@@ -202,36 +206,46 @@ export default function ArenaOnThi() {
                                         <div className="h-px bg-slate-800 flex-1"></div>
                                     </div>
 
-                                    {/* [VÁ LỖI GIAO DIỆN MOBILE]: Đã sửa overflow-hidden thành overflow-x-auto và thêm min-w để bảng có thể vuốt ngang trên điện thoại mà không bị vỡ bố cục */}
-                                    <div className="bg-[#18181b] rounded-3xl border border-slate-800 overflow-x-auto no-scrollbar shadow-2xl">
-                                        <table className="w-full text-left min-w-[700px] lg:min-w-full">
-                                            <thead className="bg-slate-900/50 text-[10px] font-black text-cyan-400 uppercase tracking-widest border-b border-slate-800">
+                                    <div className="bg-[#18181b] rounded-2xl sm:rounded-3xl border border-slate-800 overflow-x-auto custom-scrollbar shadow-2xl relative">
+                                        <table className="w-full text-left min-w-[600px] lg:min-w-full border-collapse">
+                                            <thead className="bg-slate-900 text-[10px] font-black text-cyan-400 uppercase tracking-widest border-b border-slate-800">
                                                 <tr>
-                                                    <th className="p-4 w-12 text-center shrink-0">TT</th>
-                                                    <th className="p-4">Tên Đề / Mã</th>
-                                                    <th className="p-4 text-center shrink-0">Ngày tạo</th>
-                                                    <th className="p-4 text-center shrink-0">Số câu</th>
-                                                    <th className="p-4 text-center shrink-0">Thời gian</th>
-                                                    <th className="p-4 text-center w-32 shrink-0">Thao tác</th>
+                                                    <th className="p-3 sm:p-4 w-10 sm:w-12 text-center shrink-0">TT</th>
+                                                    <th className="p-3 sm:p-4 min-w-[180px]">Tên Đề / Mã</th>
+                                                    <th className="p-3 sm:p-4 text-center shrink-0">Ngày tạo</th>
+                                                    <th className="p-3 sm:p-4 text-center shrink-0">Số câu</th>
+                                                    <th className="p-3 sm:p-4 text-center shrink-0">Thời gian</th>
+                                                    
+                                                    {/* THAO TÁC (Được ghim dính ở mép phải) */}
+                                                    <th className="p-3 sm:p-4 text-center w-24 sm:w-32 shrink-0 sticky right-0 bg-slate-900 shadow-[-8px_0_15px_-5px_rgba(0,0,0,0.5)] z-20 border-l border-slate-800">Thao tác</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-800/50">
                                                 {subExams.map((exam, idx) => (
-                                                    <tr key={exam.id} className="hover:bg-slate-800/40 transition-colors group">
-                                                        <td className="p-4 text-center font-mono text-slate-500">{idx + 1}</td>
-                                                        <td className="p-4">
-                                                            <div className="font-bold text-white group-hover:text-cyan-400 transition-colors">{exam.title}</div>
+                                                    <tr key={exam.id} className="bg-[#18181b] hover:bg-slate-800 transition-colors group">
+                                                        <td className="p-3 sm:p-4 text-center font-mono text-slate-500">{idx + 1}</td>
+                                                        <td className="p-3 sm:p-4">
+                                                            {/* Bổ sung click vào tiêu đề để vào thi */}
+                                                            <div 
+                                                                onClick={() => router.push(`/pdf-play/${exam.code}`)}
+                                                                className="font-bold text-white group-hover:text-cyan-400 transition-colors cursor-pointer"
+                                                                title="Nhấn để vào thi"
+                                                            >
+                                                                {exam.title}
+                                                            </div>
                                                             <div className="text-[10px] text-slate-500 font-mono mt-1">ID: {exam.code} | GV: {exam.authorName || 'Arena'}</div>
                                                         </td>
-                                                        <td className="p-4 text-center text-xs text-slate-400 font-mono">{formatDate(exam.createdAt)}</td>
-                                                        <td className="p-4 text-center">
+                                                        <td className="p-3 sm:p-4 text-center text-xs text-slate-400 font-mono">{formatDate(exam.createdAt)}</td>
+                                                        <td className="p-3 sm:p-4 text-center">
                                                             <span className="bg-slate-900 px-2 py-1 rounded border border-slate-700 text-xs font-black">{exam.totalQuestions}</span>
                                                         </td>
-                                                        <td className="p-4 text-center">
+                                                        <td className="p-3 sm:p-4 text-center">
                                                             <span className="text-orange-400 font-black text-sm">{exam.timeLimit}p</span>
                                                         </td>
-                                                        <td className="p-4 text-center">
-                                                            <button onClick={() => router.push(`/pdf-play/${exam.code}`)} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2 rounded-xl text-[10px] font-black uppercase transition-all shadow-md">VÀO THI</button>
+                                                        
+                                                        {/* NÚT VÀO THI (Được ghim dính ở mép phải) */}
+                                                        <td className="p-2 sm:p-4 text-center sticky right-0 bg-inherit shadow-[-8px_0_15px_-5px_rgba(0,0,0,0.5)] z-10 border-l border-slate-800/50">
+                                                            <button onClick={() => router.push(`/pdf-play/${exam.code}`)} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2 rounded-xl text-[10px] font-black uppercase transition-all shadow-md active:scale-95">VÀO THI</button>
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -309,7 +323,7 @@ export default function ArenaOnThi() {
 
             <style jsx global>{`
                 .no-scrollbar::-webkit-scrollbar { display: none; }
-                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 6px; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
                 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #ea580c; }
             `}</style>
