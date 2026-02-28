@@ -10,11 +10,11 @@ import rehypeRaw from 'rehype-raw';
 import remarkMath from 'remark-math'; 
 import rehypeKatex from 'rehype-katex'; 
 import 'katex/dist/katex.min.css'; 
-import * as mammoth from 'mammoth'; // THƯ VIỆN ĐỌC DOCX
+import * as mammoth from 'mammoth'; 
 import { 
     ArrowLeft, Sparkles, Download, Loader2, Settings, 
     FileText, Target, BrainCircuit, Clock, PenTool, LayoutTemplate, AlertCircle, BookOpen,
-    Upload, X // THÊM ICON UPLOAD VÀ XÓA
+    Upload, X, Flame // THÊM ICON FLAME
 } from 'lucide-react';
 
 const SUBJECTS = ["Tin học", "Toán học", "Ngữ văn", "Tiếng Anh", "Vật lí", "Hóa học", "Sinh học", "Lịch sử", "Địa lí", "GDCD", "Công nghệ"];
@@ -24,6 +24,7 @@ const TEXTBOOKS = ["Kết nối tri thức", "Chân trời sáng tạo", "Cánh 
 export default function FullTestGenerator() {
   const router = useRouter();
   const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true); // Thêm state authLoading để tránh văng trang
   
   const [subject, setSubject] = useState('Tin học');
   const [grade, setGrade] = useState('12');
@@ -51,6 +52,7 @@ export default function FullTestGenerator() {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       if (!u) router.push('/');
       else setUser(u);
+      setAuthLoading(false);
     });
     return () => unsubscribe();
   }, [router]);
@@ -94,7 +96,6 @@ export default function FullTestGenerator() {
           setUploadedFileName('');
       }
       
-      // Reset input để có thể chọn lại cùng một file nếu cần
       e.target.value = null;
   };
 
@@ -148,7 +149,6 @@ export default function FullTestGenerator() {
   const handleGenerateTest = async () => {
     if (!testTitle.trim()) return alert("Vui lòng nhập Tiêu đề bài kiểm tra!");
     
-    // Đã cập nhật kiểm tra lỗi: Cần nhập phạm vi HOẶC tải file lên
     if (!testScope.trim() && !uploadedText.trim()) {
         return alert("Vui lòng nhập Phạm vi kiểm tra (VD: Từ bài 1 đến bài 4) hoặc Tải tệp Đề cương lên!");
     }
@@ -188,7 +188,6 @@ export default function FullTestGenerator() {
         const selectedModel = config.geminiModel || "gemini-1.5-pro";
         const model = genAI.getGenerativeModel({ model: selectedModel });
 
-        // TẠO NGỮ LIỆU BẮT BUỘC TỪ FILE UPLOAD
         const contextPrompt = uploadedText 
             ? `\n**NGỮ LIỆU ĐẦU VÀO CỦA GIÁO VIÊN (SỐNG CÒN):**\n"""\n${uploadedText}\n"""\n\n**QUY TẮC BÁM SÁT NGỮ LIỆU (CHỐNG ẢO GIÁC):**\n1. Bạn BẮT BUỘC phải dựa 100% vào nội dung văn bản "NGỮ LIỆU ĐẦU VÀO" được cung cấp ở trên để tạo câu hỏi và ma trận.\n2. Mọi câu hỏi Trắc nghiệm, Đúng/Sai, Trả lời ngắn, Tự luận TUYỆT ĐỐI không được sử dụng kiến thức, số liệu hay thuật ngữ nằm ngoài văn bản này.\n3. Nếu có dữ liệu mâu thuẫn giữa kiến thức chung của bạn và "Ngữ liệu đầu vào", BẮT BUỘC phải tuân theo "Ngữ liệu đầu vào".\n`
             : "";
@@ -530,68 +529,85 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
       document.body.removeChild(fileDownload);
   };
 
+  if (authLoading) {
+      return (
+          <div className="min-h-screen bg-black flex items-center justify-center text-orange-500 font-bold shadow-[0_0_20px_rgba(249,115,22,0.5)]">
+              <Flame className="animate-bounce mr-2" size={30} /> ĐANG KHỞI ĐỘNG HỆ THỐNG...
+          </div>
+      );
+  }
+
   return (
-    <div className="min-h-screen bg-[#0f172a] font-sans flex flex-col h-screen overflow-hidden text-slate-200">
+    <div className="min-h-screen bg-[#050505] font-sans flex flex-col h-screen overflow-hidden text-gray-200 relative">
       
-      <header className="h-[70px] bg-[#1e293b]/90 backdrop-blur border-b border-white/10 px-6 flex justify-between items-center shrink-0">
+      {/* GLOWING BACKGROUND ORB */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-red-600/20 blur-[150px] rounded-full pointer-events-none"></div>
+
+      {/* HEADER */}
+      <header className="h-[70px] bg-black/80 backdrop-blur-md border-b border-red-500/40 shadow-[0_4px_30px_rgba(239,68,68,0.3)] px-6 flex justify-between items-center shrink-0 z-10 relative">
          <div className="flex items-center gap-4">
-             <button onClick={() => router.push('/')} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl transition"><ArrowLeft size={20}/></button>
+             <button onClick={() => router.push('/')} className="p-2 bg-gray-900 border border-red-500/30 hover:bg-red-950/50 hover:shadow-[0_0_15px_rgba(239,68,68,0.5)] rounded-xl transition-all"><ArrowLeft size={20} className="text-orange-400"/></button>
              <div>
-                 <h1 className="text-xl font-black text-white uppercase italic tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-orange-400">AI SOẠN ĐỀ FULL</h1>
-                 <p className="text-[10px] font-bold text-slate-400 uppercase">Ma trận - Bản đặc tả - Đề thi - Đáp án</p>
+                 <h1 className="text-2xl font-black uppercase italic tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600" style={{ textShadow: '0 0 20px rgba(249,115,22,0.4)' }}>
+                     AI SOẠN ĐỀ FULL
+                 </h1>
+                 <p className="text-[10px] font-bold text-orange-400/80 uppercase tracking-widest">Ma trận - Bản đặc tả - Đề thi - Đáp án</p>
              </div>
          </div>
          {resultMarkdown && (
-             <button onClick={exportToWord} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg transition">
-                 <Download size={16}/> Tải Bản Word
+             <button onClick={exportToWord} className="flex items-center gap-2 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white px-5 py-2.5 rounded-xl font-black text-sm shadow-[0_0_20px_rgba(239,68,68,0.6)] hover:shadow-[0_0_30px_rgba(239,68,68,0.9)] hover:scale-105 transition-all border border-red-400/50">
+                 <Download size={18}/> TẢI BẢN WORD
              </button>
          )}
       </header>
 
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden z-10">
           
-          <div className="w-full lg:w-[460px] bg-[#020617] border-r border-white/10 overflow-y-auto p-4 custom-scrollbar shrink-0">
+          {/* LEFT SIDEBAR - CONTROL PANEL */}
+          <div className="w-full lg:w-[460px] bg-black/60 backdrop-blur-md border-r border-orange-500/30 shadow-[5px_0_30px_rgba(249,115,22,0.1)] overflow-y-auto p-4 custom-scrollbar shrink-0">
               
               <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-2">
-                      <div>
-                          <label className="block text-[10px] font-bold text-slate-400 mb-1">Khối lớp</label>
-                          <select value={grade} onChange={e=>setGrade(e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-lg outline-none focus:border-red-500 text-white font-bold text-sm">
-                              {GRADES.map(g => <option key={g} value={g}>Lớp {g}</option>)}
-                          </select>
+                  {/* CẤU HÌNH CƠ BẢN */}
+                  <div className="bg-gray-950/50 p-4 rounded-xl border border-white/5 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                          <div>
+                              <label className="block text-[10px] font-black text-orange-400/80 uppercase tracking-wider mb-1.5">Khối lớp</label>
+                              <select value={grade} onChange={e=>setGrade(e.target.value)} className="w-full bg-gray-900 border border-gray-700 hover:border-orange-500/50 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] text-orange-100 font-bold text-sm transition-all">
+                                  {GRADES.map(g => <option key={g} value={g}>Lớp {g}</option>)}
+                              </select>
+                          </div>
+                          <div>
+                              <label className="block text-[10px] font-black text-orange-400/80 uppercase tracking-wider mb-1.5">Môn học</label>
+                              <select value={subject} onChange={e=>setSubject(e.target.value)} className="w-full bg-gray-900 border border-gray-700 hover:border-orange-500/50 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] text-orange-100 font-bold text-sm transition-all">
+                                  {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                          </div>
                       </div>
-                      <div>
-                          <label className="block text-[10px] font-bold text-slate-400 mb-1">Môn học</label>
-                          <select value={subject} onChange={e=>setSubject(e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-lg outline-none focus:border-red-500 text-white font-bold text-sm">
-                              {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                      </div>
-                  </div>
 
-                  <div className="grid grid-cols-3 gap-2">
-                      <div className="col-span-2">
-                          <label className="block text-[10px] font-bold text-slate-400 mb-1 flex items-center gap-1"><BookOpen size={12}/> Sách giáo khoa</label>
-                          <select value={textbook} onChange={e=>setTextbook(e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-lg outline-none focus:border-red-500 text-white font-bold text-sm">
-                              {TEXTBOOKS.map(t => <option key={t} value={t}>{t}</option>)}
-                          </select>
+                      <div className="grid grid-cols-3 gap-3">
+                          <div className="col-span-2">
+                              <label className="block text-[10px] font-black text-orange-400/80 uppercase tracking-wider mb-1.5 flex items-center gap-1"><BookOpen size={12}/> Sách giáo khoa</label>
+                              <select value={textbook} onChange={e=>setTextbook(e.target.value)} className="w-full bg-gray-900 border border-gray-700 hover:border-orange-500/50 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] text-orange-100 font-bold text-sm transition-all">
+                                  {TEXTBOOKS.map(t => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                          </div>
+                          <div className="col-span-1">
+                              <label className="block text-[10px] font-black text-orange-400/80 uppercase tracking-wider mb-1.5">Thời gian</label>
+                              <input type="number" min="15" value={duration} onChange={e=>setDuration(e.target.value)} className="w-full bg-gray-900 border border-gray-700 hover:border-orange-500/50 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] text-orange-100 font-bold text-sm text-center transition-all"/>
+                          </div>
                       </div>
-                      <div className="col-span-1">
-                          <label className="block text-[10px] font-bold text-slate-400 mb-1">Thời gian (Phút)</label>
-                          <input type="number" min="15" value={duration} onChange={e=>setDuration(e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-lg outline-none focus:border-red-500 text-white font-bold text-sm text-center"/>
-                      </div>
-                  </div>
 
-                  <div>
-                      <label className="block text-[10px] font-bold text-slate-400 mb-1">Tiêu đề Bài kiểm tra</label>
-                      <input value={testTitle} onChange={e=>setTestTitle(e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-lg outline-none focus:border-red-500 text-white font-bold text-sm" placeholder="VD: ĐỀ KIỂM TRA GIỮA KÌ 1"/>
+                      <div>
+                          <label className="block text-[10px] font-black text-orange-400/80 uppercase tracking-wider mb-1.5">Tiêu đề Bài kiểm tra</label>
+                          <input value={testTitle} onChange={e=>setTestTitle(e.target.value)} className="w-full bg-gray-900 border border-gray-700 hover:border-orange-500/50 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] text-orange-100 font-bold text-sm transition-all" placeholder="VD: ĐỀ KIỂM TRA GIỮA KÌ 1"/>
+                      </div>
                   </div>
 
                   {/* KHỐI GIAO DIỆN UPLOAD VÀ NHẬP PHẠM VI */}
-                  <div className="bg-slate-900/50 p-3 rounded-lg border border-red-500/30">
-                      <div className="flex justify-between items-end mb-2">
-                          <label className="block text-[10px] font-black text-red-400 uppercase">Phạm vi (Nhập tay hoặc tải tệp)</label>
+                  <div className="relative group p-4 rounded-xl border border-orange-500/30 shadow-[inset_0_0_20px_rgba(249,115,22,0.1)] bg-gray-950/80 transition-all hover:border-orange-500/60">
+                      <div className="flex justify-between items-end mb-3">
+                          <label className="block text-[10px] font-black text-red-500 uppercase tracking-wider drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]">Phạm vi (Nhập tay / Tải tệp)</label>
                           
-                          {/* NÚT UPLOAD FILE */}
                           <input 
                               type="file" 
                               id="file-upload" 
@@ -599,20 +615,19 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
                               onChange={handleFileUpload} 
                               className="hidden" 
                           />
-                          <label htmlFor="file-upload" className="cursor-pointer flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-[10px] text-blue-400 px-2 py-1 rounded border border-blue-500/30 transition">
+                          <label htmlFor="file-upload" className="cursor-pointer flex items-center gap-1 bg-gradient-to-r from-orange-600/80 to-red-600/80 hover:from-orange-500 hover:to-red-500 text-white px-3 py-1.5 rounded border border-orange-400/50 text-[10px] font-black uppercase tracking-widest shadow-[0_0_10px_rgba(249,115,22,0.4)] transition-all">
                               {isExtracting ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-                              {isExtracting ? 'Đang đọc...' : 'Tải Đề cương (.docx/.txt)'}
+                              {isExtracting ? 'ĐANG ĐỌC...' : 'TẢI ĐỀ CƯƠNG'}
                           </label>
                       </div>
 
-                      {/* HIỂN THỊ TRẠNG THÁI FILE ĐÃ TẢI LÊN */}
                       {uploadedFileName && (
-                          <div className="flex justify-between items-center bg-blue-900/20 border border-blue-500/50 p-2 mb-2 rounded text-xs text-blue-300">
-                              <div className="flex items-center gap-2 truncate">
-                                  <FileText size={14} className="text-blue-400 shrink-0" />
+                          <div className="flex justify-between items-center bg-gray-900 border border-orange-500/50 p-2 mb-3 rounded-lg text-xs shadow-[inset_0_0_10px_rgba(249,115,22,0.2)]">
+                              <div className="flex items-center gap-2 truncate text-orange-300">
+                                  <FileText size={14} className="text-orange-500 shrink-0 drop-shadow-[0_0_5px_rgba(249,115,22,0.8)]" />
                                   <span className="truncate">Đã tải: <strong>{uploadedFileName}</strong></span>
                               </div>
-                              <button onClick={clearUploadedFile} className="text-red-400 hover:text-red-300 bg-red-400/10 p-1 rounded transition shrink-0">
+                              <button onClick={clearUploadedFile} className="text-red-500 hover:text-red-400 bg-red-500/10 hover:bg-red-500/20 p-1.5 rounded-md shrink-0 transition-colors">
                                   <X size={14} />
                               </button>
                           </div>
@@ -622,85 +637,85 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
                           value={testScope} 
                           onChange={e=>setTestScope(e.target.value)} 
                           rows={2} 
-                          className="w-full bg-[#020617] border border-red-900 p-2 rounded-md outline-none focus:border-red-500 text-slate-200 text-xs" 
-                          placeholder="Nội dung càng chi tiết đề càng chính xác. VD: Bài 1:... (Nếu đã tải tệp lên, có thể ghi chú thêm hoặc bỏ trống)"
-                          
+                          className="w-full bg-gray-900 border border-gray-700 hover:border-orange-500/50 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] text-orange-100 text-xs transition-all shadow-inner custom-scrollbar" 
+                          placeholder="VD: Bài 1:... (Càng chi tiết đề càng chính xác. Nếu đã tải tệp, có thể bỏ trống)"
                       />
                   </div>
 
-                  <div className="bg-slate-800/80 p-3 rounded-xl border border-orange-500/30 shadow-inner">
-                      <div className="flex justify-between items-center mb-2">
-                          <label className="block text-[10px] font-black text-orange-400 uppercase flex items-center gap-1"><LayoutTemplate size={14}/> Cấu hình Ma trận</label>
-                          {totalTF_Y % 4 !== 0 && <div className="text-[9px] text-red-400 font-bold flex items-center gap-1 animate-pulse"><AlertCircle size={10}/> Lỗi ý Đ/S</div>}
+                  {/* BẢNG MA TRẬN */}
+                  <div className="bg-gray-950 rounded-xl border border-orange-500/30 overflow-hidden shadow-[0_0_15px_rgba(249,115,22,0.1)]">
+                      <div className="bg-gray-900 border-b border-orange-500/30 p-3 flex justify-between items-center">
+                          <label className="block text-xs font-black text-orange-400 uppercase tracking-widest flex items-center gap-2 drop-shadow-[0_0_8px_rgba(249,115,22,0.5)]"><LayoutTemplate size={16}/> Cấu hình Ma trận</label>
+                          {totalTF_Y % 4 !== 0 && <div className="text-[10px] text-red-500 font-bold flex items-center gap-1 animate-pulse drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]"><AlertCircle size={12}/> Lỗi ý Đ/S</div>}
                       </div>
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-auto p-2">
                           <table className="w-full text-left text-xs border-collapse">
                               <thead>
-                                  <tr className="border-b border-slate-600 text-slate-400">
-                                      <th className="py-1">Loại CH</th>
-                                      <th className="py-1 text-center" title="Biết">B</th>
-                                      <th className="py-1 text-center" title="Hiểu">H</th>
-                                      <th className="py-1 text-center" title="Vận dụng">VD</th>
-                                      <th className="py-1 text-center text-cyan-400">Tổng</th>
-                                      <th className="py-1 text-center">Điểm/Câu</th>
+                                  <tr className="border-b border-gray-800 text-orange-400/80">
+                                      <th className="py-2 px-1 font-black uppercase tracking-wider text-[10px]">Loại CH</th>
+                                      <th className="py-2 px-1 text-center font-black" title="Biết">B</th>
+                                      <th className="py-2 px-1 text-center font-black" title="Hiểu">H</th>
+                                      <th className="py-2 px-1 text-center font-black" title="Vận dụng">VD</th>
+                                      <th className="py-2 px-1 text-center font-black text-yellow-400">Tổng</th>
+                                      <th className="py-2 px-1 text-center font-black uppercase tracking-wider text-[10px]">Điểm/Câu</th>
                                   </tr>
                               </thead>
-                              <tbody className="text-white font-medium divide-y divide-slate-700/50">
+                              <tbody className="text-gray-300 font-medium divide-y divide-gray-800/80">
                                   <tr>
-                                      <td className="py-1.5 whitespace-nowrap text-[10px]">Trắc nghiệm</td>
-                                      <td className="p-1"><input type="number" min="0" value={matrix.mcq.b} onChange={e=>handleMatrixChange('mcq', 'b', e.target.value)} className="w-7 md:w-8 bg-slate-900 border border-slate-600 rounded text-center outline-none focus:border-orange-500 p-1"/></td>
-                                      <td className="p-1"><input type="number" min="0" value={matrix.mcq.h} onChange={e=>handleMatrixChange('mcq', 'h', e.target.value)} className="w-7 md:w-8 bg-slate-900 border border-slate-600 rounded text-center outline-none focus:border-orange-500 p-1"/></td>
-                                      <td className="p-1"><input type="number" min="0" value={matrix.mcq.vd} onChange={e=>handleMatrixChange('mcq', 'vd', e.target.value)} className="w-7 md:w-8 bg-slate-900 border border-slate-600 rounded text-center outline-none focus:border-orange-500 p-1"/></td>
-                                      <td className="p-1 text-center font-bold text-cyan-400">{getTotalQ_Normal('mcq')} c</td>
-                                      <td className="p-1"><input type="number" step="0.1" value={matrix.mcq.point} onChange={e=>handleMatrixChange('mcq', 'point', e.target.value)} className="w-10 md:w-12 bg-slate-900 border border-slate-600 rounded text-center outline-none focus:border-orange-500 p-1 text-yellow-400"/></td>
+                                      <td className="py-2 px-1 whitespace-nowrap text-[11px] font-bold">Trắc nghiệm</td>
+                                      <td className="p-1"><input type="number" min="0" value={matrix.mcq.b} onChange={e=>handleMatrixChange('mcq', 'b', e.target.value)} className="w-8 md:w-10 bg-gray-900 border border-gray-700 hover:border-orange-500/50 rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-white transition-all"/></td>
+                                      <td className="p-1"><input type="number" min="0" value={matrix.mcq.h} onChange={e=>handleMatrixChange('mcq', 'h', e.target.value)} className="w-8 md:w-10 bg-gray-900 border border-gray-700 hover:border-orange-500/50 rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-white transition-all"/></td>
+                                      <td className="p-1"><input type="number" min="0" value={matrix.mcq.vd} onChange={e=>handleMatrixChange('mcq', 'vd', e.target.value)} className="w-8 md:w-10 bg-gray-900 border border-gray-700 hover:border-orange-500/50 rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-white transition-all"/></td>
+                                      <td className="p-1 text-center font-bold text-yellow-400">{getTotalQ_Normal('mcq')} c</td>
+                                      <td className="p-1"><input type="number" step="0.1" value={matrix.mcq.point} onChange={e=>handleMatrixChange('mcq', 'point', e.target.value)} className="w-12 md:w-14 bg-gray-900 border border-gray-700 hover:border-orange-500/50 rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-orange-400 font-bold transition-all"/></td>
                                   </tr>
                                   <tr>
-                                      <td className="py-1.5 text-[10px] leading-tight">Đúng/Sai<br/><span className="text-[8px] text-orange-300 italic">(Nhập số Lệnh hỏi)</span></td>
-                                      <td className="p-1"><input type="number" min="0" value={matrix.tf.b} onChange={e=>handleMatrixChange('tf', 'b', e.target.value)} className={`w-7 md:w-8 bg-slate-900 border rounded text-center outline-none focus:border-orange-500 p-1 ${totalTF_Y % 4 !== 0 ? 'border-red-500' : 'border-slate-600'}`}/></td>
-                                      <td className="p-1"><input type="number" min="0" value={matrix.tf.h} onChange={e=>handleMatrixChange('tf', 'h', e.target.value)} className={`w-7 md:w-8 bg-slate-900 border rounded text-center outline-none focus:border-orange-500 p-1 ${totalTF_Y % 4 !== 0 ? 'border-red-500' : 'border-slate-600'}`}/></td>
-                                      <td className="p-1"><input type="number" min="0" value={matrix.tf.vd} onChange={e=>handleMatrixChange('tf', 'vd', e.target.value)} className={`w-7 md:w-8 bg-slate-900 border rounded text-center outline-none focus:border-orange-500 p-1 ${totalTF_Y % 4 !== 0 ? 'border-red-500' : 'border-slate-600'}`}/></td>
-                                      <td className="p-1 text-center font-bold text-cyan-400 leading-tight">
-                                          {totalTF_Q} c<br/><span className="text-[8px] text-slate-400 font-normal">({totalTF_Y} ý)</span>
+                                      <td className="py-2 px-1 text-[11px] font-bold leading-tight">Đúng/Sai<br/><span className="text-[9px] text-orange-500 font-normal italic drop-shadow-sm">(Nhập số Lệnh hỏi)</span></td>
+                                      <td className="p-1"><input type="number" min="0" value={matrix.tf.b} onChange={e=>handleMatrixChange('tf', 'b', e.target.value)} className={`w-8 md:w-10 bg-gray-900 border rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-white transition-all ${totalTF_Y % 4 !== 0 ? 'border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'border-gray-700 hover:border-orange-500/50'}`}/></td>
+                                      <td className="p-1"><input type="number" min="0" value={matrix.tf.h} onChange={e=>handleMatrixChange('tf', 'h', e.target.value)} className={`w-8 md:w-10 bg-gray-900 border rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-white transition-all ${totalTF_Y % 4 !== 0 ? 'border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'border-gray-700 hover:border-orange-500/50'}`}/></td>
+                                      <td className="p-1"><input type="number" min="0" value={matrix.tf.vd} onChange={e=>handleMatrixChange('tf', 'vd', e.target.value)} className={`w-8 md:w-10 bg-gray-900 border rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-white transition-all ${totalTF_Y % 4 !== 0 ? 'border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'border-gray-700 hover:border-orange-500/50'}`}/></td>
+                                      <td className="p-1 text-center font-bold text-yellow-400 leading-tight">
+                                          {totalTF_Q} c<br/><span className="text-[9px] text-gray-500 font-normal">({totalTF_Y} ý)</span>
                                       </td>
-                                      <td className="p-1"><input type="number" step="0.1" value={matrix.tf.point} onChange={e=>handleMatrixChange('tf', 'point', e.target.value)} className="w-10 md:w-12 bg-slate-900 border border-slate-600 rounded text-center outline-none focus:border-orange-500 p-1 text-yellow-400"/></td>
+                                      <td className="p-1"><input type="number" step="0.1" value={matrix.tf.point} onChange={e=>handleMatrixChange('tf', 'point', e.target.value)} className="w-12 md:w-14 bg-gray-900 border border-gray-700 hover:border-orange-500/50 rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-orange-400 font-bold transition-all"/></td>
                                   </tr>
                                   <tr>
-                                      <td className="py-1.5 whitespace-nowrap text-[10px]">Trả lời ngắn</td>
-                                      <td className="p-1"><input type="number" min="0" value={matrix.sa.b} onChange={e=>handleMatrixChange('sa', 'b', e.target.value)} className="w-7 md:w-8 bg-slate-900 border border-slate-600 rounded text-center outline-none focus:border-orange-500 p-1"/></td>
-                                      <td className="p-1"><input type="number" min="0" value={matrix.sa.h} onChange={e=>handleMatrixChange('sa', 'h', e.target.value)} className="w-7 md:w-8 bg-slate-900 border border-slate-600 rounded text-center outline-none focus:border-orange-500 p-1"/></td>
-                                      <td className="p-1"><input type="number" min="0" value={matrix.sa.vd} onChange={e=>handleMatrixChange('sa', 'vd', e.target.value)} className="w-7 md:w-8 bg-slate-900 border border-slate-600 rounded text-center outline-none focus:border-orange-500 p-1"/></td>
-                                      <td className="p-1 text-center font-bold text-cyan-400">{getTotalQ_Normal('sa')} c</td>
-                                      <td className="p-1"><input type="number" step="0.1" value={matrix.sa.point} onChange={e=>handleMatrixChange('sa', 'point', e.target.value)} className="w-10 md:w-12 bg-slate-900 border border-slate-600 rounded text-center outline-none focus:border-orange-500 p-1 text-yellow-400"/></td>
+                                      <td className="py-2 px-1 whitespace-nowrap text-[11px] font-bold">Trả lời ngắn</td>
+                                      <td className="p-1"><input type="number" min="0" value={matrix.sa.b} onChange={e=>handleMatrixChange('sa', 'b', e.target.value)} className="w-8 md:w-10 bg-gray-900 border border-gray-700 hover:border-orange-500/50 rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-white transition-all"/></td>
+                                      <td className="p-1"><input type="number" min="0" value={matrix.sa.h} onChange={e=>handleMatrixChange('sa', 'h', e.target.value)} className="w-8 md:w-10 bg-gray-900 border border-gray-700 hover:border-orange-500/50 rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-white transition-all"/></td>
+                                      <td className="p-1"><input type="number" min="0" value={matrix.sa.vd} onChange={e=>handleMatrixChange('sa', 'vd', e.target.value)} className="w-8 md:w-10 bg-gray-900 border border-gray-700 hover:border-orange-500/50 rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-white transition-all"/></td>
+                                      <td className="p-1 text-center font-bold text-yellow-400">{getTotalQ_Normal('sa')} c</td>
+                                      <td className="p-1"><input type="number" step="0.1" value={matrix.sa.point} onChange={e=>handleMatrixChange('sa', 'point', e.target.value)} className="w-12 md:w-14 bg-gray-900 border border-gray-700 hover:border-orange-500/50 rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-orange-400 font-bold transition-all"/></td>
                                   </tr>
                                   <tr>
-                                      <td className="py-1.5 whitespace-nowrap text-[10px]">Tự luận</td>
-                                      <td className="p-1"><input type="number" min="0" value={matrix.essay.b} onChange={e=>handleMatrixChange('essay', 'b', e.target.value)} className="w-7 md:w-8 bg-slate-900 border border-slate-600 rounded text-center outline-none focus:border-orange-500 p-1"/></td>
-                                      <td className="p-1"><input type="number" min="0" value={matrix.essay.h} onChange={e=>handleMatrixChange('essay', 'h', e.target.value)} className="w-7 md:w-8 bg-slate-900 border border-slate-600 rounded text-center outline-none focus:border-orange-500 p-1"/></td>
-                                      <td className="p-1"><input type="number" min="0" value={matrix.essay.vd} onChange={e=>handleMatrixChange('essay', 'vd', e.target.value)} className="w-7 md:w-8 bg-slate-900 border border-slate-600 rounded text-center outline-none focus:border-orange-500 p-1"/></td>
-                                      <td className="p-1 text-center font-bold text-cyan-400">{getTotalQ_Normal('essay')} c</td>
-                                      <td className="p-1"><input type="number" step="0.1" value={matrix.essay.point} onChange={e=>handleMatrixChange('essay', 'point', e.target.value)} className="w-10 md:w-12 bg-slate-900 border border-slate-600 rounded text-center outline-none focus:border-orange-500 p-1 text-yellow-400"/></td>
+                                      <td className="py-2 px-1 whitespace-nowrap text-[11px] font-bold">Tự luận</td>
+                                      <td className="p-1"><input type="number" min="0" value={matrix.essay.b} onChange={e=>handleMatrixChange('essay', 'b', e.target.value)} className="w-8 md:w-10 bg-gray-900 border border-gray-700 hover:border-orange-500/50 rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-white transition-all"/></td>
+                                      <td className="p-1"><input type="number" min="0" value={matrix.essay.h} onChange={e=>handleMatrixChange('essay', 'h', e.target.value)} className="w-8 md:w-10 bg-gray-900 border border-gray-700 hover:border-orange-500/50 rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-white transition-all"/></td>
+                                      <td className="p-1"><input type="number" min="0" value={matrix.essay.vd} onChange={e=>handleMatrixChange('essay', 'vd', e.target.value)} className="w-8 md:w-10 bg-gray-900 border border-gray-700 hover:border-orange-500/50 rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-white transition-all"/></td>
+                                      <td className="p-1 text-center font-bold text-yellow-400">{getTotalQ_Normal('essay')} c</td>
+                                      <td className="p-1"><input type="number" step="0.1" value={matrix.essay.point} onChange={e=>handleMatrixChange('essay', 'point', e.target.value)} className="w-12 md:w-14 bg-gray-900 border border-gray-700 hover:border-orange-500/50 rounded text-center outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.4)] p-1 text-orange-400 font-bold transition-all"/></td>
                                   </tr>
                               </tbody>
-                              <tfoot className="border-t-2 border-slate-500 bg-slate-950 font-bold text-slate-300">
+                              <tfoot className="border-t border-orange-500/50 bg-gray-900/80 font-bold text-orange-200">
                                   <tr>
-                                      <td className="py-2 text-[9px] uppercase text-slate-400">Tổng Lệnh/ %</td>
-                                      <td className="p-1 text-center border-l border-slate-700">
+                                      <td className="py-3 px-1 text-[10px] uppercase tracking-wider text-orange-400">Tổng/Tỉ lệ</td>
+                                      <td className="p-1 text-center border-l border-gray-800">
                                           <div className="text-white text-sm">{totalB_Items}</div>
-                                          <div className="text-[10px] text-emerald-400">{percentB}%</div>
+                                          <div className="text-[10px] text-green-400 drop-shadow-sm">{percentB}%</div>
                                       </td>
-                                      <td className="p-1 text-center border-l border-slate-700">
+                                      <td className="p-1 text-center border-l border-gray-800">
                                           <div className="text-white text-sm">{totalH_Items}</div>
-                                          <div className="text-[10px] text-blue-400">{percentH}%</div>
+                                          <div className="text-[10px] text-blue-400 drop-shadow-sm">{percentH}%</div>
                                       </td>
-                                      <td className="p-1 text-center border-l border-slate-700">
+                                      <td className="p-1 text-center border-l border-gray-800">
                                           <div className="text-white text-sm">{totalVD_Items}</div>
-                                          <div className="text-[10px] text-purple-400">{percentVD}%</div>
+                                          <div className="text-[10px] text-purple-400 drop-shadow-sm">{percentVD}%</div>
                                       </td>
-                                      <td className="p-1 text-center border-l border-slate-700">
-                                          <div className="text-white text-sm font-black text-cyan-400">{sumQuestions}c</div>
+                                      <td className="p-1 text-center border-l border-gray-800">
+                                          <div className="text-white text-sm font-black text-yellow-400 drop-shadow-[0_0_5px_rgba(250,204,21,0.5)]">{sumQuestions}c</div>
                                       </td>
-                                      <td className="p-1 text-center border-l border-slate-700">
-                                          <div className={`text-sm ${sumScores === 10 ? 'text-green-400' : 'text-red-400 animate-pulse'}`}>{sumScores.toFixed(2)}đ</div>
+                                      <td className="p-1 text-center border-l border-gray-800">
+                                          <div className={`text-sm font-black drop-shadow-md ${sumScores === 10 ? 'text-green-500' : 'text-red-500 animate-pulse'}`}>{sumScores.toFixed(2)}đ</div>
                                       </td>
                                   </tr>
                               </tfoot>
@@ -708,25 +723,33 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
                       </div>
                   </div>
 
-                  <button onClick={handleGenerateTest} disabled={loading} className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white py-3 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-red-500/20 active:scale-95 transition flex items-center justify-center gap-2 mt-2">
-                      {loading ? <Loader2 className="animate-spin"/> : <Sparkles size={20}/>} {loading ? 'ĐANG TẠO ĐỀ...' : 'KHAI HOẢ TẠO ĐỀ'}
+                  {/* ACTION BUTTON MANG SỨC MẠNH CỦA LỬA */}
+                  <button onClick={handleGenerateTest} disabled={loading} className={`relative w-full py-4 rounded-xl font-black uppercase tracking-widest text-white overflow-hidden group transition-all mt-4 ${loading ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700' : 'border border-orange-400 shadow-[0_0_20px_rgba(249,115,22,0.6)] hover:shadow-[0_0_40px_rgba(239,68,68,0.8)] active:scale-95'}`}>
+                      {!loading && (
+                          <div className="absolute inset-0 bg-gradient-to-r from-red-600 via-orange-500 to-yellow-500 group-hover:scale-110 transition-transform duration-500"></div>
+                      )}
+                      <div className="relative z-10 flex items-center justify-center gap-2">
+                          {loading ? <Flame className="animate-bounce text-yellow-300" size={22}/> : <Sparkles size={22}/>} 
+                          {loading ? 'ĐANG NUNG CHẢY & ĐÚC ĐỀ...' : 'KHAI HỎA TẠO ĐỀ'}
+                      </div>
                   </button>
               </div>
           </div>
 
-          <div className="flex-1 bg-slate-300 overflow-y-auto relative p-4 md:p-8 custom-scrollbar">
+          {/* RIGHT PANEL - PREVIEW AREA */}
+          <div className="flex-1 bg-gray-900/80 overflow-y-auto relative p-4 md:p-8 custom-scrollbar shadow-[inset_10px_0_30px_rgba(0,0,0,0.5)]">
               {loading ? (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-500">
-                      <div className="relative mb-6">
-                          <div className="absolute inset-0 bg-red-500 blur-xl opacity-30 animate-pulse"></div>
-                          <BrainCircuit size={80} className="text-red-600 relative z-10 animate-bounce"/>
+                  <div className="h-full flex flex-col items-center justify-center text-orange-500">
+                      <div className="relative mb-8">
+                          <div className="absolute inset-0 bg-gradient-to-t from-red-600 to-yellow-400 blur-[60px] opacity-70 animate-pulse rounded-full w-32 h-32 -ml-8 -mt-8"></div>
+                          <Flame size={90} className="text-yellow-400 relative z-10 animate-bounce drop-shadow-[0_0_15px_rgba(250,204,21,0.8)]"/>
                       </div>
-                      <h3 className="text-2xl font-black uppercase tracking-widest text-slate-700 mb-2">AI Đang thực thi</h3>
-                      <p className="text-sm font-bold">Anh/chị cứ ngồi chơi để em làm...</p>
+                      <h3 className="text-2xl font-black uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-red-500 mb-2" style={{ textShadow: '0 0 10px rgba(239,68,68,0.5)' }}>LÒ PHẢN ỨNG ĐANG CHẠY</h3>
+                      <p className="text-sm font-bold tracking-widest text-orange-200/60 animate-pulse">Quá trình ép xung AI đang diễn ra...</p>
                   </div>
               ) : resultMarkdown ? (
                   <div 
-                      className="bg-white p-8 md:p-14 rounded shadow-2xl max-w-[1200px] mx-auto min-h-full text-black" 
+                      className="bg-white p-8 md:p-14 rounded-sm shadow-[0_0_40px_rgba(239,68,68,0.3)] border border-red-500/20 max-w-[1200px] mx-auto min-h-full text-black" 
                       id="markdown-export-area"
                   >
                       <div style={{ fontFamily: "'Times New Roman', serif", fontSize: '12pt', marginBottom: '16pt' }}>
@@ -743,7 +766,7 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
                               remarkPlugins={[remarkGfm, remarkMath]}
                               rehypePlugins={[rehypeRaw, rehypeKatex]} 
                               components={{
-                                  h3: ({node, ...props}) => <h3 style={{fontSize: '12pt', fontWeight: 'bold', textTransform: 'uppercase', marginTop: '20pt', marginBottom: '8pt', color: '#b91c1c', borderBottom: '1px solid #b91c1c', paddingBottom: '4px'}} {...props}/>,
+                                  h3: ({node, ...props}) => <h3 style={{fontSize: '12pt', fontWeight: 'bold', textTransform: 'uppercase', marginTop: '20pt', marginBottom: '8pt', color: '#b91c1c', borderBottom: '2px solid #b91c1c', paddingBottom: '4px'}} {...props}/>,
                                   h4: ({node, ...props}) => <h4 style={{fontSize: '12pt', fontWeight: 'bold', marginTop: '12pt', marginBottom: '6pt'}} {...props}/>,
                                   p: ({node, ...props}) => <p style={{fontSize: '12pt', lineHeight: '1.2', margin: '4pt 0', textAlign: 'justify'}} {...props}/>,
                                   ul: ({node, ...props}) => <ul style={{fontSize: '12pt', listStyleType: 'disc', paddingLeft: '20pt', margin: '4pt 0'}} {...props}/>,
@@ -763,9 +786,11 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
                       </div>
                   </div>
               ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-500 opacity-50">
-                      <FileText size={100} className="mb-4"/>
-                      <p className="text-xl font-bold uppercase tracking-widest">AI SOẠN ĐỀ CẦN KIỂM TRA KỸ KHI ÁP DỤNG CHO HS THI</p>
+                  <div className="h-full flex flex-col items-center justify-center text-gray-700 opacity-60">
+                      <div className="relative mb-6">
+                          <Target size={120} className="text-gray-800 drop-shadow-[0_0_15px_rgba(255,255,255,0.05)]"/>
+                      </div>
+                      <p className="text-2xl font-black uppercase tracking-[0.2em] text-center text-gray-600 drop-shadow-md">KHAI BÁO CẤU HÌNH<br/><span className="text-sm font-bold tracking-widest text-gray-500">ĐỂ BẮT ĐẦU TẠO ĐỀ</span></p>
                   </div>
               )}
           </div>

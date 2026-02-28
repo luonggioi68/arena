@@ -283,22 +283,29 @@ export default function HomePage() {
       {/* MAIN CONTENT - KHÓA OVERFLOW ĐỂ NGĂN CUỘN */}
       <div className="flex-1 w-full lg:max-w-[80%] 2xl:max-w-[70%] mx-auto flex flex-col gap-2 md:gap-3 px-2 md:px-4 py-2 min-h-0 overflow-hidden">
           
-          {/* MENU 8 Ô RỰC LỬA - CẬP NHẬT GIAO DIỆN CHUẨN */}
+          {/* MENU 8 Ô RỰC LỬA - CẬP NHẬT VỊ TRÍ NÚT */}
           <div className="w-full grid grid-cols-4 md:grid-cols-8 gap-1.5 md:gap-2 shrink-0 relative z-20">
               {[...Array(8)].map((_, index) => {
                   const isKHBD = index === 0;
                   const isTest = index === 1;
                   const isMixer = index === 2; 
-                  const isSubmit = index === 3; 
-                  const title = isKHBD ? "Soạn KHBD" : isTest ? "Soạn Đề KT" : isMixer ? "Trộn Đề" : isSubmit ? "Cổng Nộp Bài" : "";
+                  const isDuplicate = index === 3; // Nút Nhân Bản Đề mới ở ô 4
+                  const isSubmit = index === 7; // Dời Cổng Nộp Bài về ô 8
+                  
+                  const title = isKHBD ? "Soạn KHBD" : 
+                                isTest ? "Soạn Đề KT" : 
+                                isMixer ? "Trộn Đề" : 
+                                isDuplicate ? "Nhân Bản Đề" : 
+                                isSubmit ? "Cổng Nộp Bài" : "";
 
                   const handleMenuClick = () => {
-                      if (title) { // Chỉ xử lý click khi ô đó có title
+                      if (title) {
                           if (!user) { setShowAuthModal(true); setAuthMode('LOGIN'); } 
                           else {
                               if (isKHBD) router.push('/lesson-plan');
                               if (isTest) router.push('/create-test');
                               if (isMixer) router.push('/mixer'); 
+                              if (isDuplicate) router.push('/clone-test'); // Bạn nhớ tạo route trang này nếu chưa có nhé
                               if (isSubmit) router.push('/submit');
                           }
                       }
@@ -310,12 +317,10 @@ export default function HomePage() {
                           className={`relative group h-[40px] md:h-[50px] rounded-lg md:rounded-xl font-black text-[8px] sm:text-[9px] md:text-[10px] uppercase tracking-wider md:tracking-widest text-white transition-all transform outline-none border-x border-t border-orange-400/80 border-b-2 md:border-b-4 border-b-red-900 overflow-hidden p-1 shadow-md
                               ${title ? 'hover:-translate-y-0.5 cursor-pointer' : 'cursor-default opacity-80'}`}
                       >
-                          {/* Nền 3D rực lửa áp dụng cho tất cả 8 ô */}
                           <div className="absolute inset-0 bg-gradient-to-br from-red-600 via-orange-600 to-yellow-500"></div>
                           <div className="absolute inset-0 bg-gradient-to-t from-yellow-300/0 to-yellow-200/40 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                           <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/30 to-transparent"></div>
                           
-                          {/* Chỉ render Text nếu có Title */}
                           {title && (
                               <span className="relative z-10 drop-shadow-md leading-tight flex items-center justify-center text-center h-full w-full">
                                   {title}
@@ -326,17 +331,18 @@ export default function HomePage() {
               })}
           </div>
 
-          {/* THANH LUYỆN TẬP */}
-          <div className="shrink-0 w-full bg-black/80 backdrop-blur-xl border-2 border-red-600/50 rounded-lg md:rounded-2xl flex flex-col md:flex-row overflow-hidden shadow-lg animate-in fade-in slide-in-from-top-4 relative z-20 h-[50px] md:h-[65px]">
-                <div className="bg-gradient-to-br from-red-700 to-orange-800 px-3 w-full md:w-32 h-full flex items-center justify-center text-center shrink-0 border-b border-red-500/30 md:border-b-0 md:border-r">
-                    <Target size={14} className="text-yellow-300 mr-2 md:mb-0.5 animate-pulse drop-shadow-md md:w-5 md:h-5"/>
-                    <h2 className="text-xs md:text-sm font-black uppercase text-white leading-none tracking-tighter drop-shadow-md">Luyện Tập</h2>
+          {/* THANH LUYỆN TẬP - VÁ LỖI HIỂN THỊ MOBILE */}
+          <div className="shrink-0 w-full bg-black/80 backdrop-blur-xl border-2 border-red-600/50 rounded-lg md:rounded-2xl flex flex-row overflow-hidden shadow-lg animate-in fade-in slide-in-from-top-4 relative z-20 h-[50px] md:h-[65px]">
+                {/* Đổi flex-col md:flex-row thành flex-row luôn để tiêu đề và các lớp nằm ngang nhau */}
+                <div className="bg-gradient-to-br from-red-700 to-orange-800 px-2 md:px-3 w-[100px] sm:w-[120px] md:w-32 h-full flex items-center justify-center text-center shrink-0 border-r border-red-500/30">
+                    <Target size={14} className="text-yellow-300 mr-1 md:mr-2 md:mb-0.5 animate-pulse drop-shadow-md md:w-5 md:h-5"/>
+                    <h2 className="text-[10px] sm:text-xs md:text-sm font-black uppercase text-white leading-none tracking-tighter drop-shadow-md">Luyện Tập</h2>
                 </div>
                 
                 <div className="flex-1 flex overflow-x-auto no-scrollbar bg-slate-900/30 h-full">
                     <div className="flex w-max min-w-full md:w-full h-full">
                         {[6, 7, 8, 9, 10, 11, 12].map((grade) => (
-                            <button key={grade} onClick={() => handleGradeClick(grade)} className="group relative flex-1 min-w-[50px] md:min-w-[60px] h-full flex flex-col items-center justify-center transition-all border-r border-red-900/30 last:border-0 md:border-r-0 md:border-l active:bg-red-900/40 overflow-hidden">
+                            <button key={grade} onClick={() => handleGradeClick(grade)} className="group relative flex-1 min-w-[45px] sm:min-w-[50px] md:min-w-[60px] h-full flex flex-col items-center justify-center transition-all border-l border-red-900/30 first:border-0 active:bg-red-900/40 overflow-hidden">
                                 <div className="absolute inset-0 bg-gradient-to-b from-red-900/50 via-red-800/50 to-orange-900/50 md:opacity-100 opacity-0 group-hover:opacity-0"></div>
                                 <div className="absolute inset-0 bg-gradient-to-br from-red-600 via-orange-500 to-yellow-500 opacity-0 group-hover:opacity-100 transition-all group-hover:animate-pulse"></div>
                                 <div className="relative z-10 flex flex-col items-center group-hover:-translate-y-0.5 transition-transform mt-0.5">

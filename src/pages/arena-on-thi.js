@@ -21,20 +21,24 @@ export default function ArenaOnThi() {
     const [leaderboard, setLeaderboard] = useState([]);
     const [activeGrade, setActiveGrade] = useState('12');
     const [searchTeacher, setSearchTeacher] = useState('');
-    const [expandedSubjects, setExpandedSubjects] = useState({});
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+        // 1. Lắng nghe trạng thái auth chỉ để hiển thị giao diện góc phải (Đăng nhập / Tên User)
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
             setUser(currentUser);
+        });
+
+        // 2. Tải dữ liệu Đề thi và Bảng xếp hạng TRỰC TIẾP (Không cần chờ đăng nhập)
+        const fetchData = async () => {
             try {
-                // 1. Tải toàn bộ Đề thi
+                // Tải toàn bộ Đề thi
                 const qExams = query(collection(firestore, "pdf_exams"), where("status", "==", "OPEN"));
                 const snapExams = await getDocs(qExams);
                 const examsData = snapExams.docs.map(d => ({ id: d.id, ...d.data() }));
                 examsData.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
                 setExams(examsData);
 
-                // 2. Tải & Tính toán Bảng Xếp Hạng
+                // Tải & Tính toán Bảng Xếp Hạng
                 const snapResults = await getDocs(collection(firestore, "pdf_exam_results"));
                 const scoresMap = {};
                 
@@ -68,10 +72,16 @@ export default function ArenaOnThi() {
                 setLeaderboard(lbArray);
             } catch (e) {
                 console.error("Lỗi tải dữ liệu:", e);
+                if (e.code === 'permission-denied') {
+                    alert("⚠️ LỖI PHÂN QUYỀN: Bạn chưa mở khóa Firestore Rules cho phép khách đọc dữ liệu. Vui lòng kiểm tra Firebase!");
+                }
             } finally {
                 setLoading(false);
             }
-        });
+        };
+
+        fetchData();
+
         return () => unsubscribe();
     }, [setUser]);
 
