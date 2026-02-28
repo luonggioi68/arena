@@ -21,7 +21,6 @@ export default function PDFPlay() {
     const [isFinished, setIsFinished] = useState(false);
     const [score, setScore] = useState(0);
 
-    // Đã xóa state mobileTab vì bây giờ cả 2 màn hình đều hiển thị song song
     const [answers, setAnswers] = useState({ part1: {}, part2: {}, part3: {} });
 
     const handleSubmitRef = useRef();
@@ -246,22 +245,23 @@ export default function PDFPlay() {
 
     // ================= MÀN HÌNH LÀM BÀI (ACTIVE EXAM) =================
     return (
-        <div className="h-screen w-full bg-[#09090b] flex flex-col overflow-hidden font-sans text-slate-200 printable-exam-area">
+        // Dùng 100dvh để sửa lỗi thanh địa chỉ Safari/Chrome che khuất nội dung trên Mobile
+        <div className="h-[100dvh] w-full bg-[#09090b] flex flex-col overflow-hidden font-sans text-slate-200 printable-exam-area">
             
             {/* WRAPPER CHIA MÀN HÌNH (Mobile: Dọc, Desktop: Ngang) */}
             <div className="flex-1 flex flex-col md:flex-row min-h-0 w-full relative">
                 
-                {/* ================= KHU VỰC 1: ĐỀ PDF (Top trên Mobile, Trái trên Desktop) ================= */}
-                {/* Trên mobile lấy flex-[2] (chiếm ~2/3 màn hình), Desktop lấy flex-1 */}
-                <div className="flex-[2] md:flex-1 flex flex-col min-h-[40vh] md:min-h-0 relative bg-black z-20 shadow-[0_10px_30px_rgba(0,0,0,0.5)] md:shadow-none">
+                {/* ================= KHU VỰC 1: ĐỀ PDF ================= */}
+                {/* Mobile: Ép cứng h-[60dvh] (chiếm ~60% màn hình). Desktop: flex-1 */}
+                <div className="h-[60dvh] sm:h-[65dvh] md:h-auto md:flex-1 flex flex-col shrink-0 relative bg-black z-20 shadow-[0_10px_30px_rgba(0,0,0,0.5)] md:shadow-none">
                     
                     {/* HEADER */}
-                    <div className="h-[60px] sm:h-[70px] bg-[#050505] border-b-2 border-orange-600 shadow-[0_5px_20px_rgba(249,115,22,0.15)] flex items-center justify-between px-3 md:px-6 shrink-0 relative z-20">
+                    <div className="h-[55px] sm:h-[70px] bg-[#050505] border-b-2 border-orange-600 shadow-[0_5px_20px_rgba(249,115,22,0.15)] flex items-center justify-between px-3 md:px-6 shrink-0 relative z-20">
                         <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-orange-500/10 to-transparent pointer-events-none"></div>
                         
-                        <div className="flex items-center gap-3 overflow-hidden">
+                        <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
                             <button onClick={() => { if(confirm('⚠️ Thoát bây giờ sẽ mất toàn bộ bài đang làm. Bạn chắc chứ?')) router.push('/arena-on-thi'); }} className="p-2 sm:p-2.5 bg-gradient-to-b from-orange-500 to-red-600 border-b-[3px] border-red-900 rounded-xl active:translate-y-1 active:border-b-0 transition-all group shrink-0">
-                                <ArrowLeft size={18} className="text-white drop-shadow-md" strokeWidth={3}/>
+                                <ArrowLeft size={16} className="text-white drop-shadow-md sm:w-[18px] sm:h-[18px]" strokeWidth={3}/>
                             </button>
                             <div className="font-black text-sm md:text-lg text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-500 to-red-600 uppercase tracking-tighter italic truncate drop-shadow-sm" title={exam.title}>
                                 {exam.title}
@@ -282,8 +282,8 @@ export default function PDFPlay() {
                                 <User size={24} className="bg-orange-500/20 p-1 rounded-full text-orange-400 border border-orange-500/50"/>
                             </div>
                             
-                            <div className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl font-black text-base sm:text-xl shadow-[inset_0_0_10px_rgba(0,0,0,0.5)] border-2 ${timeLeft < 300 ? 'bg-red-950/50 text-red-400 border-red-500 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-[#0a0a0a] text-orange-400 border-orange-500/50 drop-shadow-[0_0_5px_rgba(249,115,22,0.8)]'}`}>
-                                <Timer size={20} strokeWidth={2.5}/> {formatTime(timeLeft)}
+                            <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl font-black text-sm sm:text-xl shadow-[inset_0_0_10px_rgba(0,0,0,0.5)] border-2 ${timeLeft < 300 ? 'bg-red-950/50 text-red-400 border-red-500 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-[#0a0a0a] text-orange-400 border-orange-500/50 drop-shadow-[0_0_5px_rgba(249,115,22,0.8)]'}`}>
+                                <Timer size={16} className="sm:w-5 sm:h-5" strokeWidth={2.5}/> {formatTime(timeLeft)}
                             </div>
                         </div>
                     </div>
@@ -301,16 +301,17 @@ export default function PDFPlay() {
                     </div>
                 </div>
 
-                {/* ================= KHU VỰC 2: KHUNG ĐÁP ÁN (Bottom trên Mobile, Phải trên Desktop) ================= */}
-                {/* Trên mobile lấy flex-1 (chiếm ~1/3 màn hình), Desktop cố định w-320px */}
-                <div className="flex-1 md:flex-none md:w-[320px] bg-[#0a0a0a] border-t-2 md:border-t-0 md:border-l-2 border-red-600/50 flex flex-col shadow-[0_-10px_30px_rgba(239,68,68,0.15)] md:shadow-[-10px_0_30px_rgba(239,68,68,0.15)] relative z-30">
+                {/* ================= KHU VỰC 2: KHUNG ĐÁP ÁN ================= */}
+                {/* Mobile: Lấy toàn bộ không gian còn lại (flex-1). Thêm min-h-0 để cho phép thanh cuộn hoạt động. Desktop: Cố định 320px */}
+                <div className="flex-1 min-h-0 md:flex-none md:w-[320px] bg-[#0a0a0a] border-t-2 md:border-t-0 md:border-l-2 border-red-600/50 flex flex-col shadow-[0_-10px_30px_rgba(239,68,68,0.15)] md:shadow-[-10px_0_30px_rgba(239,68,68,0.15)] relative z-30">
                     
-                    <div className="h-[40px] md:h-[45px] bg-gradient-to-r from-red-950 to-[#0a0a0a] border-b border-red-500/30 flex items-center justify-center shrink-0 shadow-sm relative">
+                    <div className="h-[35px] md:h-[45px] bg-gradient-to-r from-red-950 to-[#0a0a0a] border-b border-red-500/30 flex items-center justify-center shrink-0 shadow-sm relative">
                         <div className="absolute left-0 top-0 w-1 h-full bg-red-500"></div>
                         <span className="text-[10px] md:text-xs font-black text-red-400 uppercase tracking-[0.3em] flex items-center gap-2 drop-shadow-md"><PenTool size={14} className="md:w-4 md:h-4"/> PHIẾU ĐIỀN ĐÁP ÁN</span>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-3 sm:p-4 custom-scrollbar space-y-6">
+                    {/* Vùng chứa cuộn: padding bottom thêm 1 chút để không dính sát viền trên mobile */}
+                    <div className="flex-1 overflow-y-auto p-3 sm:p-4 pb-8 custom-scrollbar space-y-6">
                         {/* TRẮC NGHIỆM */}
                         {exam.answerKey?.part1 && Object.keys(exam.answerKey.part1).length > 0 && (
                             <div>
@@ -404,9 +405,9 @@ export default function PDFPlay() {
             </div>
 
             {/* ================= KHU VỰC 3: NÚT NỘP BÀI BOTTOM DÀNH CHO MOBILE ================= */}
-            <div className="md:hidden h-[65px] bg-[#050505] border-t-2 border-orange-600/50 p-2 shrink-0 z-50 relative shadow-[0_-5px_20px_rgba(249,115,22,0.15)]">
-                <button onClick={() => handleSubmit(false)} disabled={isSubmitting} className="w-full h-full bg-gradient-to-b from-orange-500 to-red-600 border-b-4 border-red-900 active:translate-y-1 active:border-b-0 text-white rounded-xl font-black uppercase text-sm tracking-widest shadow-[0_0_15px_rgba(239,68,68,0.5)] flex items-center justify-center gap-2 transition-all">
-                    {isSubmitting ? 'ĐANG XỬ LÝ...' : <><Send size={18} strokeWidth={3}/> NỘP BÀI CHIẾN DỊCH</>}
+            <div className="md:hidden h-[55px] sm:h-[65px] bg-[#050505] border-t-2 border-orange-600/50 p-2 shrink-0 z-50 relative shadow-[0_-5px_20px_rgba(249,115,22,0.15)]">
+                <button onClick={() => handleSubmit(false)} disabled={isSubmitting} className="w-full h-full bg-gradient-to-b from-orange-500 to-red-600 border-b-4 border-red-900 active:translate-y-1 active:border-b-0 text-white rounded-xl font-black uppercase text-xs sm:text-sm tracking-widest shadow-[0_0_15px_rgba(239,68,68,0.5)] flex items-center justify-center gap-2 transition-all">
+                    {isSubmitting ? 'ĐANG XỬ LÝ...' : <><Send size={16} strokeWidth={3}/> NỘP BÀI CHIẾN DỊCH</>}
                 </button>
             </div>
 
