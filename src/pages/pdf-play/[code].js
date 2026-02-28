@@ -1,331 +1,447 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
+import { firestore } from '@/lib/firebase';
+import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import useAuthStore from '@/store/useAuthStore';
-import { auth, firestore } from '@/lib/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { 
-    ArrowLeft, Loader2, Shield, Trophy, Medal, BookOpen, Clock, 
-    CheckCircle, Target, Sparkles, AlertCircle, LogIn, User, Play, 
-    CalendarDays, ChevronDown, ChevronUp, Search, X, FileText 
-} from 'lucide-react';
+import { Timer, Send, Shield, CheckCircle, User, FileText, Edit3, Eye, PenTool, ArrowLeft, Zap, Target, Trophy, Lock } from 'lucide-react';
+import confetti from 'canvas-confetti';
 
-const GRADES = ['12', '11', '10', '9', '8', '7', '6', 'Khác'];
-
-export default function ArenaOnThi() {
+export default function PDFPlay() {
     const router = useRouter();
-    const { user, setUser } = useAuthStore();
-    const [loading, setLoading] = useState(true);
+    const { code } = router.query;
+    const { user } = useAuthStore(); 
 
-    const [exams, setExams] = useState([]);
-    const [leaderboard, setLeaderboard] = useState([]);
-    const [activeGrade, setActiveGrade] = useState('12');
-    const [searchTeacher, setSearchTeacher] = useState('');
+    const [exam, setExam] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [studentInfo, setStudentInfo] = useState({ name: '', isGuest: true });
+    
+    const [isStarted, setIsStarted] = useState(false);
+    const [timeLeft, setTimeLeft] = useState(0);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isFinished, setIsFinished] = useState(false);
+    const [score, setScore] = useState(0);
+
+    const [answers, setAnswers] = useState({ part1: {}, part2: {}, part3: {} });
+
+    const handleSubmitRef = useRef();
 
     useEffect(() => {
-        // 1. Lắng nghe trạng thái auth chỉ để hiển thị giao diện góc phải (Đăng nhập / Tên User)
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            setUser(currentUser);
-        });
-
-        // 2. Tải dữ liệu Đề thi và Bảng xếp hạng TRỰC TIẾP (Không cần chờ đăng nhập)
-        const fetchData = async () => {
+        if (!code) return;
+        const fetchExam = async () => {
             try {
-                // Tải toàn bộ Đề thi
-                const qExams = query(collection(firestore, "pdf_exams"), where("status", "==", "OPEN"));
-                const snapExams = await getDocs(qExams);
-                const examsData = snapExams.docs.map(d => ({ id: d.id, ...d.data() }));
-                examsData.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-                setExams(examsData);
-
-                // Tải & Tính toán Bảng Xếp Hạng
-                const snapResults = await getDocs(collection(firestore, "pdf_exam_results"));
-                const scoresMap = {};
-                
-                snapResults.forEach(doc => {
-                    const data = doc.data();
-                    const sName = data.studentName;
-                    const sScore = parseFloat(data.score) || 0;
-                    const sGrade = data.studentClass || 'Tự do'; 
-                    
-                    if (!sName || sName.includes('ẩn danh') || sName.trim() === '') return;
-
-                    if (!scoresMap[sName]) {
-                        scoresMap[sName] = { 
-                            name: sName, 
-                            totalScore: 0, 
-                            examsCount: 0, 
-                            lastGrade: sGrade 
-                        };
-                    }
-                    scoresMap[sName].totalScore += sScore;
-                    scoresMap[sName].examsCount += 1;
-                    scoresMap[sName].lastGrade = sGrade; 
-                });
-
-                const lbArray = Object.values(scoresMap)
-                    .sort((a, b) => {
-                        if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-                        return b.examsCount - a.examsCount;
-                    });
-                
-                setLeaderboard(lbArray);
-            } catch (e) {
-                console.error("Lỗi tải dữ liệu:", e);
-                if (e.code === 'permission-denied') {
-                    alert("⚠️ LỖI PHÂN QUYỀN: Bạn chưa mở khóa Firestore Rules cho phép khách đọc dữ liệu. Vui lòng kiểm tra Firebase!");
+                const q = query(collection(firestore, "pdf_exams"), where("code", "==", code));
+                const snap = await getDocs(q);
+                if (!snap.empty) {
+                    const examData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+                    setExam(examData);
+                    setTimeLeft(examData.timeLimit * 60); 
                 }
-            } finally {
-                setLoading(false);
+            } catch (err) { console.error(err); } 
+            finally { setLoading(false); }
+        };
+        fetchExam();
+    }, [code]);
+
+    useEffect(() => {
+        if (user) {
+            setStudentInfo({ name: user.displayName || user.email, isGuest: false });
+        } else {
+            setStudentInfo({ name: `Khách_${Math.floor(Math.random() * 9000) + 1000}`, isGuest: true });
+        }
+    }, [user]);
+
+    // BỘ ĐẾM GIỜ
+    useEffect(() => {
+        let timer;
+        if (isStarted && !isSubmitting && !isFinished) {
+            if (timeLeft > 0) {
+                timer = setInterval(() => {
+                    setTimeLeft(prev => prev - 1);
+                }, 1000);
+            } else if (timeLeft <= 0) {
+                if (handleSubmitRef.current) handleSubmitRef.current(true);
+            }
+        }
+        return () => clearInterval(timer);
+    }, [isStarted, timeLeft, isSubmitting, isFinished]);
+
+    // [BẢO MẬT]: CHẶN LƯU (CTRL+S), IN (CTRL+P) VÀ CHUỘT PHẢI (TRÊN GIAO DIỆN WEB)
+    useEffect(() => {
+        const preventCheating = (e) => {
+            if (
+                (e.ctrlKey && ['s', 'p', 'c', 'u'].includes(e.key.toLowerCase())) || 
+                e.key === 'F12' ||
+                (e.ctrlKey && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase()))
+            ) {
+                e.preventDefault();
+                alert("⚠️ HỆ THỐNG BẢO MẬT: Tính năng này đã bị khóa trong giờ thi!");
             }
         };
 
-        fetchData();
+        const preventRightClick = (e) => {
+            if (e.target.tagName !== 'EMBED') {
+                e.preventDefault();
+            }
+        };
 
-        return () => unsubscribe();
-    }, [setUser]);
+        if (isStarted && !isFinished) {
+            window.addEventListener('keydown', preventCheating);
+            window.addEventListener('contextmenu', preventRightClick);
+        }
 
-    const examsBySubject = useMemo(() => {
-        const filtered = exams.filter(e => {
-            const matchGrade = e.grade === activeGrade;
-            const authorStr = (e.authorName || e.authorEmail || 'Arena GV').toLowerCase();
-            return matchGrade && (searchTeacher.trim() === '' || authorStr.includes(searchTeacher.toLowerCase().trim()));
-        });
-        return filtered.reduce((acc, exam) => {
-            const subject = exam.subject || 'Khác';
-            if (!acc[subject]) acc[subject] = [];
-            acc[subject].push(exam);
-            return acc;
-        }, {});
-    }, [exams, activeGrade, searchTeacher]);
+        return () => {
+            window.removeEventListener('keydown', preventCheating);
+            window.removeEventListener('contextmenu', preventRightClick);
+        };
+    }, [isStarted, isFinished]);
 
-    const formatDate = (ts) => ts ? new Date(ts.seconds * 1000).toLocaleDateString('vi-VN') : '---';
+    const formatTime = (seconds) => {
+        const m = Math.floor(seconds / 60); const s = seconds % 60;
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    };
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617]"><Loader2 className="animate-spin text-cyan-500" size={60} /></div>;
+    const handlePart1 = (qNum, opt) => setAnswers(p => ({ ...p, part1: { ...p.part1, [qNum]: opt } }));
+    const handlePart2 = (qNum, subIdx, val) => setAnswers(p => {
+        const curQ = p.part2[qNum] || {};
+        return { ...p, part2: { ...p.part2, [qNum]: { ...curQ, [subIdx]: val } } };
+    });
+    const handlePart3 = (qNum, val) => setAnswers(p => ({ ...p, part3: { ...p.part3, [qNum]: val } }));
 
+    const calculateScore = () => {
+        let totalScore = 0;
+        const key = exam.answerKey || {};
+
+        if (key.part1) {
+            Object.keys(key.part1).forEach(qNum => { if (answers.part1[qNum] === key.part1[qNum]) totalScore += 0.25; });
+        }
+        if (key.part2) {
+            Object.keys(key.part2).forEach(qNum => {
+                const correctData = key.part2[qNum];
+                const studentAnsObj = answers.part2[qNum] || {};
+                let matchCount = 0;
+                
+                const correctArr = Array.isArray(correctData) ? correctData : Object.values(correctData || {});
+                
+                correctArr.forEach((trueVal, idx) => { 
+                    if (studentAnsObj[idx] === trueVal) matchCount++; 
+                });
+
+                if (matchCount === 1) totalScore += 0.1;
+                else if (matchCount === 2) totalScore += 0.25;
+                else if (matchCount === 3) totalScore += 0.5;
+                else if (matchCount === 4) totalScore += 1.0;
+            });
+        }
+        if (key.part3) {
+            Object.keys(key.part3).forEach(qNum => {
+                const stuAns = String(answers.part3[qNum] || "").trim().toLowerCase();
+                const trueAns = String(key.part3[qNum] || "").trim().toLowerCase();
+                if (stuAns === trueAns && stuAns !== "") totalScore += 0.5;
+            });
+        }
+        return Math.min(10, totalScore).toFixed(2);
+    };
+
+    const handleSubmit = async (isAutoSubmit = false) => {
+        if (!isFinished && !isAutoSubmit && !confirm("Chốt đáp án và nộp bài? Không thể sửa lại!")) return;
+        setIsSubmitting(true);
+
+        try {
+            const finalScore = calculateScore();
+            setScore(finalScore);
+
+            if (!studentInfo.isGuest) {
+                await addDoc(collection(firestore, "pdf_exam_results"), {
+                    examId: exam.id, 
+                    examCode: exam.code,
+                    examTitle: exam.title,
+                    studentName: studentInfo.name, 
+                    studentClass: exam.grade || 'Tự do',
+                    score: parseFloat(finalScore),
+                    answers: answers,
+                    submittedAt: serverTimestamp()
+                });
+            }
+            setIsFinished(true);
+            confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
+        } catch (err) { 
+            console.error("Lỗi khi chấm điểm/nộp bài: ", err);
+            alert("Đã xảy ra lỗi khi nộp bài: " + err.message); 
+        } 
+        finally { 
+            setIsSubmitting(false); 
+        }
+    };
+
+    useEffect(() => {
+        handleSubmitRef.current = handleSubmit;
+    });
+
+    if (loading) return <div className="h-screen bg-[#09090b] flex items-center justify-center text-orange-500 font-black animate-pulse text-2xl drop-shadow-[0_0_15px_rgba(249,115,22,0.8)]"><Zap className="inline mr-2" size={30}/> ĐANG GIẢI MÃ...</div>;
+    if (!exam) return <div className="h-screen bg-[#09090b] flex items-center justify-center text-red-500 font-black text-xl"><Target className="inline mr-2" size={24}/> MÃ CHIẾN DỊCH KHÔNG TỒN TẠI!</div>;
+
+    const securePdfUrl = exam.pdfUrl?.replace('http://', 'https://');
+
+    // ================= MÀN HÌNH CHỜ (WAITING ROOM) =================
+    if (!isStarted) {
+        return (
+            <div className="min-h-screen bg-[#09090b] flex items-center justify-center p-4 relative overflow-hidden font-sans">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-red-600/20 blur-[150px] rounded-full pointer-events-none"></div>
+                
+                <div className="bg-[#0f172a]/90 backdrop-blur-xl border-2 border-orange-500/50 p-8 md:p-12 rounded-[2.5rem] w-full max-w-lg shadow-[0_0_50px_rgba(249,115,22,0.2)] text-center relative z-10 animate-in zoom-in-95">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-orange-500 to-transparent"></div>
+                    
+                    <Shield size={60} className="mx-auto text-orange-400 drop-shadow-[0_0_15px_rgba(249,115,22,0.8)] mb-6"/>
+                    <h1 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter mb-2 text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-500 to-red-600 drop-shadow-sm">{exam.title}</h1>
+                    <div className="flex justify-center items-center gap-4 text-orange-200 font-bold text-sm mb-8 uppercase tracking-widest">
+                        <span className="bg-orange-950/50 px-3 py-1 rounded-lg border border-orange-500/30">{exam.timeLimit} Phút</span> 
+                        <span className="bg-orange-950/50 px-3 py-1 rounded-lg border border-orange-500/30">{exam.totalQuestions} Câu</span>
+                    </div>
+
+                    <div className="bg-gradient-to-r from-[#0a0a0a] to-red-950/30 border border-orange-500/30 p-4 rounded-2xl mb-8 flex items-center justify-between shadow-inner">
+                        <div className="text-left flex items-center gap-3">
+                            <div className="bg-orange-500/20 p-2 rounded-full border border-orange-500/50 text-orange-400"><User size={20}/></div>
+                            <div>
+                                <p className="text-[10px] text-orange-400 font-bold uppercase tracking-widest mb-0.5">Chiến binh</p>
+                                <p className="text-white font-black text-sm md:text-base">{studentInfo.name}</p>
+                            </div>
+                        </div>
+                        <CheckCircle size={24} className="text-emerald-500 drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]"/>
+                    </div>
+
+                    <button onClick={() => setIsStarted(true)} className="w-full bg-gradient-to-b from-orange-500 to-red-600 border-b-4 border-red-900 active:translate-y-1 active:border-b-0 text-white py-4 rounded-2xl font-black text-xl uppercase tracking-widest shadow-[0_0_30px_rgba(249,115,22,0.4)] transition-all flex items-center justify-center gap-2">
+                        BẮT ĐẦU CHIẾN DỊCH
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // ================= MÀN HÌNH HOÀN THÀNH (FINISHED) =================
+    if (isFinished) {
+        return (
+            <div className="min-h-screen bg-[#09090b] flex items-center justify-center p-4 font-sans relative overflow-hidden">
+                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-yellow-600/20 via-transparent to-transparent pointer-events-none"></div>
+                 
+                 <div className="bg-[#0f172a]/90 backdrop-blur-xl border-2 border-yellow-500/50 p-8 md:p-10 rounded-[2.5rem] w-full max-w-md text-center relative z-10 animate-in zoom-in">
+                    <Trophy size={80} className="text-yellow-400 mx-auto mb-6 drop-shadow-[0_0_30px_rgba(250,204,21,0.8)]"/>
+                    <h2 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 to-orange-500 uppercase italic tracking-tighter mb-2 drop-shadow-md">HOÀN THÀNH</h2>
+                    <p className="text-orange-200 font-bold uppercase tracking-widest text-xs mb-8">Chiến binh: <span className="text-white">{studentInfo.name}</span></p>
+                    
+                    <div className="bg-black/80 border-2 border-yellow-500/30 p-8 rounded-3xl mb-8 shadow-[inset_0_0_30px_rgba(250,204,21,0.1)] relative">
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow-500 text-black font-black text-[10px] px-3 py-1 rounded-full uppercase tracking-widest">TỔNG ĐIỂM</div>
+                        <p className="text-7xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-orange-400 to-red-500 drop-shadow-lg">
+                            {score}
+                        </p>
+                    </div>
+
+                    <button onClick={() => router.push('/arena-on-thi')} className="w-full bg-gradient-to-b from-slate-700 to-slate-900 border-b-4 border-black active:translate-y-1 active:border-b-0 hover:from-slate-600 hover:to-slate-800 text-white py-4 rounded-xl font-black uppercase tracking-widest transition-all shadow-lg">
+                        VỀ TRANG CHỦ
+                    </button>
+                 </div>
+            </div>
+        );
+    }
+
+    // ================= MÀN HÌNH LÀM BÀI (ACTIVE EXAM) =================
     return (
-        <div className="min-h-screen bg-[#09090b] text-slate-200 font-sans pb-20 overflow-x-hidden relative">
+        // [VÁ LỖI CỐT LÕI]: Dùng fixed inset-0 để ôm chặt cứng màn hình điện thoại, tránh lỗi tràn của 100dvh
+        <div className="fixed inset-0 bg-[#09090b] flex flex-col overflow-hidden font-sans text-slate-200 printable-exam-area">
             
-            {/* BACKGROUND CHUNG */}
-            <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/20 via-[#09090b] to-black -z-20"></div>
-
-            {/* ================= HEADER 3D NEON RỰC LỬA ================= */}
-            <header className="sticky top-0 z-50 bg-[#050505]/90 backdrop-blur-xl border-b-2 border-orange-600 shadow-[0_10px_30px_rgba(249,115,22,0.15)] px-2 sm:px-4 h-[70px] sm:h-[80px]">
-                {/* Tia sáng hắt từ trên xuống */}
-                <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-orange-500/20 to-transparent pointer-events-none"></div>
-
-                <div className="max-w-[1600px] mx-auto h-full flex items-center justify-between gap-2 sm:gap-4 relative z-10">
+            {/* WRAPPER CHIA MÀN HÌNH (Mobile: Dọc, Desktop: Ngang) */}
+            <div className="flex-1 flex flex-col md:flex-row min-h-0 w-full relative">
+                
+                {/* ================= KHU VỰC 1: ĐỀ PDF ================= */}
+                {/* Mobile: Ép tỷ lệ flex-[7] (Chiếm đúng 70% không gian). Desktop: flex-1 */}
+                <div className="flex-[7] md:flex-1 flex flex-col min-h-0 shrink-0 relative bg-black z-20 shadow-[0_10px_30px_rgba(0,0,0,0.5)] md:shadow-none">
                     
-                    {/* CỤM TRÁI: Nút Back 3D & Logo */}
-                    <div className="flex items-center gap-3 shrink-0">
-                        <button onClick={() => router.push('/')} className="relative group p-2.5 sm:p-3 bg-gradient-to-b from-orange-500 to-red-600 border-b-4 border-red-900 rounded-xl shadow-[0_0_15px_rgba(239,68,68,0.5)] active:translate-y-1 active:border-b-0 transition-all flex items-center justify-center overflow-hidden">
-                            <div className="absolute inset-0 bg-white/20 translate-y-[-100%] group-hover:translate-y-[100%] transition-transform duration-500"></div>
-                            <ArrowLeft size={20} className="text-white drop-shadow-md relative z-10" strokeWidth={3} />
-                        </button>
+                    {/* HEADER */}
+                    <div className="h-[55px] sm:h-[70px] bg-[#050505] border-b-2 border-orange-600 shadow-[0_5px_20px_rgba(249,115,22,0.15)] flex items-center justify-between px-3 md:px-6 shrink-0 relative z-20">
+                        <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-orange-500/10 to-transparent pointer-events-none"></div>
                         
-                        <div className="hidden lg:flex items-center gap-2 font-black italic uppercase text-2xl tracking-tighter drop-shadow-[0_0_15px_rgba(249,115,22,0.8)]">
-                            <Shield className="text-orange-400 drop-shadow-[0_0_10px_rgba(249,115,22,1)]" size={32} />
-                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-500 to-red-600">ARENA ÔN THI</span>
+                        <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
+                            <button onClick={() => { if(confirm('⚠️ Thoát bây giờ sẽ mất toàn bộ bài đang làm. Bạn chắc chứ?')) router.push('/arena-on-thi'); }} className="p-2 sm:p-2.5 bg-gradient-to-b from-orange-500 to-red-600 border-b-[3px] border-red-900 rounded-xl active:translate-y-1 active:border-b-0 transition-all group shrink-0">
+                                <ArrowLeft size={16} className="text-white drop-shadow-md sm:w-[18px] sm:h-[18px]" strokeWidth={3}/>
+                            </button>
+                            <div className="font-black text-sm md:text-lg text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-500 to-red-600 uppercase tracking-tighter italic truncate drop-shadow-sm" title={exam.title}>
+                                {exam.title}
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 sm:gap-6 shrink-0">
+                            {/* Cảnh báo khóa tải */}
+                            <div className="hidden lg:flex items-center gap-1.5 text-red-500 bg-red-950/30 px-3 py-1 rounded-lg border border-red-500/20 text-[10px] font-black uppercase tracking-widest">
+                                <Lock size={12}/> Đã khóa Tải/In
+                            </div>
+
+                            <div className="hidden sm:flex items-center gap-2 bg-slate-900/80 border border-orange-500/30 pl-3 pr-1.5 py-1 rounded-full shadow-inner">
+                                <div className="flex flex-col items-end pr-2">
+                                    <span className="text-[8px] font-black text-orange-400 uppercase tracking-widest">{studentInfo.isGuest ? 'Chế độ Khách' : 'Chiến Binh'}</span>
+                                    <span className="text-xs font-bold text-white leading-none mt-0.5 truncate max-w-[120px]">{studentInfo.name}</span>
+                                </div>
+                                <User size={24} className="bg-orange-500/20 p-1 rounded-full text-orange-400 border border-orange-500/50"/>
+                            </div>
+                            
+                            <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl font-black text-sm sm:text-xl shadow-[inset_0_0_10px_rgba(0,0,0,0.5)] border-2 ${timeLeft < 300 ? 'bg-red-950/50 text-red-400 border-red-500 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-[#0a0a0a] text-orange-400 border-orange-500/50 drop-shadow-[0_0_5px_rgba(249,115,22,0.8)]'}`}>
+                                <Timer size={16} className="sm:w-5 sm:h-5" strokeWidth={2.5}/> {formatTime(timeLeft)}
+                            </div>
                         </div>
                     </div>
 
-                    {/* CỤM GIỮA: Thanh tìm kiếm Neon Glow */}
-                    <div className="flex-1 max-w-2xl relative group mx-1 sm:mx-4">
-                        {/* Hào quang phát sáng khi focus */}
-                        <div className="absolute -inset-0.5 bg-gradient-to-r from-yellow-500 via-orange-500 to-red-600 rounded-2xl blur opacity-30 group-focus-within:opacity-80 transition duration-500"></div>
-                        <div className="relative flex items-center bg-[#0a0a0a] border-2 border-orange-600/50 rounded-2xl h-10 sm:h-[50px] overflow-hidden shadow-inner">
-                            <Search className="ml-3 sm:ml-4 text-orange-500 drop-shadow-[0_0_5px_rgba(249,115,22,0.8)]" size={20} />
-                            <input 
-                                type="text"
-                                placeholder="Tìm nhiệm vụ theo tên giáo viên..."
-                                value={searchTeacher}
-                                onChange={(e) => setSearchTeacher(e.target.value)}
-                                className="w-full bg-transparent border-none text-white text-xs sm:text-sm font-bold px-2 sm:px-4 h-full outline-none placeholder:text-orange-900/70"
-                            />
-                            {searchTeacher && (
-                                <button onClick={() => setSearchTeacher('')} className="mr-2 sm:mr-3 text-orange-500 hover:text-white p-1 transition-colors">
-                                    <X size={18} />
-                                </button>
-                            )}
-                        </div>
+                    <div className="flex-1 w-full bg-white relative min-h-0">
+                        {/* BẢO MẬT PDF: Kính cường lực che chuột phải chỉ bật trên máy tính. Mobile để vuốt tự do. */}
+                        <div 
+                            className="hidden md:block absolute top-0 left-0 bottom-0 right-[20px] z-10 cursor-not-allowed"
+                            onContextMenu={(e) => {
+                                e.preventDefault();
+                                alert("⚠️ HỆ THỐNG BẢO MẬT: Chuột phải đã bị vô hiệu hóa trên vùng đề thi!");
+                            }}
+                        ></div>
+                        <embed src={`${securePdfUrl}#view=FitH&toolbar=0&navpanes=0`} type="application/pdf" className="w-full h-full relative z-0" />
                     </div>
+                </div>
+
+                {/* ================= KHU VỰC 2: KHUNG ĐÁP ÁN ================= */}
+                {/* Mobile: Ép tỷ lệ flex-[3] (Chiếm đúng 30% không gian). Desktop: Cố định 320px */}
+                <div className="flex-[3] md:flex-none md:w-[320px] bg-[#0a0a0a] border-t-2 md:border-t-0 md:border-l-2 border-red-600/50 flex flex-col min-h-0 shadow-[0_-10px_30px_rgba(239,68,68,0.15)] md:shadow-[-10px_0_30px_rgba(239,68,68,0.15)] relative z-30">
                     
-                    {/* CỤM PHẢI: User Badge hoặc Nút Đăng nhập 3D */}
-                    <div className="shrink-0">
-                        {user ? (
-                            <div className="flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-red-950 to-[#0a0a0a] border-2 border-orange-600/50 pl-2 sm:pl-4 pr-1 sm:pr-1.5 py-1 sm:py-1.5 rounded-full shadow-[0_0_15px_rgba(249,115,22,0.2)]">
-                                <span className="text-[10px] sm:text-xs font-black text-yellow-100 hidden sm:block truncate max-w-[100px] lg:max-w-[150px] drop-shadow-md tracking-wider">
-                                    {user.displayName || user.email}
-                                </span>
-                                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-br from-yellow-400 via-orange-500 to-red-600 flex items-center justify-center border-2 border-yellow-200 text-black shadow-[0_0_15px_rgba(250,204,21,0.6)] shrink-0">
-                                    <User size={16} strokeWidth={2.5}/>
+                    <div className="h-[35px] md:h-[45px] bg-gradient-to-r from-red-950 to-[#0a0a0a] border-b border-red-500/30 flex items-center justify-center shrink-0 shadow-sm relative">
+                        <div className="absolute left-0 top-0 w-1 h-full bg-red-500"></div>
+                        <span className="text-[10px] md:text-xs font-black text-red-400 uppercase tracking-[0.3em] flex items-center gap-2 drop-shadow-md"><PenTool size={14} className="md:w-4 md:h-4"/> PHIẾU ĐIỀN ĐÁP ÁN</span>
+                    </div>
+
+                    {/* Vùng chứa cuộn: Đã thêm min-h-0 ở các lớp cha để đảm bảo overflow-y-auto hoạt động */}
+                    <div className="flex-1 overflow-y-auto min-h-0 p-3 sm:p-4 pb-8 custom-scrollbar space-y-4 md:space-y-6">
+                        {/* TRẮC NGHIỆM */}
+                        {exam.answerKey?.part1 && Object.keys(exam.answerKey.part1).length > 0 && (
+                            <div>
+                                <div className="text-[11px] font-black text-orange-400 uppercase tracking-widest mb-3 flex items-center gap-1.5 bg-orange-950/30 p-2 rounded-lg border border-orange-500/20"><FileText size={14}/> I. TRẮC NGHIỆM</div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {Object.keys(exam.answerKey.part1).sort((a,b)=>a-b).map(qNum => (
+                                        <div key={qNum} className="flex items-center justify-between bg-slate-900/80 rounded-lg px-2 py-1.5 border border-slate-800 shadow-inner">
+                                            <span className="text-[11px] font-bold text-slate-400 w-5 text-center">{qNum}</span>
+                                            <div className="flex gap-1">
+                                                {['A', 'B', 'C', 'D'].map(opt => {
+                                                    const isSel = answers.part1[qNum] === opt;
+                                                    return (
+                                                        <button key={opt} onClick={() => handlePart1(qNum, opt)} className={`w-6 h-6 sm:w-[26px] sm:h-[26px] rounded-full text-[10px] sm:text-[11px] font-black transition-all ${isSel ? 'bg-gradient-to-br from-orange-400 to-red-600 text-white shadow-[0_0_12px_rgba(249,115,22,0.8)] border-none scale-110' : 'bg-[#111] text-slate-500 hover:bg-slate-800 border border-slate-700'}`}>
+                                                            {opt}
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
-                        ) : (
-                            <button onClick={() => router.push('/')} className="relative px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-b from-yellow-400 via-orange-500 to-red-600 border-b-4 border-red-900 rounded-xl text-[10px] sm:text-xs font-black text-white uppercase tracking-widest active:translate-y-1 active:border-b-0 transition-all shadow-[0_0_20px_rgba(249,115,22,0.5)] overflow-hidden group">
-                                <div className="absolute inset-0 bg-white/20 translate-y-[-100%] group-hover:translate-y-[100%] transition-transform duration-500"></div>
-                                <span className="relative z-10 flex items-center gap-1.5 drop-shadow-md">
-                                    <LogIn size={14} className="hidden sm:block" strokeWidth={3}/> Đăng nhập
-                                </span>
-                            </button>
+                        )}
+
+                        {/* ĐÚNG / SAI */}
+                        {exam.answerKey?.part2 && Object.keys(exam.answerKey.part2).length > 0 && (
+                            <div>
+                                <div className="text-[11px] font-black text-yellow-400 uppercase tracking-widest mb-3 flex items-center gap-1.5 bg-yellow-950/30 p-2 rounded-lg border border-yellow-500/20"><CheckCircle size={14}/> II. ĐÚNG / SAI</div>
+                                <div className="bg-slate-900/80 rounded-xl border border-slate-800 overflow-hidden shadow-inner">
+                                    <table className="w-full text-center border-collapse">
+                                        <thead>
+                                            <tr className="bg-black border-b border-slate-800">
+                                                <th className="py-3 px-1 border-r border-slate-800 text-[10px] font-black text-slate-500 w-10 uppercase">Câu</th>
+                                                <th className="py-3 px-1 border-r border-slate-800 text-[10px] font-black text-slate-500 w-[18%] uppercase">a</th>
+                                                <th className="py-3 px-1 border-r border-slate-800 text-[10px] font-black text-slate-500 w-[18%] uppercase">b</th>
+                                                <th className="py-3 px-1 border-r border-slate-800 text-[10px] font-black text-slate-500 w-[18%] uppercase">c</th>
+                                                <th className="py-3 px-1 text-[10px] font-black text-slate-500 w-[18%] uppercase">d</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-800">
+                                            {Object.keys(exam.answerKey.part2).sort((a,b)=>a-b).map(qNum => (
+                                                <tr key={qNum} className="hover:bg-slate-800/50 transition-colors">
+                                                    <td className="py-2.5 px-1 border-r border-slate-800 text-xs font-bold text-slate-400 bg-black/50">{qNum}</td>
+                                                    {['a', 'b', 'c', 'd'].map((sub, idx) => {
+                                                        const val = answers.part2[qNum]?.[idx];
+                                                        return (
+                                                            <td key={idx} className="py-2.5 px-0.5 border-r border-slate-800 last:border-0 align-middle">
+                                                                <div className="flex justify-center rounded overflow-hidden border border-slate-700 w-fit mx-auto bg-[#0a0a0a]">
+                                                                    <button onClick={() => handlePart2(qNum, idx, 'Đ')} className={`w-6 h-6 sm:w-7 sm:h-7 text-[10px] sm:text-[11px] font-black flex items-center justify-center transition-all ${val==='Đ' ? 'bg-emerald-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.6)] z-10 rounded-l' : 'text-slate-500 hover:text-white hover:bg-slate-800'}`}>Đ</button>
+                                                                    <button onClick={() => handlePart2(qNum, idx, 'S')} className={`w-6 h-6 sm:w-7 sm:h-7 text-[10px] sm:text-[11px] font-black flex items-center justify-center transition-all ${val==='S' ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.6)] z-10 rounded-r' : 'text-slate-500 hover:text-white hover:bg-slate-800'}`}>S</button>
+                                                                </div>
+                                                            </td>
+                                                        )
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ĐIỀN ĐÁP ÁN */}
+                        {exam.answerKey?.part3 && Object.keys(exam.answerKey.part3).length > 0 && (
+                            <div>
+                                <div className="text-[11px] font-black text-red-400 uppercase tracking-widest mb-3 flex items-center gap-1.5 bg-red-950/30 p-2 rounded-lg border border-red-500/20"><Edit3 size={14}/> III. ĐIỀN ĐÁP ÁN</div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                    {Object.keys(exam.answerKey.part3).sort((a,b)=>a-b).map(qNum => (
+                                        <div key={qNum} className="flex items-center bg-slate-900/80 border border-slate-800 rounded-lg overflow-hidden focus-within:border-orange-500 focus-within:shadow-[0_0_10px_rgba(249,115,22,0.3)] transition-all">
+                                            <span className="w-8 bg-black text-center text-xs font-bold text-slate-500 py-2 shrink-0 border-r border-slate-800">C.{qNum}</span>
+                                            <input 
+                                                type="text" value={answers.part3[qNum] || ''} onChange={(e) => handlePart3(qNum, e.target.value)}
+                                                className="w-full bg-transparent text-xs font-black text-orange-400 text-center outline-none px-2 py-2 placeholder:text-slate-700"
+                                                placeholder="..."
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         )}
                     </div>
-                </div>
-            </header>
-            {/* ================= END HEADER ================= */}
 
-            <main className="max-w-[1600px] mx-auto px-4 mt-8 flex flex-col xl:flex-row gap-8">
-                {/* CỘT TRÁI: DANH SÁCH ĐỀ */}
-                <div className="flex-1 overflow-hidden">
-                    <div className="flex overflow-x-auto no-scrollbar gap-2 mb-8 pb-1">
-                        {GRADES.map(grade => (
-                            <button 
-                                key={grade} onClick={() => setActiveGrade(grade)}
-                                className={`shrink-0 px-6 py-3 rounded-2xl font-black text-sm transition-all border-2 ${
-                                    activeGrade === grade 
-                                    ? 'bg-gradient-to-br from-cyan-600 to-blue-700 border-cyan-400 text-white shadow-lg scale-105' 
-                                    : 'bg-[#18181b] border-slate-800 text-slate-400 hover:border-cyan-500/50'
-                                }`}
-                            >
-                                LỚP {grade}
-                            </button>
-                        ))}
-                    </div>
-
-                    {Object.keys(examsBySubject).length === 0 ? (
-                        <div className="bg-[#18181b] border border-slate-800 rounded-[2rem] p-20 text-center flex flex-col items-center">
-                            <BookOpen size={48} className="text-slate-700 mb-4"/>
-                            <p className="text-slate-500 font-bold">Không tìm thấy dữ liệu phù hợp</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-12">
-                            {Object.entries(examsBySubject).map(([subject, subExams]) => (
-                                <div key={subject}>
-                                    <div className="flex items-center gap-4 mb-4">
-                                        <h2 className="text-2xl font-black uppercase text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">{subject}</h2>
-                                        <div className="h-px bg-slate-800 flex-1"></div>
-                                    </div>
-
-                                    <div className="bg-[#18181b] rounded-2xl sm:rounded-3xl border border-slate-800 overflow-x-auto custom-scrollbar shadow-2xl relative">
-                                        <table className="w-full text-left min-w-[600px] lg:min-w-full border-collapse">
-                                            <thead className="bg-slate-900 text-[10px] font-black text-cyan-400 uppercase tracking-widest border-b border-slate-800">
-                                                <tr>
-                                                    <th className="p-3 sm:p-4 w-10 sm:w-12 text-center shrink-0">TT</th>
-                                                    <th className="p-3 sm:p-4 min-w-[180px]">Tên Đề / Mã</th>
-                                                    <th className="p-3 sm:p-4 text-center shrink-0">Ngày tạo</th>
-                                                    <th className="p-3 sm:p-4 text-center shrink-0">Số câu</th>
-                                                    <th className="p-3 sm:p-4 text-center shrink-0">Thời gian</th>
-                                                    
-                                                    {/* THAO TÁC (Được ghim dính ở mép phải) */}
-                                                    <th className="p-3 sm:p-4 text-center w-24 sm:w-32 shrink-0 sticky right-0 bg-slate-900 shadow-[-8px_0_15px_-5px_rgba(0,0,0,0.5)] z-20 border-l border-slate-800">Thao tác</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-800/50">
-                                                {subExams.map((exam, idx) => (
-                                                    <tr key={exam.id} className="bg-[#18181b] hover:bg-slate-800 transition-colors group">
-                                                        <td className="p-3 sm:p-4 text-center font-mono text-slate-500">{idx + 1}</td>
-                                                        <td className="p-3 sm:p-4">
-                                                            {/* Bổ sung click vào tiêu đề để vào thi */}
-                                                            <div 
-                                                                onClick={() => router.push(`/pdf-play/${exam.code}`)}
-                                                                className="font-bold text-white group-hover:text-cyan-400 transition-colors cursor-pointer"
-                                                                title="Nhấn để vào thi"
-                                                            >
-                                                                {exam.title}
-                                                            </div>
-                                                            <div className="text-[10px] text-slate-500 font-mono mt-1">ID: {exam.code} | GV: {exam.authorName || 'Arena'}</div>
-                                                        </td>
-                                                        <td className="p-3 sm:p-4 text-center text-xs text-slate-400 font-mono">{formatDate(exam.createdAt)}</td>
-                                                        <td className="p-3 sm:p-4 text-center">
-                                                            <span className="bg-slate-900 px-2 py-1 rounded border border-slate-700 text-xs font-black">{exam.totalQuestions}</span>
-                                                        </td>
-                                                        <td className="p-3 sm:p-4 text-center">
-                                                            <span className="text-orange-400 font-black text-sm">{exam.timeLimit}p</span>
-                                                        </td>
-                                                        
-                                                        {/* NÚT VÀO THI (Được ghim dính ở mép phải) */}
-                                                        <td className="p-2 sm:p-4 text-center sticky right-0 bg-inherit shadow-[-8px_0_15px_-5px_rgba(0,0,0,0.5)] z-10 border-l border-slate-800/50">
-                                                            <button onClick={() => router.push(`/pdf-play/${exam.code}`)} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2 rounded-xl text-[10px] font-black uppercase transition-all shadow-md active:scale-95">VÀO THI</button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* CỘT PHẢI: BẢNG VÀNG THIẾT KẾ ĐẦY ĐỦ */}
-                <div className="w-full xl:w-[350px] shrink-0">
-                    <div className="sticky top-[100px] bg-[#18181b] border-2 border-orange-500/20 rounded-[2.5rem] overflow-hidden shadow-2xl">
-                        <div className="bg-gradient-to-br from-orange-500 to-red-600 p-6 flex items-center gap-3">
-                            <Trophy className="text-white" size={32} />
-                            <div>
-                                <h2 className="text-2xl font-black text-white uppercase italic leading-none">Bảng Vàng</h2>
-                                <p className="text-[10px] text-orange-100 font-bold uppercase tracking-widest mt-1 opacity-80">Tích lũy XP hệ thống</p>
-                            </div>
-                        </div>
-
-                        <div className="p-2 max-h-[600px] overflow-y-auto custom-scrollbar bg-slate-950/50">
-                            {leaderboard.length === 0 ? (
-                                <div className="p-10 text-center text-slate-600 font-bold text-xs uppercase">Chưa có dữ liệu</div>
-                            ) : (
-                                <table className="w-full border-separate border-spacing-y-2">
-                                    <thead className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">
-                                        <tr>
-                                            <th className="pb-2 pl-4 text-left">Top</th>
-                                            <th className="pb-2 text-left">Học sinh / Lớp</th>
-                                            <th className="pb-2 pr-4 text-right">Tổng Điểm</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {leaderboard.map((student, index) => {
-                                            const isTop3 = index < 3;
-                                            const colors = [
-                                                "bg-yellow-500 text-black shadow-[0_0_15px_rgba(234,179,8,0.4)]",
-                                                "bg-slate-300 text-black shadow-[0_0_15px_rgba(203,213,225,0.3)]",
-                                                "bg-orange-700 text-white shadow-[0_0_15px_rgba(194,65,12,0.3)]"
-                                            ];
-
-                                            return (
-                                                <tr key={student.name} className="bg-slate-900/50 hover:bg-slate-800 transition-colors group">
-                                                    <td className="py-3 pl-4 rounded-l-2xl">
-                                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs border-2 ${isTop3 ? colors[index] : "bg-slate-800 text-slate-400 border-slate-700"}`}>
-                                                            {isTop3 ? <Medal size={14}/> : index + 1}
-                                                        </div>
-                                                    </td>
-                                                    <td className="py-3">
-                                                        <div className="font-bold text-sm text-white truncate max-w-[120px] group-hover:text-cyan-400 transition-colors">{student.name}</div>
-                                                        <div className="flex items-center gap-2 mt-0.5">
-                                                            <span className="text-[9px] bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 text-slate-400 font-bold">Lớp {student.lastGrade}</span>
-                                                            <span className="text-[9px] text-slate-500 italic">Đã giải {student.examsCount} đề</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="py-3 pr-4 text-right rounded-r-2xl">
-                                                        <div className="text-orange-400 font-black text-lg drop-shadow-md">
-                                                            {student.totalScore.toFixed(2)}
-                                                            <span className="text-[10px] ml-0.5 opacity-60">đ</span>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            )}
-                        </div>
+                    {/* NÚT NỘP BÀI (Chỉ hiện trên PC ở đây, Mobile sẽ có thanh dưới đáy) */}
+                    <div className="p-4 shrink-0 border-t border-red-600/30 bg-[#050505] hidden md:block z-20">
+                        <button onClick={() => handleSubmit(false)} disabled={isSubmitting} className="w-full bg-gradient-to-b from-orange-500 to-red-600 border-b-4 border-red-900 active:translate-y-1 active:border-b-0 text-white py-4 rounded-xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(239,68,68,0.5)] transition-all flex items-center justify-center gap-2">
+                            {isSubmitting ? 'ĐANG XỬ LÝ...' : <><Send size={18} strokeWidth={3}/> NỘP BÀI NGAY</>}
+                        </button>
                     </div>
                 </div>
-            </main>
 
+            </div>
+
+            {/* ================= KHU VỰC 3: NÚT NỘP BÀI BOTTOM DÀNH CHO MOBILE ================= */}
+            <div className="md:hidden h-[55px] sm:h-[65px] bg-[#050505] border-t-2 border-orange-600/50 p-2 shrink-0 z-50 relative shadow-[0_-5px_20px_rgba(249,115,22,0.15)]">
+                <button onClick={() => handleSubmit(false)} disabled={isSubmitting} className="w-full h-full bg-gradient-to-b from-orange-500 to-red-600 border-b-4 border-red-900 active:translate-y-1 active:border-b-0 text-white rounded-xl font-black uppercase text-xs sm:text-sm tracking-widest shadow-[0_0_15px_rgba(239,68,68,0.5)] flex items-center justify-center gap-2 transition-all">
+                    {isSubmitting ? 'ĐANG XỬ LÝ...' : <><Send size={16} strokeWidth={3}/> NỘP BÀI CHIẾN DỊCH</>}
+                </button>
+            </div>
+
+            {/* BẢO MẬT PDF: Ép CSS màn hình in thành màu trắng bóc nếu học sinh cố tình dùng thủ thuật in */}
             <style jsx global>{`
-                .no-scrollbar::-webkit-scrollbar { display: none; }
-                .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 6px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #ea580c; }
+                @media print {
+                    body * {
+                        visibility: hidden !important;
+                    }
+                    html, body {
+                        background-color: white !important;
+                    }
+                    html::before {
+                        content: "⚠️ TÍNH NĂNG IN ĐÃ BỊ HỆ THỐNG BẢO MẬT KHÓA ⚠️";
+                        visibility: visible !important;
+                        display: block;
+                        text-align: center;
+                        font-size: 24px;
+                        font-weight: bold;
+                        color: red;
+                        margin-top: 50px;
+                        width: 100%;
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                    }
+                }
+            `}</style>
+
+            <style jsx>{`
+                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: #ea580c; border-radius: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #dc2626; }
             `}</style>
         </div>
     );
