@@ -23,22 +23,18 @@ export default function ArenaOnThi() {
     const [searchTeacher, setSearchTeacher] = useState('');
 
     useEffect(() => {
-        // 1. Lắng nghe trạng thái auth chỉ để hiển thị giao diện góc phải (Đăng nhập / Tên User)
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
             setUser(currentUser);
         });
 
-        // 2. Tải dữ liệu Đề thi và Bảng xếp hạng TRỰC TIẾP (Không cần chờ đăng nhập)
         const fetchData = async () => {
             try {
-                // Tải toàn bộ Đề thi
                 const qExams = query(collection(firestore, "pdf_exams"), where("status", "==", "OPEN"));
                 const snapExams = await getDocs(qExams);
                 const examsData = snapExams.docs.map(d => ({ id: d.id, ...d.data() }));
                 examsData.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
                 setExams(examsData);
 
-                // Tải & Tính toán Bảng Xếp Hạng
                 const snapResults = await getDocs(collection(firestore, "pdf_exam_results"));
                 const scoresMap = {};
                 
@@ -206,16 +202,17 @@ export default function ArenaOnThi() {
                                         <div className="h-px bg-slate-800 flex-1"></div>
                                     </div>
 
-                                    <div className="bg-[#18181b] rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
-                                        <table className="w-full text-left">
+                                    {/* [VÁ LỖI GIAO DIỆN MOBILE]: Đã sửa overflow-hidden thành overflow-x-auto và thêm min-w để bảng có thể vuốt ngang trên điện thoại mà không bị vỡ bố cục */}
+                                    <div className="bg-[#18181b] rounded-3xl border border-slate-800 overflow-x-auto no-scrollbar shadow-2xl">
+                                        <table className="w-full text-left min-w-[700px] lg:min-w-full">
                                             <thead className="bg-slate-900/50 text-[10px] font-black text-cyan-400 uppercase tracking-widest border-b border-slate-800">
                                                 <tr>
-                                                    <th className="p-4 w-12 text-center">TT</th>
+                                                    <th className="p-4 w-12 text-center shrink-0">TT</th>
                                                     <th className="p-4">Tên Đề / Mã</th>
-                                                    <th className="p-4 text-center">Ngày tạo</th>
-                                                    <th className="p-4 text-center">Số câu</th>
-                                                    <th className="p-4 text-center">Thời gian</th>
-                                                    <th className="p-4 text-center w-32">Thao tác</th>
+                                                    <th className="p-4 text-center shrink-0">Ngày tạo</th>
+                                                    <th className="p-4 text-center shrink-0">Số câu</th>
+                                                    <th className="p-4 text-center shrink-0">Thời gian</th>
+                                                    <th className="p-4 text-center w-32 shrink-0">Thao tác</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-800/50">
