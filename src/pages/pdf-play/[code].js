@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { firestore } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import useAuthStore from '@/store/useAuthStore';
-import { Timer, Send, Shield, CheckCircle, User, FileText, Edit3, Eye, PenTool, ArrowLeft, Zap, Target } from 'lucide-react';
+// [VÁ LỖI]: Đã thêm Trophy vào import
+import { Timer, Send, Shield, CheckCircle, User, FileText, Edit3, Eye, PenTool, ArrowLeft, Zap, Target, Trophy } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function PDFPlay() {
@@ -22,8 +23,10 @@ export default function PDFPlay() {
     const [score, setScore] = useState(0);
 
     const [mobileTab, setMobileTab] = useState('PDF'); 
-
     const [answers, setAnswers] = useState({ part1: {}, part2: {}, part3: {} });
+
+    // Ref để lưu trữ hàm handleSubmit mới nhất cho bộ đếm giờ
+    const handleSubmitRef = useRef();
 
     useEffect(() => {
         if (!code) return;
@@ -50,15 +53,18 @@ export default function PDFPlay() {
         }
     }, [user]);
 
+    // [VÁ LỖI TỰ NỘP BÀI]: Logic đếm giờ an toàn hơn
     useEffect(() => {
         let timer;
-        if (isStarted && timeLeft > 0 && !isSubmitting && !isFinished) {
-            timer = setInterval(() => {
-                setTimeLeft(prev => {
-                    if (prev <= 1) { clearInterval(timer); handleSubmit(); return 0; }
-                    return prev - 1;
-                });
-            }, 1000);
+        if (isStarted && !isSubmitting && !isFinished) {
+            if (timeLeft > 0) {
+                timer = setInterval(() => {
+                    setTimeLeft(prev => prev - 1);
+                }, 1000);
+            } else if (timeLeft <= 0) {
+                // Hết giờ -> Tự động nộp bài
+                if (handleSubmitRef.current) handleSubmitRef.current(true);
+            }
         }
         return () => clearInterval(timer);
     }, [isStarted, timeLeft, isSubmitting, isFinished]);
@@ -84,10 +90,16 @@ export default function PDFPlay() {
         }
         if (key.part2) {
             Object.keys(key.part2).forEach(qNum => {
-                const correctArr = key.part2[qNum];
+                const correctData = key.part2[qNum];
                 const studentAnsObj = answers.part2[qNum] || {};
                 let matchCount = 0;
-                correctArr.forEach((trueVal, idx) => { if (studentAnsObj[idx] === trueVal) matchCount++; });
+                
+                const correctArr = Array.isArray(correctData) ? correctData : Object.values(correctData || {});
+                
+                correctArr.forEach((trueVal, idx) => { 
+                    if (studentAnsObj[idx] === trueVal) matchCount++; 
+                });
+
                 if (matchCount === 1) totalScore += 0.1;
                 else if (matchCount === 2) totalScore += 0.25;
                 else if (matchCount === 3) totalScore += 0.5;
@@ -97,20 +109,23 @@ export default function PDFPlay() {
         if (key.part3) {
             Object.keys(key.part3).forEach(qNum => {
                 const stuAns = String(answers.part3[qNum] || "").trim().toLowerCase();
-                const trueAns = String(key.part3[qNum]).trim().toLowerCase();
+                const trueAns = String(key.part3[qNum] || "").trim().toLowerCase();
                 if (stuAns === trueAns && stuAns !== "") totalScore += 0.5;
             });
         }
         return Math.min(10, totalScore).toFixed(2);
     };
 
-    const handleSubmit = async () => {
-        if (!isFinished && !confirm("Chốt đáp án và nộp bài? Không thể sửa lại!")) return;
+    // [VÁ LỖI]: Thêm biến isAutoSubmit để bỏ qua hộp thoại xác nhận khi hết giờ
+    const handleSubmit = async (isAutoSubmit = false) => {
+        if (!isFinished && !isAutoSubmit && !confirm("Chốt đáp án và nộp bài? Không thể sửa lại!")) return;
         setIsSubmitting(true);
-        const finalScore = calculateScore();
-        setScore(finalScore);
 
         try {
+            const finalScore = calculateScore();
+            setScore(finalScore);
+
+            // Ghi nhận điểm nếu không phải là khách
             if (!studentInfo.isGuest) {
                 await addDoc(collection(firestore, "pdf_exam_results"), {
                     examId: exam.id, 
@@ -126,12 +141,18 @@ export default function PDFPlay() {
             setIsFinished(true);
             confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
         } catch (err) { 
-            alert("Lỗi khi nộp bài: " + err.message); 
+            console.error("Lỗi khi chấm điểm/nộp bài: ", err);
+            alert("Đã xảy ra lỗi khi nộp bài: " + err.message); 
         } 
         finally { 
             setIsSubmitting(false); 
         }
     };
+
+    // Luôn cập nhật ref với phiên bản hàm mới nhất
+    useEffect(() => {
+        handleSubmitRef.current = handleSubmit;
+    });
 
     if (loading) return <div className="h-screen bg-[#09090b] flex items-center justify-center text-orange-500 font-black animate-pulse text-2xl drop-shadow-[0_0_15px_rgba(249,115,22,0.8)]"><Zap className="inline mr-2" size={30}/> ĐANG GIẢI MÃ...</div>;
     if (!exam) return <div className="h-screen bg-[#09090b] flex items-center justify-center text-red-500 font-black text-xl"><Target className="inline mr-2" size={24}/> MÃ CHIẾN DỊCH KHÔNG TỒN TẠI!</div>;
@@ -332,7 +353,8 @@ export default function PDFPlay() {
 
                 {/* NÚT NỘP BÀI (PC) */}
                 <div className="p-4 shrink-0 border-t border-red-600/30 bg-[#050505] hidden md:block z-20">
-                    <button onClick={handleSubmit} disabled={isSubmitting} className="w-full bg-gradient-to-b from-orange-500 to-red-600 border-b-4 border-red-900 active:translate-y-1 active:border-b-0 text-white py-4 rounded-xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(239,68,68,0.5)] transition-all flex items-center justify-center gap-2">
+                    {/* [VÁ LỖI]: Bọc lại bằng () => handleSubmit(false) để đảm bảo không nhận nhầm object event thành cờ true */}
+                    <button onClick={() => handleSubmit(false)} disabled={isSubmitting} className="w-full bg-gradient-to-b from-orange-500 to-red-600 border-b-4 border-red-900 active:translate-y-1 active:border-b-0 text-white py-4 rounded-xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(239,68,68,0.5)] transition-all flex items-center justify-center gap-2">
                         {isSubmitting ? 'ĐANG XỬ LÝ...' : <><Send size={18} strokeWidth={3}/> NỘP BÀI NGAY</>}
                     </button>
                 </div>
@@ -348,7 +370,7 @@ export default function PDFPlay() {
                     <PenTool size={18} className="mb-0.5"/><span className="text-[9px] font-black uppercase tracking-widest">Đáp Án</span>
                 </button>
 
-                <button onClick={handleSubmit} disabled={isSubmitting} className="flex-[1.4] h-full bg-gradient-to-b from-orange-500 to-red-600 border-b-4 border-red-900 active:translate-y-1 active:border-b-0 text-white rounded-xl font-black uppercase text-[11px] tracking-widest shadow-[0_0_15px_rgba(239,68,68,0.5)] flex items-center justify-center gap-1.5 transition-all">
+                <button onClick={() => handleSubmit(false)} disabled={isSubmitting} className="flex-[1.4] h-full bg-gradient-to-b from-orange-500 to-red-600 border-b-4 border-red-900 active:translate-y-1 active:border-b-0 text-white rounded-xl font-black uppercase text-[11px] tracking-widest shadow-[0_0_15px_rgba(239,68,68,0.5)] flex items-center justify-center gap-1.5 transition-all">
                     <Send size={16} strokeWidth={3}/> NỘP BÀI
                 </button>
             </div>

@@ -155,6 +155,30 @@ export default function AdminUserManagement() {
         return nameToSearch.includes(term) || emailToSearch.includes(term) || phoneToSearch.includes(term);
     });
 
+    // --- TÍNH TOÁN THỐNG KÊ ---
+    const totalAccounts = allUsers.length;
+    let activeAccounts = 0;
+    let expiredAccounts = 0;
+
+    allUsers.forEach(user => {
+        if (activeTab === 'TEACHER') {
+            if (user.expireDate) {
+                const exp = new Date(user.expireDate);
+                const now = new Date();
+                exp.setHours(0,0,0,0);
+                now.setHours(0,0,0,0);
+                if (exp - now < 0) {
+                    expiredAccounts++;
+                } else {
+                    activeAccounts++;
+                }
+            } else {
+                 // Không có ngày hết hạn coi như vô thời hạn (còn hạn)
+                 activeAccounts++; 
+            }
+        }
+    });
+
     return (
         <div className="min-h-screen bg-[#020617] p-4 md:p-8 text-slate-200">
             <div className="max-w-7xl mx-auto mb-8">
@@ -177,14 +201,38 @@ export default function AdminUserManagement() {
                     </div>
                 </div>
 
-                {/* TABS */}
-                <div className="flex gap-2 mt-8 bg-slate-900/50 p-1.5 rounded-2xl w-fit border border-slate-800">
-                    <button onClick={() => setActiveTab('TEACHER')} className={`px-6 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${activeTab === 'TEACHER' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                        <Briefcase size={16}/> GIÁO VIÊN
-                    </button>
-                    <button onClick={() => setActiveTab('STUDENT')} className={`px-6 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${activeTab === 'STUDENT' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                        <GraduationCap size={16}/> HỌC SINH
-                    </button>
+                {/* TABS & STATS */}
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-4 mt-8 mb-6">
+                    {/* TABS */}
+                    <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl w-fit border border-slate-800">
+                        <button onClick={() => setActiveTab('TEACHER')} className={`px-6 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${activeTab === 'TEACHER' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                            <Briefcase size={16}/> GIÁO VIÊN
+                        </button>
+                        <button onClick={() => setActiveTab('STUDENT')} className={`px-6 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${activeTab === 'STUDENT' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                            <GraduationCap size={16}/> HỌC SINH
+                        </button>
+                    </div>
+
+                    {/* THỐNG KÊ */}
+                    <div className="flex flex-wrap gap-3">
+                        <div className="bg-slate-900/50 border border-slate-800 px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-sm">
+                            <span className="text-slate-400 text-xs font-bold uppercase">Tổng TK:</span>
+                            <span className="text-white font-black text-sm">{totalAccounts}</span>
+                        </div>
+                        
+                        {activeTab === 'TEACHER' && (
+                            <>
+                                <div className="bg-emerald-500/10 border border-emerald-500/20 px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-sm">
+                                    <span className="text-emerald-400 text-xs font-bold uppercase">TK Còn hạn:</span>
+                                    <span className="text-emerald-300 font-black text-sm">{activeAccounts}</span>
+                                </div>
+                                <div className="bg-red-500/10 border border-red-500/20 px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-sm">
+                                    <span className="text-red-400 text-xs font-bold uppercase">TK Hết hạn:</span>
+                                    <span className="text-red-300 font-black text-sm">{expiredAccounts}</span>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
 
