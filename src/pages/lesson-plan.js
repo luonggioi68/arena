@@ -1,516 +1,318 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
+import useAuthStore from '@/store/useAuthStore';
 import { auth, firestore } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm'; 
-import rehypeRaw from 'rehype-raw'; 
-import remarkMath from 'remark-math'; 
-import rehypeKatex from 'rehype-katex'; 
-import 'katex/dist/katex.min.css'; 
-import mammoth from 'mammoth';
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { 
-    ArrowLeft, Sparkles, Download, Loader2, BookOpen, Settings, 
-    CheckSquare, Square, FileText, Target, BrainCircuit, Link as LinkIcon, Users, Monitor, AlignLeft,
-    Flame // THÊM ICON LỬA
+    ArrowLeft, Loader2, Shield, Trophy, Medal, BookOpen, Clock, 
+    CheckCircle, Target, Sparkles, AlertCircle, LogIn, User, Play, 
+    CalendarDays, ChevronDown, ChevronUp, Search, X, FileText 
 } from 'lucide-react';
 
-const SUBJECTS = ["Tin học", "Toán học", "Ngữ văn", "Tiếng Anh", "Vật lí", "Hóa học", "Sinh học", "Lịch sử", "Địa lí", "GDCD", "Công nghệ"];
-const GRADES = ["12", "11", "10", "9", "8", "7", "6"];
+const GRADES = ['12', '11', '10', '9', '8', '7', '6', 'Khác'];
 
-export default function LessonPlanner() {
-  const router = useRouter();
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true); // Fix lỗi văng trang
-  
-  // --- STATES CẤU HÌNH ĐẦU VÀO ---
-  const [subject, setSubject] = useState('Tin học');
-  const [grade, setGrade] = useState('12');
-  const [lessonName, setLessonName] = useState('');
-  const [duration, setDuration] = useState(2);
-  const [studentCount, setStudentCount] = useState(35); 
+export default function ArenaOnThi() {
+    const router = useRouter();
+    const { user, setUser } = useAuthStore();
+    const [loading, setLoading] = useState(true);
 
-  // State cho Thiết bị / Học liệu
-  const [equipment, setEquipment] = useState('');
+    const [exams, setExams] = useState([]);
+    const [leaderboard, setLeaderboard] = useState([]);
+    const [activeGrade, setActiveGrade] = useState('12');
+    const [searchTeacher, setSearchTeacher] = useState('');
 
-  // Năng lực, Nội dung & Tệp đính kèm
-  const [competencies, setCompetencies] = useState(''); 
-  
-  const [rawKnowledge, setRawKnowledge] = useState(''); 
-  
-  const [sgkContent, setSgkContent] = useState('');
-  const [wordName, setWordName] = useState('');
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+        });
 
-  // Tùy biến GV
-  const [allowGroupWork, setAllowGroupWork] = useState(true);
-  const [allowWorksheet, setAllowWorksheet] = useState(true);
-  
-  // --- STATES AI & KẾT QUẢ ---
-  const [loading, setLoading] = useState(false);
-  const [resultMarkdown, setResultMarkdown] = useState('');
+        const fetchData = async () => {
+            try {
+                const qExams = query(collection(firestore, "pdf_exams"), where("status", "==", "OPEN"));
+                const snapExams = await getDocs(qExams);
+                const examsData = snapExams.docs.map(d => ({ id: d.id, ...d.data() }));
+                examsData.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                setExams(examsData);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (!u) {
-          router.push('/');
-      } else {
-          setUser(u);
-      }
-      setAuthLoading(false);
-    });
-    return () => unsubscribe();
-  }, [router]);
+                const snapResults = await getDocs(collection(firestore, "pdf_exam_results"));
+                const scoresMap = {};
+                
+                snapResults.forEach(doc => {
+                    const data = doc.data();
+                    const sName = data.studentName;
+                    const sScore = parseFloat(data.score) || 0;
+                    const sGrade = data.studentClass || 'Tự do'; 
+                    
+                    if (!sName || sName.includes('ẩn danh') || sName.trim() === '') return;
 
-  // HÀM ĐỌC FILE WORD
-  const handleWordUpload = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      if (!file.name.endsWith('.docx')) return alert("Hệ thống chỉ hỗ trợ file Word định dạng .docx!");
-      
-      setWordName(file.name);
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-          const arrayBuffer = event.target.result;
-          try {
-              const result = await mammoth.extractRawText({ arrayBuffer });
-              setSgkContent(result.value); 
-          } catch (err) {
-              alert("Lỗi đọc file Word: " + err.message);
-          }
-      };
-      reader.readAsArrayBuffer(file);
-  };
+                    if (!scoresMap[sName]) {
+                        scoresMap[sName] = { 
+                            name: sName, 
+                            totalScore: 0, 
+                            examsCount: 0, 
+                            lastGrade: sGrade 
+                        };
+                    }
+                    scoresMap[sName].totalScore += sScore;
+                    scoresMap[sName].examsCount += 1;
+                    scoresMap[sName].lastGrade = sGrade; 
+                });
 
-  const handleGenerateLessonPlan = async () => {
-    if (!lessonName.trim()) return alert("Vui lòng nhập Tên bài học!");
-    
-    if (!sgkContent.trim() && !rawKnowledge.trim()) {
-        return alert("Vui lòng cung cấp Nguồn dữ liệu (Giáo án Word cũ HOẶC Dán nội dung kiến thức)!");
-    }
+                const lbArray = Object.values(scoresMap)
+                    .sort((a, b) => {
+                        if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+                        return b.examsCount - a.examsCount;
+                    });
+                
+                setLeaderboard(lbArray);
+            } catch (e) {
+                console.error("Lỗi tải dữ liệu:", e);
+                if (e.code === 'permission-denied') {
+                    alert("⚠️ LỖI PHÂN QUYỀN: Bạn chưa mở khóa Firestore Rules cho phép khách đọc dữ liệu. Vui lòng kiểm tra Firebase!");
+                }
+            } finally {
+                setLoading(false);
+            }
+        };
 
-    setLoading(true);
-    setResultMarkdown('');
+        fetchData();
 
-    try {
-        const userConfigDoc = await getDoc(doc(firestore, "user_configs", user.uid));
-        if (!userConfigDoc.exists() || !userConfigDoc.data().geminiKey) {
-            throw new Error("Chưa cấu hình Gemini API Key trong menu Cấu Hình!");
-        }
-        
-        const config = userConfigDoc.data();
-        const genAI = new GoogleGenerativeAI(config.geminiKey);
-        
-        const selectedModel = config.geminiModel || "gemini-1.5-pro";
-        const model = genAI.getGenerativeModel({ model: selectedModel });
+        return () => unsubscribe();
+    }, [setUser]);
 
-        const defaultEquipment = "Máy tính, máy chiếu, SGK";
-        const finalEquipment = equipment.trim() ? `${defaultEquipment}, ${equipment.trim()}` : defaultEquipment;
+    const examsBySubject = useMemo(() => {
+        const filtered = exams.filter(e => {
+            const matchGrade = e.grade === activeGrade;
+            const authorStr = (e.authorName || e.authorEmail || 'Arena GV').toLowerCase();
+            return matchGrade && (searchTeacher.trim() === '' || authorStr.includes(searchTeacher.toLowerCase().trim()));
+        });
+        return filtered.reduce((acc, exam) => {
+            const subject = exam.subject || 'Khác';
+            if (!acc[subject]) acc[subject] = [];
+            acc[subject].push(exam);
+            return acc;
+        }, {});
+    }, [exams, activeGrade, searchTeacher]);
 
-        const hasCompetencies = competencies.trim().length > 0;
-        const nlSoText = hasCompetencies ? `* **Năng lực số:** ${competencies.trim()}` : "";
-        
-        const integrationRule = `
-5. QUY TẮC TÍCH HỢP SƯ PHẠM VÀO "HOẠT ĐỘNG 2: HÌNH THÀNH KIẾN THỨC":
-   ${hasCompetencies ? `- Bắt buộc lồng ghép diễn giải "Năng lực số" vào mục "a) Mục tiêu" của Hoạt động 2.` : ""}
-   ${allowGroupWork ? `- Bắt buộc tổ chức THẢO LUẬN NHÓM (Căn cứ sĩ số ${studentCount} HS để chia nhóm phù hợp) trong phần "d) Tổ chức thực hiện" của Hoạt động 2.` : "- TUYỆT ĐỐI KHÔNG chia nhóm, chỉ làm việc cá nhân."}
-   ${allowWorksheet ? `- Thiết kế và yêu cầu học sinh sử dụng PHIẾU HỌC TẬP trong Hoạt động 2 hoặc Hoạt động 3, đồng thời xuất chi tiết Phiếu ở phần Phụ lục.` : "- KHÔNG thiết kế và không dùng Phiếu học tập."}`;
+    const formatDate = (ts) => ts ? new Date(ts.seconds * 1000).toLocaleDateString('vi-VN') : '---';
 
-        const prompt = `
-Bạn là một Trợ lý Giáo viên ${subject} chuyên nghiệp, nhiệm vụ chính là chuẩn hóa và nâng cấp "Kế hoạch bài dạy" theo Công văn 5512 (GDPT 2018).
+    if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617]"><Loader2 className="animate-spin text-cyan-500" size={60} /></div>;
 
-**THÔNG TIN BÀI DẠY (ĐẦU VÀO):**
-- Môn học: ${subject} lớp ${grade}
-- Tên bài học: ${lessonName}
-- Năng lực số: """${competencies}"""
-- Thiết bị dạy học và Học liệu: """${finalEquipment}"""
-- **NỘI DUNG KIẾN THỨC LÝ THUYẾT/BÀI TẬP:** """\n${rawKnowledge}\n"""
-- **NỘI DUNG GIÁO ÁN GỐC (nếu có tải lên):** """\n${sgkContent}\n"""
+    return (
+        <div className="min-h-screen bg-[#09090b] text-slate-200 font-sans pb-20 overflow-x-hidden relative">
+            
+            {/* BACKGROUND CHUNG */}
+            <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/20 via-[#09090b] to-black -z-20"></div>
 
-**QUY TẮC SỐNG CÒN (BẮT BUỘC TUÂN THỦ 100%):**
-1. KẾT QUẢ BẮT BUỘC PHẢI BẮT ĐẦU NGAY bằng dòng "### **I. MỤC TIÊU**". Tuyệt đối không chào hỏi, không sinh ra Tên bài học ở đầu.
-2. XỬ LÝ NỘI DUNG GỐC: 
-   - Nếu GV cung cấp "NỘI DUNG KIẾN THỨC LÝ THUYẾT/BÀI TẬP", hãy bóc tách các ý chính trong đó để tạo thành các tiểu mục Hoạt động 2.1, 2.2... Các bài tập đi kèm hãy đưa vào Hoạt động 3 (Luyện tập) và Hoạt động 4 (Vận dụng).
-   - Nếu GV cung cấp "NỘI DUNG GIÁO ÁN GỐC", hãy chuẩn hóa nó theo khung 5512, giữ nguyên vẹn nội dung chuyên môn của GV.
-3. BỐI CẢNH: Lớp học có đúng ${studentCount} học sinh.
-4. BẢNG BIỂU (TABLE): Bắt buộc kẻ bảng Markdown nếu có nội dung dạng bảng.
-5. QUY TẮC CÁC MỤC A, B, C, D: KHÔNG SỬ DỤNG DẤU CHẤM TRÒN (BULLET) CHO CÁC MỤC a, b, c, d. Viết in đậm liền lề trái. Đảm bảo trước mỗi mục a, b, c, d luôn là 1 dòng trống.
-6. TOÁN HỌC / LÝ / HÓA HỌC: MỌI biểu thức chứa phân số, căn bậc 2, giới hạn (lim), logarit, tích phân... BẮT BUỘC phải được viết bằng mã lệnh LaTeX và kẹp trong cặp dấu $...$ (Ví dụ: $\\sqrt{x^2+1}$, $\\lim_{x \\to 0}$, $\\frac{a}{b}$).
-${integrationRule}
+            {/* ================= HEADER 3D NEON RỰC LỬA ================= */}
+            <header className="sticky top-0 z-50 bg-[#050505]/90 backdrop-blur-xl border-b-2 border-orange-600 shadow-[0_10px_30px_rgba(249,115,22,0.15)] px-2 sm:px-4 h-[70px] sm:h-[80px]">
+                {/* Tia sáng hắt từ trên xuống */}
+                <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-orange-500/20 to-transparent pointer-events-none"></div>
 
-**TEMPLATE KHBD CẦN TUÂN THỦ (Định dạng Markdown):**
-### **I. MỤC TIÊU**
-**1. Kiến thức:**
-* (Liệt kê kiến thức trọng tâm)
-**2. Năng lực:**
-* **Năng lực chung:** Tự chủ và tự học; Giao tiếp và hợp tác; Giải quyết vấn đề và sáng tạo.
-* **Năng lực đặc thù:** (Năng lực đặc thù môn ${subject}).
-${nlSoText}
-**3. Phẩm chất:**
-* (Trách nhiệm, Trung thực, Chăm chỉ...).
+                <div className="max-w-[1600px] mx-auto h-full flex items-center justify-between gap-2 sm:gap-4 relative z-10">
+                    
+                    {/* CỤM TRÁI: Nút Back 3D & Logo */}
+                    <div className="flex items-center gap-3 shrink-0">
+                        <button onClick={() => router.push('/')} className="relative group p-2.5 sm:p-3 bg-gradient-to-b from-orange-500 to-red-600 border-b-4 border-red-900 rounded-xl shadow-[0_0_15px_rgba(239,68,68,0.5)] active:translate-y-1 active:border-b-0 transition-all flex items-center justify-center overflow-hidden">
+                            <div className="absolute inset-0 bg-white/20 translate-y-[-100%] group-hover:translate-y-[100%] transition-transform duration-500"></div>
+                            <ArrowLeft size={20} className="text-white drop-shadow-md relative z-10" strokeWidth={3} />
+                        </button>
+                        
+                        <div className="hidden lg:flex items-center gap-2 font-black italic uppercase text-2xl tracking-tighter drop-shadow-[0_0_15px_rgba(249,115,22,0.8)]">
+                            <Shield className="text-orange-400 drop-shadow-[0_0_10px_rgba(249,115,22,1)]" size={32} />
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-500 to-red-600">ARENA ÔN THI</span>
+                        </div>
+                    </div>
 
-### **II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU**
-* **Thiết bị:** ${finalEquipment}
-* **Học liệu:** SGK...
+                    {/* CỤM GIỮA: Thanh tìm kiếm Neon Glow */}
+                    <div className="flex-1 max-w-2xl relative group mx-1 sm:mx-4">
+                        {/* Hào quang phát sáng khi focus */}
+                        <div className="absolute -inset-0.5 bg-gradient-to-r from-yellow-500 via-orange-500 to-red-600 rounded-2xl blur opacity-30 group-focus-within:opacity-80 transition duration-500"></div>
+                        <div className="relative flex items-center bg-[#0a0a0a] border-2 border-orange-600/50 rounded-2xl h-10 sm:h-[50px] overflow-hidden shadow-inner">
+                            <Search className="ml-3 sm:ml-4 text-orange-500 drop-shadow-[0_0_5px_rgba(249,115,22,0.8)]" size={20} />
+                            <input 
+                                type="text"
+                                placeholder="Tìm nhiệm vụ theo tên giáo viên..."
+                                value={searchTeacher}
+                                onChange={(e) => setSearchTeacher(e.target.value)}
+                                className="w-full bg-transparent border-none text-white text-xs sm:text-sm font-bold px-2 sm:px-4 h-full outline-none placeholder:text-orange-900/70"
+                            />
+                            {searchTeacher && (
+                                <button onClick={() => setSearchTeacher('')} className="mr-2 sm:mr-3 text-orange-500 hover:text-white p-1 transition-colors">
+                                    <X size={18} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {/* CỤM PHẢI: User Badge hoặc Nút Đăng nhập 3D */}
+                    <div className="shrink-0">
+                        {user ? (
+                            <div className="flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-red-950 to-[#0a0a0a] border-2 border-orange-600/50 pl-2 sm:pl-4 pr-1 sm:pr-1.5 py-1 sm:py-1.5 rounded-full shadow-[0_0_15px_rgba(249,115,22,0.2)]">
+                                <span className="text-[10px] sm:text-xs font-black text-yellow-100 hidden sm:block truncate max-w-[100px] lg:max-w-[150px] drop-shadow-md tracking-wider">
+                                    {user.displayName || user.email}
+                                </span>
+                                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-br from-yellow-400 via-orange-500 to-red-600 flex items-center justify-center border-2 border-yellow-200 text-black shadow-[0_0_15px_rgba(250,204,21,0.6)] shrink-0">
+                                    <User size={16} strokeWidth={2.5}/>
+                                </div>
+                            </div>
+                        ) : (
+                            <button onClick={() => router.push('/')} className="relative px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-b from-yellow-400 via-orange-500 to-red-600 border-b-4 border-red-900 rounded-xl text-[10px] sm:text-xs font-black text-white uppercase tracking-widest active:translate-y-1 active:border-b-0 transition-all shadow-[0_0_20px_rgba(249,115,22,0.5)] overflow-hidden group">
+                                <div className="absolute inset-0 bg-white/20 translate-y-[-100%] group-hover:translate-y-[100%] transition-transform duration-500"></div>
+                                <span className="relative z-10 flex items-center gap-1.5 drop-shadow-md">
+                                    <LogIn size={14} className="hidden sm:block" strokeWidth={3}/> Đăng nhập
+                                </span>
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </header>
+            {/* ================= END HEADER ================= */}
 
-### **III. TIẾN TRÌNH DẠY HỌC**
+            <main className="max-w-[1600px] mx-auto px-4 mt-8 flex flex-col xl:flex-row gap-8">
+                {/* CỘT TRÁI: DANH SÁCH ĐỀ */}
+                <div className="flex-1 overflow-hidden">
+                    <div className="flex overflow-x-auto no-scrollbar gap-2 mb-8 pb-1">
+                        {GRADES.map(grade => (
+                            <button 
+                                key={grade} onClick={() => setActiveGrade(grade)}
+                                className={`shrink-0 px-6 py-3 rounded-2xl font-black text-sm transition-all border-2 ${
+                                    activeGrade === grade 
+                                    ? 'bg-gradient-to-br from-cyan-600 to-blue-700 border-cyan-400 text-white shadow-lg scale-105' 
+                                    : 'bg-[#18181b] border-slate-800 text-slate-400 hover:border-cyan-500/50'
+                                }`}
+                            >
+                                LỚP {grade}
+                            </button>
+                        ))}
+                    </div>
 
-#### **Hoạt động 1: Mở đầu**
+                    {Object.keys(examsBySubject).length === 0 ? (
+                        <div className="bg-[#18181b] border border-slate-800 rounded-[2rem] p-20 text-center flex flex-col items-center">
+                            <BookOpen size={48} className="text-slate-700 mb-4"/>
+                            <p className="text-slate-500 font-bold">Không tìm thấy dữ liệu phù hợp</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-12">
+                            {Object.entries(examsBySubject).map(([subject, subExams]) => (
+                                <div key={subject}>
+                                    <div className="flex items-center gap-4 mb-4">
+                                        <h2 className="text-2xl font-black uppercase text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">{subject}</h2>
+                                        <div className="h-px bg-slate-800 flex-1"></div>
+                                    </div>
 
-**a) Mục tiêu:** ...
+                                    {/* [VÁ LỖI GIAO DIỆN MOBILE]: Đã sửa overflow-hidden thành overflow-x-auto và thêm min-w để bảng có thể vuốt ngang trên điện thoại mà không bị vỡ bố cục */}
+                                    <div className="bg-[#18181b] rounded-3xl border border-slate-800 overflow-x-auto no-scrollbar shadow-2xl">
+                                        <table className="w-full text-left min-w-[700px] lg:min-w-full">
+                                            <thead className="bg-slate-900/50 text-[10px] font-black text-cyan-400 uppercase tracking-widest border-b border-slate-800">
+                                                <tr>
+                                                    <th className="p-4 w-12 text-center shrink-0">TT</th>
+                                                    <th className="p-4">Tên Đề / Mã</th>
+                                                    <th className="p-4 text-center shrink-0">Ngày tạo</th>
+                                                    <th className="p-4 text-center shrink-0">Số câu</th>
+                                                    <th className="p-4 text-center shrink-0">Thời gian</th>
+                                                    <th className="p-4 text-center w-32 shrink-0">Thao tác</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-800/50">
+                                                {subExams.map((exam, idx) => (
+                                                    <tr key={exam.id} className="hover:bg-slate-800/40 transition-colors group">
+                                                        <td className="p-4 text-center font-mono text-slate-500">{idx + 1}</td>
+                                                        <td className="p-4">
+                                                            <div className="font-bold text-white group-hover:text-cyan-400 transition-colors">{exam.title}</div>
+                                                            <div className="text-[10px] text-slate-500 font-mono mt-1">ID: {exam.code} | GV: {exam.authorName || 'Arena'}</div>
+                                                        </td>
+                                                        <td className="p-4 text-center text-xs text-slate-400 font-mono">{formatDate(exam.createdAt)}</td>
+                                                        <td className="p-4 text-center">
+                                                            <span className="bg-slate-900 px-2 py-1 rounded border border-slate-700 text-xs font-black">{exam.totalQuestions}</span>
+                                                        </td>
+                                                        <td className="p-4 text-center">
+                                                            <span className="text-orange-400 font-black text-sm">{exam.timeLimit}p</span>
+                                                        </td>
+                                                        <td className="p-4 text-center">
+                                                            <button onClick={() => router.push(`/pdf-play/${exam.code}`)} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2 rounded-xl text-[10px] font-black uppercase transition-all shadow-md">VÀO THI</button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
 
-**b) Nội dung:** ...
+                {/* CỘT PHẢI: BẢNG VÀNG THIẾT KẾ ĐẦY ĐỦ */}
+                <div className="w-full xl:w-[350px] shrink-0">
+                    <div className="sticky top-[100px] bg-[#18181b] border-2 border-orange-500/20 rounded-[2.5rem] overflow-hidden shadow-2xl">
+                        <div className="bg-gradient-to-br from-orange-500 to-red-600 p-6 flex items-center gap-3">
+                            <Trophy className="text-white" size={32} />
+                            <div>
+                                <h2 className="text-2xl font-black text-white uppercase italic leading-none">Bảng Vàng</h2>
+                                <p className="text-[10px] text-orange-100 font-bold uppercase tracking-widest mt-1 opacity-80">Tích lũy XP hệ thống</p>
+                            </div>
+                        </div>
 
-**c) Sản phẩm:** ...
+                        <div className="p-2 max-h-[600px] overflow-y-auto custom-scrollbar bg-slate-950/50">
+                            {leaderboard.length === 0 ? (
+                                <div className="p-10 text-center text-slate-600 font-bold text-xs uppercase">Chưa có dữ liệu</div>
+                            ) : (
+                                <table className="w-full border-separate border-spacing-y-2">
+                                    <thead className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">
+                                        <tr>
+                                            <th className="pb-2 pl-4 text-left">Top</th>
+                                            <th className="pb-2 text-left">Học sinh / Lớp</th>
+                                            <th className="pb-2 pr-4 text-right">Tổng Điểm</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {leaderboard.map((student, index) => {
+                                            const isTop3 = index < 3;
+                                            const colors = [
+                                                "bg-yellow-500 text-black shadow-[0_0_15px_rgba(234,179,8,0.4)]",
+                                                "bg-slate-300 text-black shadow-[0_0_15px_rgba(203,213,225,0.3)]",
+                                                "bg-orange-700 text-white shadow-[0_0_15px_rgba(194,65,12,0.3)]"
+                                            ];
 
-**d) Tổ chức thực hiện:**
-* **B1: Chuyển giao nhiệm vụ:** ...
-* **B2: Thực hiện nhiệm vụ:** ...
-* **B3: Báo cáo, thảo luận:** ...
-* **B4: Kết luận, nhận định:** ...
+                                            return (
+                                                <tr key={student.name} className="bg-slate-900/50 hover:bg-slate-800 transition-colors group">
+                                                    <td className="py-3 pl-4 rounded-l-2xl">
+                                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs border-2 ${isTop3 ? colors[index] : "bg-slate-800 text-slate-400 border-slate-700"}`}>
+                                                            {isTop3 ? <Medal size={14}/> : index + 1}
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3">
+                                                        <div className="font-bold text-sm text-white truncate max-w-[120px] group-hover:text-cyan-400 transition-colors">{student.name}</div>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            <span className="text-[9px] bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 text-slate-400 font-bold">Lớp {student.lastGrade}</span>
+                                                            <span className="text-[9px] text-slate-500 italic">Đã giải {student.examsCount} đề</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 pr-4 text-right rounded-r-2xl">
+                                                        <div className="text-orange-400 font-black text-lg drop-shadow-md">
+                                                            {student.totalScore.toFixed(2)}
+                                                            <span className="text-[10px] ml-0.5 opacity-60">đ</span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </main>
 
-#### **Hoạt động 2: Hình thành kiến thức mới**
-#### **Hoạt động 2.1: [Tên mục 1]**
-
-**a) Mục tiêu:** ... (Lồng ghép diễn giải Năng lực số vào đây nếu có)
-
-**b) Nội dung:** ...
-
-**c) Sản phẩm:** ...
-
-**d) Tổ chức thực hiện:**
-* **B1, B2, B3, B4** ... (Thể hiện rõ hoạt động chia nhóm hoặc dùng phiếu học tập tại đây)
-
-*(Các hoạt động Luyện tập, Vận dụng trình bày tương tự 4 bước)*
-
----
-### **PHỤ LỤC: PHIẾU HỌC TẬP**
-*(Chỉ hiển thị nếu được yêu cầu thiết kế)*
-        `;
-
-        const result = await model.generateContent(prompt);
-        let textResult = result.response.text();
-
-        const targetStart = "### **I. MỤC TIÊU**";
-        const startIndex = textResult.indexOf(targetStart);
-        if (startIndex !== -1) {
-            textResult = textResult.substring(startIndex);
-        }
-
-        textResult = textResult.replace(/^\s*[\*\-]\s*\*\*(a\)|b\)|c\)|d\))\s*(.*?)\*\*/gm, '**$1 $2**');
-        textResult = textResult.replace(/([^\n])\s*\n?\*\*(a\)|b\)|c\)|d\))\s*(.*?)\*\*/g, '$1\n\n**$2 $3**');
-
-        setResultMarkdown(textResult);
-
-    } catch (error) {
-        console.error(error);
-        alert("Lỗi tạo giáo án: " + error.message);
-    } finally {
-        setLoading(false);
-    }
-  };
-
-  const exportToWord = () => {
-      if (!resultMarkdown) return;
-      
-      const exportNode = document.getElementById("markdown-export-area").cloneNode(true);
-      
-      const katexHtmlElements = exportNode.querySelectorAll('.katex-html');
-      katexHtmlElements.forEach(el => el.remove());
-
-      const header = `
-          <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-          <head>
-              <meta charset='utf-8'>
-              <title>Giao An</title>
-              <style>
-                  @page Section1 {
-                      size: 595.3pt 841.9pt; 
-                      margin: 42.5pt 42.5pt 42.5pt 56.7pt; 
-                      mso-header-margin: 35.4pt;
-                      mso-footer-margin: 35.4pt;
-                      mso-paper-source: 0;
-                  }
-                  div.Section1 { page: Section1; }
-                  
-                  body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1; text-align: justify; }
-                  
-                  h2 { font-size: 12pt; font-weight: bold; text-align: center; text-transform: uppercase; margin-top: 12pt; margin-bottom: 6pt; }
-                  h5 { font-size: 12pt; font-weight: bold; text-align: center; margin-top: 0; margin-bottom: 16pt; }
-                  h3 { font-size: 12pt; font-weight: bold; text-transform: uppercase; margin-top: 12pt; margin-bottom: 6pt; }
-                  h4 { font-size: 12pt; font-weight: bold; font-style: italic; margin-top: 12pt; margin-bottom: 6pt; }
-                  p, li { font-size: 12pt; line-height: 1; margin-top: 3pt; margin-bottom: 3pt; }
-                  ul { padding-left: 20pt; margin-top: 3pt; margin-bottom: 3pt; }
-                  hr { border: 0; border-bottom: 1px solid #000; margin: 20pt 0; }
-                  
-                  table { width: 100%; border-collapse: collapse; margin-top: 10pt; margin-bottom: 10pt; }
-                  table, th, td { border: 1px solid black; }
-                  th { font-weight: bold; background-color: #f2f2f2; text-align: center; padding: 5pt; }
-                  td { padding: 5pt; text-align: left; vertical-align: top; }
-              </style>
-          </head>
-          <body>
-          <div class="Section1">
-      `;
-      const footer = "</div></body></html>";
-      
-      const htmlContent = exportNode.innerHTML;
-      const sourceHTML = header + htmlContent + footer;
-      
-      const source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
-      const fileDownload = document.createElement("a");
-      document.body.appendChild(fileDownload);
-      fileDownload.href = source;
-      fileDownload.download = `KHBD_${subject}_Lop${grade}_${lessonName || 'BaiHoc'}.doc`;
-      fileDownload.click();
-      document.body.removeChild(fileDownload);
-  };
-
-  const cleanLessonName = lessonName ? lessonName.trim().replace(/^(BÀI:\s*BÀI\s*|BÀI:\s*|BÀI\s*)/i, 'BÀI ') : 'TÊN BÀI HỌC';
-
-  if (authLoading) {
-      return (
-          <div className="min-h-screen bg-black flex items-center justify-center text-orange-500 font-bold shadow-[0_0_20px_rgba(249,115,22,0.5)]">
-              <Flame className="animate-bounce mr-2" size={30} /> ĐANG KHỞI ĐỘNG HỆ THỐNG LÕI...
-          </div>
-      );
-  }
-
-  return (
-    <div className="min-h-screen bg-[#050505] font-sans flex flex-col h-screen overflow-hidden text-gray-200 relative">
-      
-      {/* GLOWING BACKGROUND ORB */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-red-600/20 blur-[150px] rounded-full pointer-events-none"></div>
-
-      {/* HEADER BỐC LỬA */}
-      <header className="h-[70px] bg-black/80 backdrop-blur-md border-b border-red-500/40 shadow-[0_4px_30px_rgba(239,68,68,0.3)] px-6 flex justify-between items-center shrink-0 z-10 relative">
-         <div className="flex items-center gap-4">
-             <button onClick={() => router.push('/')} className="p-2 bg-gray-900 border border-red-500/30 hover:bg-red-950/50 hover:shadow-[0_0_15px_rgba(239,68,68,0.5)] rounded-xl transition-all"><ArrowLeft size={20} className="text-orange-400"/></button>
-             <div>
-                <h1 className="text-2xl font-black uppercase italic tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600" style={{ textShadow: '0 0 20px rgba(249,115,22,0.4)' }}>
-                    AI SOẠN KẾ HOẠCH BÀI DẠY
-                </h1>
-                <p className="text-[10px] font-bold text-orange-400/80 uppercase tracking-widest">Chuẩn hóa cấu trúc CV 5512 (GDPT 2018)</p>
-             </div>
-         </div>
-         {resultMarkdown && (
-             <button onClick={exportToWord} className="flex items-center gap-2 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white px-5 py-2.5 rounded-xl font-black text-sm shadow-[0_0_20px_rgba(239,68,68,0.6)] hover:shadow-[0_0_30px_rgba(239,68,68,0.9)] hover:scale-105 transition-all border border-red-400/50">
-                 <Download size={18}/> TẢI BẢN WORD
-             </button>
-         )}
-      </header>
-
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden z-10">
-          
-          {/* CỘT TRÁI: CẤU HÌNH NEON */}
-          <div className="w-full lg:w-[450px] bg-black/60 backdrop-blur-md border-r border-orange-500/30 shadow-[5px_0_30px_rgba(249,115,22,0.1)] overflow-y-auto p-6 custom-scrollbar shrink-0">
-              <h2 className="text-sm font-black text-orange-400 uppercase tracking-widest mb-6 flex items-center gap-2 drop-shadow-[0_0_8px_rgba(249,115,22,0.5)]">
-                  <Settings size={18}/> Tham số bài dạy
-              </h2>
-              
-              <div className="space-y-5">
-                  <div className="grid grid-cols-2 gap-3">
-                      <div>
-                          <label className="block text-[10px] font-black text-orange-400/80 uppercase tracking-wider mb-1.5">Khối lớp</label>
-                          <select value={grade} onChange={e=>setGrade(e.target.value)} className="w-full bg-gray-900 border border-gray-700 hover:border-orange-500/50 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] text-orange-100 font-bold text-sm transition-all">
-                              {GRADES.map(g => <option key={g} value={g}>Lớp {g}</option>)}
-                          </select>
-                      </div>
-                      <div>
-                          <label className="block text-[10px] font-black text-orange-400/80 uppercase tracking-wider mb-1.5">Môn học</label>
-                          <select value={subject} onChange={e=>setSubject(e.target.value)} className="w-full bg-gray-900 border border-gray-700 hover:border-orange-500/50 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] text-orange-100 font-bold text-sm transition-all">
-                              {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                      </div>
-                  </div>
-
-                  <div>
-                      <label className="block text-[10px] font-black text-orange-400/80 uppercase tracking-wider mb-1.5">Tên bài học</label>
-                      <input value={lessonName} onChange={e=>setLessonName(e.target.value)} className="w-full bg-gray-900 border border-gray-700 hover:border-orange-500/50 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] text-orange-100 font-bold text-sm transition-all shadow-inner" placeholder="VD: Bài 15: Phép tính giới hạn..."/>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                      <div>
-                          <label className="block text-[10px] font-black text-orange-400/80 uppercase tracking-wider mb-1.5">Thời lượng (Tiết)</label>
-                          <input type="number" min="1" value={duration} onChange={e=>setDuration(e.target.value)} className="w-full bg-gray-900 border border-gray-700 hover:border-orange-500/50 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] text-orange-100 font-bold text-sm text-center transition-all"/>
-                      </div>
-                      <div>
-                          <label className="block text-[10px] font-black text-orange-400/80 uppercase tracking-wider mb-1.5 flex items-center gap-1"><Users size={12}/> Sĩ số học sinh</label>
-                          <input type="number" min="1" value={studentCount} onChange={e=>setStudentCount(e.target.value)} className="w-full bg-gray-900 border border-gray-700 hover:border-orange-500/50 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] text-orange-100 font-bold text-sm text-center transition-all"/>
-                      </div>
-                  </div>
-
-                  {/* THIẾT BỊ DẠY HỌC BỔ SUNG */}
-                  <div>
-                      <label className="block text-[10px] font-black text-orange-400/80 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                          <Monitor size={14}/> Thiết bị & Học liệu bổ sung
-                      </label>
-                      <textarea 
-                          value={equipment} 
-                          onChange={e=>setEquipment(e.target.value)} 
-                          rows={2} 
-                          className="w-full bg-gray-900 border border-gray-700 hover:border-orange-500/50 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] text-orange-100 text-xs transition-all shadow-inner custom-scrollbar" 
-                          placeholder="VD: Loa, Bảng phụ, Tranh ảnh, Phiếu học tập..."
-                      />
-                  </div>
-
-                  {/* NĂNG LỰC SỐ */}
-                  <div>
-                      <label className="block text-[10px] font-black text-orange-400/80 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                          <Target size={14}/> Năng lực số (Tùy chọn)
-                      </label>
-                      <textarea 
-                          value={competencies} 
-                          onChange={e=>setCompetencies(e.target.value)} 
-                          rows={2} 
-                          className="w-full bg-gray-900 border border-gray-700 hover:border-orange-500/50 p-2.5 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] text-orange-300 font-medium text-xs transition-all shadow-inner custom-scrollbar" 
-                          placeholder="Dán mã và nội dung Năng lực số vào đây..."
-                      />
-                  </div>
-
-                  {/* KHUNG NẠP DỮ LIỆU BỐC LỬA */}
-                  <div className="bg-gray-950/80 p-5 rounded-xl border border-orange-500/30 shadow-[inset_0_0_20px_rgba(249,115,22,0.1)] transition-all hover:border-orange-500/60 space-y-4">
-                      <label className="block text-[11px] font-black text-red-500 uppercase flex items-center gap-1 drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]">
-                          <BookOpen size={16}/> Nguồn dữ liệu (Chọn 1 trong 2)
-                      </label>
-
-                      <div>
-                          <label className="text-[10px] font-bold text-orange-400/80 flex items-center gap-1 mb-2"><FileText size={12}/> 1. Nâng cấp KHBD cũ</label>
-                          <input type="file" id="wordUpload" accept=".docx" onChange={handleWordUpload} className="hidden" />
-                          <label htmlFor="wordUpload" className="flex items-center justify-center gap-2 w-full bg-gray-900 border border-orange-500/30 hover:border-orange-500 text-orange-300 hover:text-orange-100 py-2.5 rounded-lg cursor-pointer transition-all text-xs font-bold shadow-[0_0_10px_rgba(249,115,22,0.2)]">
-                              {wordName ? 'Đã tải: ' + wordName : 'TẢI LÊN FILE WORD (.DOCX)'}
-                          </label>
-                      </div>
-
-                      <div className="flex items-center gap-2 opacity-40">
-                          <div className="flex-1 h-px bg-orange-500"></div><span className="text-[9px] font-black text-orange-300">HOẶC SOẠN MỚI</span><div className="flex-1 h-px bg-orange-500"></div>
-                      </div>
-
-                      <div>
-                          <label className="text-[10px] font-bold text-orange-400/80 flex items-center gap-1 mb-2">
-                              <AlignLeft size={12}/> 2. Dán nội dung kiến thức SGK
-                          </label>
-                          <textarea 
-                              value={rawKnowledge} 
-                              onChange={e=>setRawKnowledge(e.target.value)} 
-                              rows={4}
-                              className="w-full bg-gray-900 border border-orange-500/30 hover:border-orange-500/60 p-3 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] text-orange-100 text-xs placeholder:text-gray-600 custom-scrollbar transition-all" 
-                              placeholder="Copy đoạn văn bản lý thuyết, bài tập từ SGK và dán vào đây để AI phân chia hoạt động..."
-                          />
-                      </div>
-                  </div>
-
-                  {/* KHUNG TÙY CHỌN SƯ PHẠM */}
-                  <div className="bg-gray-950/50 border border-gray-800 p-4 rounded-xl">
-                      <label className="block text-[10px] font-black text-orange-400/80 uppercase tracking-wider mb-3">Quy định Sư phạm</label>
-                      <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-gray-300">Tổ chức Hoạt động Nhóm</span>
-                              <button onClick={()=>setAllowGroupWork(!allowGroupWork)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${allowGroupWork ? 'bg-gradient-to-r from-orange-500 to-red-600 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'bg-gray-700'}`}>
-                                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${allowGroupWork ? 'translate-x-6' : 'translate-x-1'}`} />
-                              </button>
-                          </div>
-                          
-                          <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-gray-300">Thiết kế Phiếu học tập</span>
-                              <button onClick={()=>setAllowWorksheet(!allowWorksheet)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${allowWorksheet ? 'bg-gradient-to-r from-orange-500 to-red-600 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'bg-gray-700'}`}>
-                                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${allowWorksheet ? 'translate-x-6' : 'translate-x-1'}`} />
-                              </button>
-                          </div>
-                      </div>
-                  </div>
-
-                  <button onClick={handleGenerateLessonPlan} disabled={loading} className={`relative w-full py-4 rounded-xl font-black uppercase tracking-widest text-white overflow-hidden group transition-all mt-6 ${loading ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700' : 'border border-orange-400 shadow-[0_0_20px_rgba(249,115,22,0.6)] hover:shadow-[0_0_40px_rgba(239,68,68,0.8)] active:scale-95'}`}>
-                      {!loading && (
-                          <div className="absolute inset-0 bg-gradient-to-r from-red-600 via-orange-500 to-yellow-500 group-hover:scale-110 transition-transform duration-500"></div>
-                      )}
-                      <div className="relative z-10 flex items-center justify-center gap-2">
-                          {loading ? <Flame className="animate-bounce text-yellow-300" size={22}/> : <Sparkles size={22}/>} 
-                          {loading ? 'ĐANG NUNG CHẢY DỮ LIỆU...' : 'XỬ LÝ GIÁO ÁN'}
-                      </div>
-                  </button>
-              </div>
-          </div>
-
-          {/* CỘT PHẢI: HIỂN THỊ KẾT QUẢ VỚI BORDER NEON */}
-          <div className="flex-1 bg-gray-900/80 overflow-y-auto relative p-4 md:p-8 custom-scrollbar shadow-[inset_10px_0_30px_rgba(0,0,0,0.5)]">
-              {loading ? (
-                  <div className="h-full flex flex-col items-center justify-center text-orange-500">
-                      <div className="relative mb-8">
-                          <div className="absolute inset-0 bg-gradient-to-t from-red-600 to-yellow-400 blur-[60px] opacity-70 animate-pulse rounded-full w-32 h-32 -ml-8 -mt-8"></div>
-                          <Flame size={90} className="text-yellow-400 relative z-10 animate-bounce drop-shadow-[0_0_15px_rgba(250,204,21,0.8)]"/>
-                      </div>
-                      <h3 className="text-2xl font-black uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-red-500 mb-2" style={{ textShadow: '0 0 10px rgba(239,68,68,0.5)' }}>LÒ PHẢN ỨNG ĐANG CHẠY</h3>
-                      <p className="text-sm font-bold tracking-widest text-orange-200/60 animate-pulse">Đang dàn trang chuẩn 5512 và Render công thức...</p>
-                  </div>
-              ) : resultMarkdown ? (
-                  <div 
-                      className="bg-white p-8 md:p-14 rounded-sm shadow-[0_0_40px_rgba(239,68,68,0.3)] border border-red-500/20 max-w-4xl mx-auto min-h-full text-black" 
-                      id="markdown-export-area"
-                  >
-                      <div id="static-header" style={{ fontFamily: "'Times New Roman', serif", fontSize: '12pt', marginBottom: '16pt' }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16pt', border: 'none' }}>
-                              <tbody>
-                                  <tr>
-                                      <td style={{ textAlign: 'left', border: 'none', padding: '0', width: '50%' }}>
-                                          <p style={{ margin: '0 0 4pt 0', fontSize: '12pt' }}>Tuần: .......................................</p>
-                                      </td>
-                                      <td style={{ textAlign: 'left', border: 'none', padding: '0', width: '50%' }}>
-                                          <p style={{ margin: '0 0 4pt 0', fontSize: '12pt' }}>Ngày soạn: .......................................</p>
-                                      </td>
-                                  </tr>
-                                  <tr>
-                                      <td style={{ textAlign: 'left', border: 'none', padding: '0' }}>
-                                          <p style={{ margin: '0', fontSize: '12pt' }}>Tiết ppct: ...................................</p>
-                                      </td>
-                                      <td style={{ textAlign: 'left', border: 'none', padding: '0' }}>
-                                          <p style={{ margin: '0', fontSize: '12pt' }}>Lớp: {grade}</p>
-                                      </td>
-                                  </tr>
-                              </tbody>
-                          </table>
-                          <h2 style={{ fontSize: '12pt', fontWeight: 'bold', textAlign: 'center', textTransform: 'uppercase', marginBottom: '4pt', marginTop: '16pt' }}>
-                              {cleanLessonName}
-                          </h2>
-                          <h5 style={{ fontSize: '12pt', fontWeight: 'bold', textAlign: 'center', marginTop: 0, marginBottom: '16pt' }}>
-                              Thời gian thực hiện: {duration} tiết
-                          </h5>
-                      </div>
-
-                      <div style={{ fontFamily: "'Times New Roman', serif" }}>
-                          <ReactMarkdown 
-                              remarkPlugins={[remarkGfm, remarkMath]}
-                              rehypePlugins={[rehypeRaw, rehypeKatex]} 
-                              components={{
-                                  h3: ({node, ...props}) => <h3 style={{fontSize: '12pt', fontWeight: 'bold', textTransform: 'uppercase', marginTop: '12pt', marginBottom: '6pt'}} {...props}/>,
-                                  h4: ({node, ...props}) => <h4 style={{fontSize: '12pt', fontWeight: 'bold', fontStyle: 'italic', marginTop: '12pt', marginBottom: '6pt'}} {...props}/>,
-                                  p: ({node, ...props}) => <p style={{fontSize: '12pt', lineHeight: '1', margin: '3pt 0', textAlign: 'justify'}} {...props}/>,
-                                  ul: ({node, ...props}) => <ul style={{fontSize: '12pt', listStyleType: 'disc', paddingLeft: '20pt', margin: '3pt 0'}} {...props}/>,
-                                  ol: ({node, ...props}) => <ol style={{fontSize: '12pt', listStyleType: 'decimal', paddingLeft: '20pt', margin: '3pt 0'}} {...props}/>,
-                                  li: ({node, ...props}) => <li style={{marginBottom: '3pt', lineHeight: '1'}} {...props}/>,
-                                  strong: ({node, ...props}) => <strong style={{fontWeight: 'bold'}} {...props}/>,
-                                  em: ({node, ...props}) => <em style={{fontStyle: 'italic'}} {...props}/>,
-                                  table: ({node, ...props}) => <table style={{width: '100%', borderCollapse: 'collapse', marginTop: '10pt', marginBottom: '10pt'}} {...props}/>,
-                                  th: ({node, ...props}) => <th style={{border: '1px solid black', padding: '5pt', backgroundColor: '#f2f2f2', fontWeight: 'bold', textAlign: 'center'}} {...props}/>,
-                                  td: ({node, ...props}) => <td style={{border: '1px solid black', padding: '5pt', textAlign: 'left', verticalAlign: 'top'}} {...props}/>,
-                              }}
-                          >
-                              {resultMarkdown}
-                          </ReactMarkdown>
-                      </div>
-                  </div>
-              ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-gray-700 opacity-60">
-                      <div className="relative mb-6">
-                          <BookOpen size={120} className="text-gray-800 drop-shadow-[0_0_15px_rgba(255,255,255,0.05)]"/>
-                      </div>
-                      <p className="text-2xl font-black uppercase tracking-[0.2em] text-center text-gray-600 drop-shadow-md">KHAI BÁO DỮ LIỆU<br/><span className="text-sm font-bold tracking-widest text-gray-500">ĐỂ BẮT ĐẦU SOẠN GIÁO ÁN</span></p>
-                  </div>
-              )}
-          </div>
-
-      </div>
-    </div>
-  );
+            <style jsx global>{`
+                .no-scrollbar::-webkit-scrollbar { display: none; }
+                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #ea580c; }
+            `}</style>
+        </div>
+    );
 }
