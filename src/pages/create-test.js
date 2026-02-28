@@ -249,8 +249,8 @@ Tại bảng Ma trận Phần 1, phần TỔNG ĐIỂM của mỗi cột, bạn 
 - TOÁN HỌC/LÝ/HÓA: 
     +Công thức PHỨC TẠP NHƯ: CĂN BẬC HAI,BA, GIỚI HẠN, MŨ, LUỸ THỪA,LOG,...BẮT BUỘC dùng LaTeX kẹp trong $...$. BẮT BUỘC gõ khoảng trắng (space) TRƯỚC và SAU mỗi công thức $...$. KHÔNG dùng dấu nháy hay backtick bao quanh công thức.
     +Công thức đơn giản như biểu thức, phương trình bậc nhất,.. không bắt buộc phải dùng LaTeX, có thể viết trực tiếp trong câu hỏi.Ví dụ: x=2, 2x+4=0,... Nhưng nếu dùng LaTeX thì vẫn phải tuân thủ quy tắc có khoảng trắng trước và sau công thức.
-    - BẮT ĐẦU VĂN BẢN TỪ "### **PHẦN 1: MA TRẬN ĐỀ KIỂM TRA**", TUYỆT ĐỐI KHÔNG CHÀO HỎI.
-
+- BẮT ĐẦU VĂN BẢN TỪ "### **PHẦN 1: MA TRẬN ĐỀ KIỂM TRA**", TUYỆT ĐỐI KHÔNG CHÀO HỎI.
+- Viết Code Python/C++ trong đề, phần Đáp án và Hướng dẫn chấm nếu có 1 dòng thì không cần định dạng LaTeX ví dụ: len(s), s.insert(k,x),..., nhưng nếu có nhiều dòng code hoặc công thức phức tạp thì BẮT BUỘC phải định dạng LaTeX hoặc code để đảm bảo tính rõ ràng và dễ đọc. KHÔNG được viết code hay công thức phức tạp liền mạch trong một đoạn văn bản dài mà không có định dạng rõ ràng.
 **BẠN PHẢI TRẢ VỀ ĐÚNG 4 PHẦN THEO THỨ TỰ DƯỚI ĐÂY:**
 
 ### **PHẦN 1: MA TRẬN ĐỀ KIỂM TRA**
