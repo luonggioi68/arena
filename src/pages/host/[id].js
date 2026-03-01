@@ -136,9 +136,7 @@ export default function HostLobby() {
               BẮT ĐẦU NGAY <Play fill="currentColor" className="w-6 h-6 md:w-8 md:h-8"/>
           </button>
           
-          <p className="mt-4 md:mt-6 text-slate-500 font-medium text-xs md:text-base">
-              Học sinh nhập PIN tại: <span className="text-white font-bold bg-white/10 px-2 py-1 rounded">/play</span>
-          </p>
+          
       </div>
 
       {/* CSS làm đẹp thanh cuộn */}

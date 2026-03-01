@@ -5,7 +5,7 @@ import { collection, getDocs, updateDoc, doc, deleteDoc } from 'firebase/firesto
 import { 
     Users, Search, Plus, Edit, Trash2, Save, X, 
     Calendar, CheckCircle, AlertTriangle, Clock, 
-    GraduationCap, Briefcase, Shield, Star, Lock, Unlock, Timer
+    GraduationCap, Briefcase, Shield, Star, Lock, Unlock, Timer, RefreshCcw
 } from 'lucide-react';
 
 export default function AdminUserManagement() {
@@ -14,9 +14,16 @@ export default function AdminUserManagement() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
+    
+    // State cho Modal Sửa đơn lẻ
     const [currentUser, setCurrentUser] = useState({
         id: '', name: '', email: '', role: 'teacher', expireDate: '', status: 'active', grade: ''
     });
+
+    // --- STATE MỚI: DÀNH CHO XỬ LÝ HÀNG LOẠT ---
+    const [selectedUsers, setSelectedUsers] = useState([]);
+    const [isResetDateModalOpen, setIsResetDateModalOpen] = useState(false);
+    const [bulkExpireDate, setBulkExpireDate] = useState('');
 
     // --- HÀM HỖ TRỢ SẮP XẾP NGÀY MỚI NHẤT ---
     const sortUsersByNewest = (usersList) => {
@@ -31,17 +38,16 @@ export default function AdminUserManagement() {
     const fetchUsers = async () => {
         setLoading(true);
         setAllUsers([]); 
+        setSelectedUsers([]); // Xóa chọn khi đổi tab hoặc reload
         try {
             if (activeTab === 'TEACHER') {
                 const querySnapshot = await getDocs(collection(firestore, 'users'));
                 let data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 data = data.filter(u => u.role === 'teacher' || !u.role);
-                // Áp dụng sắp xếp
                 setAllUsers(sortUsersByNewest(data));
             } else {
                 const querySnapshot = await getDocs(collection(firestore, 'student_profiles'));
                 let data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                // Áp dụng sắp xếp
                 setAllUsers(sortUsersByNewest(data));
             }
         } catch (error) {
@@ -59,7 +65,7 @@ export default function AdminUserManagement() {
         return () => unsubscribe();
     }, [activeTab]);
 
-    // 2. HÀM XÓA 
+    // 2. HÀM XÓA ĐƠN LẺ (CŨ)
     const handleDelete = async (id) => {
         if (window.confirm("Bạn có chắc chắn muốn XÓA TẬN GỐC tài khoản này không? Toàn bộ dữ liệu đăng nhập và hồ sơ sẽ bốc hơi và không thể khôi phục!")) {
             setLoading(true);
@@ -88,7 +94,86 @@ export default function AdminUserManagement() {
         }
     };
 
-    // 3. HÀM KHÓA/MỞ KHÓA TÀI KHOẢN
+    // --- HÀM MỚI: XÓA HÀNG LOẠT ---
+    const handleBulkDelete = async () => {
+        if (selectedUsers.length === 0) return;
+        if (window.confirm(`⚠️ CHÚ Ý: Bạn đang chuẩn bị xóa TẬN GỐC ${selectedUsers.length} tài khoản.\nHành động này không thể hoàn tác. Bạn chắc chắn chứ?`)) {
+            setLoading(true);
+            try {
+                const targetCollection = activeTab === 'TEACHER' ? 'users' : 'student_profiles';
+                
+                // Gọi API xóa cho từng UID đã chọn
+                const deletePromises = selectedUsers.map(uid => 
+                    fetch('/api/delete-user', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ uid: uid, collectionName: targetCollection })
+                    })
+                );
+
+                await Promise.all(deletePromises);
+
+                alert(`✅ Đã xóa thành công ${selectedUsers.length} tài khoản!`);
+                fetchUsers();
+            } catch (error) {
+                console.error(error);
+                alert("Lỗi khi xóa hàng loạt: " + error.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+    };
+
+    // --- HÀM MỚI: XỬ LÝ CHECKBOX ---
+    const handleSelectAll = (e, filteredList) => {
+        if (e.target.checked) {
+            setSelectedUsers(filteredList.map(u => u.id));
+        } else {
+            setSelectedUsers([]);
+        }
+    };
+
+    const handleSelectOne = (id) => {
+        if (selectedUsers.includes(id)) {
+            setSelectedUsers(selectedUsers.filter(userId => userId !== id));
+        } else {
+            setSelectedUsers([...selectedUsers, id]);
+        }
+    };
+
+    // --- HÀM MỚI: CẬP NHẬT NGÀY HẾT HẠN HÀNG LOẠT ---
+    const handleBulkResetExpireDate = async () => {
+        if (selectedUsers.length === 0) return;
+        if (!bulkExpireDate) return alert("Vui lòng chọn ngày hết hạn mới!");
+
+        setLoading(true);
+        try {
+            // Chỉ áp dụng cho Tab Giáo Viên, vì Học Sinh không có thuộc tính ngày hết hạn
+            if (activeTab === 'TEACHER') {
+                const updatePromises = selectedUsers.map(uid => {
+                    const userRef = doc(firestore, 'users', uid);
+                    return updateDoc(userRef, { expireDate: bulkExpireDate });
+                });
+
+                await Promise.all(updatePromises);
+                
+                alert(`✅ Đã reset ngày hết hạn (${bulkExpireDate}) cho ${selectedUsers.length} tài khoản thành công!`);
+                setIsResetDateModalOpen(false);
+                setBulkExpireDate('');
+                fetchUsers();
+            } else {
+                alert("Tính năng này chỉ áp dụng cho tài khoản Giáo viên!");
+                setIsResetDateModalOpen(false);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Lỗi khi cập nhật ngày hết hạn: " + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // 3. HÀM KHÓA/MỞ KHÓA TÀI KHOẢN (CŨ)
     const handleToggleLock = async (id, currentStatus) => {
         const isCurrentlyLocked = currentStatus === 'locked';
         const newStatus = isCurrentlyLocked ? 'active' : 'locked';
@@ -112,7 +197,7 @@ export default function AdminUserManagement() {
         }
     };
 
-    // 4. HÀM LƯU / CẬP NHẬT 
+    // 4. HÀM LƯU / CẬP NHẬT ĐƠN LẺ (CŨ)
     const handleSave = async () => {
         if (!currentUser.name) return alert("Vui lòng nhập tên!");
         setLoading(true);
@@ -173,7 +258,6 @@ export default function AdminUserManagement() {
                     activeAccounts++;
                 }
             } else {
-                 // Không có ngày hết hạn coi như vô thời hạn (còn hạn)
                  activeAccounts++; 
             }
         }
@@ -201,54 +285,84 @@ export default function AdminUserManagement() {
                     </div>
                 </div>
 
-                {/* TABS & STATS */}
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-4 mt-8 mb-6">
-                    {/* TABS */}
-                    <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl w-fit border border-slate-800">
-                        <button onClick={() => setActiveTab('TEACHER')} className={`px-6 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${activeTab === 'TEACHER' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                            <Briefcase size={16}/> GIÁO VIÊN
-                        </button>
-                        <button onClick={() => setActiveTab('STUDENT')} className={`px-6 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${activeTab === 'STUDENT' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                            <GraduationCap size={16}/> HỌC SINH
-                        </button>
+                {/* TABS & STATS & BULK ACTIONS */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mt-8 mb-6">
+                    <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+                        {/* TABS */}
+                        <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl w-fit border border-slate-800">
+                            <button onClick={() => setActiveTab('TEACHER')} className={`px-6 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${activeTab === 'TEACHER' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                                <Briefcase size={16}/> GIÁO VIÊN
+                            </button>
+                            <button onClick={() => setActiveTab('STUDENT')} className={`px-6 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${activeTab === 'STUDENT' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                                <GraduationCap size={16}/> HỌC SINH
+                            </button>
+                        </div>
+
+                        {/* THỐNG KÊ */}
+                        <div className="flex flex-wrap gap-3">
+                            <div className="bg-slate-900/50 border border-slate-800 px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-sm">
+                                <span className="text-slate-400 text-xs font-bold uppercase">Tổng TK:</span>
+                                <span className="text-white font-black text-sm">{totalAccounts}</span>
+                            </div>
+                            
+                            {activeTab === 'TEACHER' && (
+                                <>
+                                    <div className="bg-emerald-500/10 border border-emerald-500/20 px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-sm">
+                                        <span className="text-emerald-400 text-xs font-bold uppercase">TK Còn hạn:</span>
+                                        <span className="text-emerald-300 font-black text-sm">{activeAccounts}</span>
+                                    </div>
+                                    <div className="bg-red-500/10 border border-red-500/20 px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-sm">
+                                        <span className="text-red-400 text-xs font-bold uppercase">TK Hết hạn:</span>
+                                        <span className="text-red-300 font-black text-sm">{expiredAccounts}</span>
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     </div>
 
-                    {/* THỐNG KÊ */}
-                    <div className="flex flex-wrap gap-3">
-                        <div className="bg-slate-900/50 border border-slate-800 px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-sm">
-                            <span className="text-slate-400 text-xs font-bold uppercase">Tổng TK:</span>
-                            <span className="text-white font-black text-sm">{totalAccounts}</span>
+                    {/* NÚT THAO TÁC HÀNG LOẠT (CHỈ HIỆN KHI CÓ CHỌN) */}
+                    {selectedUsers.length > 0 && (
+                        <div className="flex gap-2 animate-in fade-in zoom-in slide-in-from-bottom-4">
+                            <button 
+                                onClick={handleBulkDelete}
+                                className="bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white px-6 py-3 rounded-xl font-bold text-xs border border-red-600 shadow-lg transition-all flex items-center gap-2 uppercase tracking-widest"
+                            >
+                                <Trash2 size={16}/> XÓA ({selectedUsers.length})
+                            </button>
+                            
+                            {activeTab === 'TEACHER' && (
+                                <button 
+                                    onClick={() => setIsResetDateModalOpen(true)}
+                                    className="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white px-6 py-3 rounded-xl font-bold text-xs border border-indigo-600 shadow-lg transition-all flex items-center gap-2 uppercase tracking-widest"
+                                >
+                                    <RefreshCcw size={16}/> RESET NGÀY HẾT HẠN
+                                </button>
+                            )}
                         </div>
-                        
-                        {activeTab === 'TEACHER' && (
-                            <>
-                                <div className="bg-emerald-500/10 border border-emerald-500/20 px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-sm">
-                                    <span className="text-emerald-400 text-xs font-bold uppercase">TK Còn hạn:</span>
-                                    <span className="text-emerald-300 font-black text-sm">{activeAccounts}</span>
-                                </div>
-                                <div className="bg-red-500/10 border border-red-500/20 px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-sm">
-                                    <span className="text-red-400 text-xs font-bold uppercase">TK Hết hạn:</span>
-                                    <span className="text-red-300 font-black text-sm">{expiredAccounts}</span>
-                                </div>
-                            </>
-                        )}
-                    </div>
+                    )}
                 </div>
             </div>
 
             {/* TABLE */}
-            <div className="max-w-7xl mx-auto bg-slate-900/30 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-xl">
+            <div className="max-w-7xl mx-auto bg-slate-900/30 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-xl shadow-2xl">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead>
                             <tr className="bg-slate-900/50 border-b border-slate-800">
+                                {/* CỘT CHECKBOX TẤT CẢ */}
+                                <th className="px-6 py-4 w-12 text-center border-r border-slate-800/50">
+                                    <input 
+                                        type="checkbox" 
+                                        onChange={(e) => handleSelectAll(e, filteredUsers)} 
+                                        checked={filteredUsers.length > 0 && selectedUsers.length === filteredUsers.length}
+                                        className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                                    />
+                                </th>
+
                                 <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase w-16 text-center">TT</th>
                                 <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Người dùng</th>
-                                
-                                {/* CỘT NGÀY ĐĂNG KÝ */}
                                 <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase text-center">Ngày đăng ký</th>
                                 
-                                {/* CỘT THỜI GIAN CÒN LẠI (Chỉ hiển thị ở tab Giáo viên) */}
                                 {activeTab === 'TEACHER' && (
                                     <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase text-center">Thời gian còn lại</th>
                                 )}
@@ -262,12 +376,12 @@ export default function AdminUserManagement() {
                         </thead>
                         <tbody className="divide-y divide-slate-800/50">
                             {loading ? (
-                                <tr><td colSpan={activeTab === 'TEACHER' ? 7 : 6} className="px-6 py-12 text-center text-slate-500">Đang tải và sắp xếp dữ liệu mới nhất...</td></tr>
+                                <tr><td colSpan={activeTab === 'TEACHER' ? 8 : 7} className="px-6 py-12 text-center text-slate-500">Đang tải và sắp xếp dữ liệu mới nhất...</td></tr>
                             ) : filteredUsers.length === 0 ? (
-                                <tr><td colSpan={activeTab === 'TEACHER' ? 7 : 6} className="px-6 py-12 text-center text-slate-500">Không tìm thấy tài khoản nào</td></tr>
+                                <tr><td colSpan={activeTab === 'TEACHER' ? 8 : 7} className="px-6 py-12 text-center text-slate-500">Không tìm thấy tài khoản nào</td></tr>
                             ) : filteredUsers.map((user, index) => {
                                 
-                                // LOGIC KIỂM TRA HẾT HẠN & SỐ NGÀY CÒN LẠI
+                                const isSelected = selectedUsers.includes(user.id);
                                 let isExpired = false;
                                 let remainingDays = null;
 
@@ -285,7 +399,6 @@ export default function AdminUserManagement() {
 
                                 const isLocked = user.status === 'locked';
 
-                                // XỬ LÝ FORMAT NGÀY ĐĂNG KÝ
                                 let regDate = '---';
                                 if (user.createdAt) {
                                     if (user.createdAt.seconds) {
@@ -297,7 +410,21 @@ export default function AdminUserManagement() {
                                 }
 
                                 return (
-                                    <tr key={user.id} className={`hover:bg-slate-800/30 transition group ${isLocked ? 'opacity-60 grayscale-[50%]' : ''}`}>
+                                    // Thay đổi màu nền nếu hàng đang được chọn (isSelected)
+                                    <tr key={user.id} className={`transition group 
+                                        ${isLocked ? 'opacity-60 grayscale-[50%]' : ''}
+                                        ${isSelected ? 'bg-indigo-900/30' : 'hover:bg-slate-800/30'}
+                                    `}>
+                                        {/* Ô CHECKBOX TỪNG DÒNG */}
+                                        <td className="px-6 py-4 text-center border-r border-slate-800/50">
+                                            <input 
+                                                type="checkbox" 
+                                                onChange={() => handleSelectOne(user.id)} 
+                                                checked={isSelected}
+                                                className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500 cursor-pointer accent-indigo-500 transition-all hover:scale-110"
+                                            />
+                                        </td>
+
                                         <td className="px-6 py-4 text-center text-slate-500 font-mono font-bold text-sm">
                                             {index + 1}
                                         </td>
@@ -310,7 +437,6 @@ export default function AdminUserManagement() {
                                             <div className="text-xs text-slate-500 font-mono mt-1">{user.email || user.phone}</div>
                                         </td>
 
-                                        {/* HIỂN THỊ NGÀY ĐĂNG KÝ */}
                                         <td className="px-6 py-4 text-center">
                                             <span className="text-xs text-slate-400 font-mono bg-slate-800/50 px-2 py-1 rounded-md border border-slate-700/50 inline-block">
                                                 {regDate}
@@ -426,38 +552,40 @@ export default function AdminUserManagement() {
                 </div>
             </div>
 
-            {/* MODAL SỬA THÔNG TIN */}
+            {/* MODAL SỬA THÔNG TIN ĐƠN LẺ */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                    <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 shadow-2xl">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in zoom-in duration-200">
+                    <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent"></div>
+                        
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-xl font-black text-white uppercase tracking-tighter">Cập nhật tài khoản</h2>
-                            <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-800 rounded-full"><X size={20}/></button>
+                            <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors"><X size={20}/></button>
                         </div>
                         <div className="space-y-4">
                             <div>
-                                <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Tên hiển thị</label>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block tracking-widest">Tên hiển thị</label>
                                 <input 
                                     value={currentUser.name} onChange={e => setCurrentUser({...currentUser, name: e.target.value})}
-                                    className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 outline-none focus:border-indigo-500 text-white font-bold"
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 outline-none focus:border-indigo-500 text-white font-bold transition-colors"
                                 />
                             </div>
                             
                             {activeTab === 'TEACHER' ? (
                                 <div>
-                                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block text-indigo-400">Ngày hết hạn (Gia hạn)</label>
+                                    <label className="text-[10px] font-bold text-indigo-400 uppercase mb-1 block tracking-widest flex items-center gap-1"><Calendar size={12}/> Ngày hết hạn</label>
                                     <input 
                                         type="date" value={currentUser.expireDate} onChange={e => setCurrentUser({...currentUser, expireDate: e.target.value})}
-                                        className="w-full bg-slate-800 border border-indigo-500/30 rounded-xl p-3 outline-none focus:border-indigo-500 text-white font-mono"
+                                        className="w-full bg-slate-800 border border-indigo-500/30 rounded-xl p-3 outline-none focus:border-indigo-500 text-white font-mono transition-colors"
                                     />
                                     <p className="text-[10px] text-slate-500 mt-1 italic">* Chọn ngày giới hạn tài khoản, hoặc để trống nếu vô thời hạn.</p>
                                 </div>
                             ) : (
                                 <div>
-                                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block text-emerald-400">Khối Lớp</label>
+                                    <label className="text-[10px] font-bold text-emerald-400 uppercase mb-1 block tracking-widest flex items-center gap-1"><GraduationCap size={12}/> Khối Lớp</label>
                                     <select 
                                         value={currentUser.grade || '10'} onChange={e => setCurrentUser({...currentUser, grade: e.target.value})}
-                                        className="w-full bg-slate-800 border border-emerald-500/30 rounded-xl p-3 outline-none focus:border-emerald-500 text-white font-bold"
+                                        className="w-full bg-slate-800 border border-emerald-500/30 rounded-xl p-3 outline-none focus:border-emerald-500 text-white font-bold transition-colors"
                                     >
                                         {[6,7,8,9,10,11,12].map(g => <option key={g} value={g}>Lớp {g}</option>)}
                                     </select>
@@ -466,9 +594,47 @@ export default function AdminUserManagement() {
 
                         </div>
                         <div className="flex gap-3 mt-8">
-                            <button onClick={() => setIsModalOpen(false)} className="flex-1 py-3 text-slate-400 font-bold hover:bg-slate-800 rounded-xl transition">HỦY</button>
-                            <button onClick={handleSave} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+                            <button onClick={() => setIsModalOpen(false)} className="flex-1 py-3 text-slate-400 font-bold hover:bg-slate-800 hover:text-white rounded-xl transition-colors">HỦY BỎ</button>
+                            <button onClick={handleSave} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.4)] transition-all active:scale-95 flex items-center justify-center gap-2">
                                 <Save size={16}/> LƯU LẠI
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL RESET NGÀY HẾT HẠN HÀNG LOẠT */}
+            {isResetDateModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in zoom-in duration-200">
+                    <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent"></div>
+                        
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-black text-white uppercase tracking-tighter">Reset Hàng Loạt</h2>
+                            <button onClick={() => setIsResetDateModalOpen(false)} className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors"><X size={20}/></button>
+                        </div>
+
+                        <div className="bg-indigo-500/10 border border-indigo-500/20 p-4 rounded-xl mb-4">
+                            <p className="text-sm text-indigo-300 font-bold mb-1">Đang chọn: <span className="text-white text-lg">{selectedUsers.length}</span> tài khoản</p>
+                            <p className="text-[10px] text-slate-400 italic">Tất cả tài khoản được chọn sẽ cập nhật chung về ngày hết hạn bên dưới.</p>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-bold text-indigo-400 uppercase mb-1 block tracking-widest flex items-center gap-1"><Calendar size={12}/> Ngày hết hạn mới</label>
+                                <input 
+                                    type="date" 
+                                    value={bulkExpireDate} 
+                                    onChange={e => setBulkExpireDate(e.target.value)}
+                                    className="w-full bg-slate-800 border border-indigo-500/30 rounded-xl p-4 outline-none focus:border-indigo-500 text-white font-mono transition-colors text-lg"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 mt-8">
+                            <button onClick={() => setIsResetDateModalOpen(false)} className="flex-1 py-3 text-slate-400 font-bold hover:bg-slate-800 hover:text-white rounded-xl transition-colors">HỦY BỎ</button>
+                            <button onClick={handleBulkResetExpireDate} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.4)] transition-all active:scale-95 flex items-center justify-center gap-2">
+                                <RefreshCcw size={16}/> ÁP DỤNG NGAY
                             </button>
                         </div>
                     </div>
