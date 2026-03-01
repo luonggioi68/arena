@@ -77,7 +77,10 @@ export default function Dashboard() {
   const [newPassword, setNewPassword] = useState('');
   const [isChangingPass, setIsChangingPass] = useState(false);
 
-  // --- STATE MỚI: Dùng cho trang Quản lý Người Dùng ---
+  // --- STATE QUẢN LÝ POPUP GIA HẠN ---
+  const [showExpiryModal, setShowExpiryModal] = useState(false);
+  const [expiryData, setExpiryData] = useState({ isExpired: false, daysLeft: 0, expireDate: '', email: '' });
+
   const [userStats, setUserStats] = useState({
       totalTeachers: 0,
       activeTeachers: 0,
@@ -125,7 +128,7 @@ export default function Dashboard() {
                   return;
               }
 
-              // KIỂM TRA BÁO SẮP HẾT HẠN
+              // KIỂM TRA BÁO SẮP HẾT HẠN VÀ HẾT HẠN (SỬ DỤNG POPUP MỚI)
               if (userData.expireDate) {
                   const expireDate = new Date(userData.expireDate);
                   const now = new Date();
@@ -137,13 +140,16 @@ export default function Dashboard() {
                   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
                   if (diffDays < 0) {
-                      alert(`⛔ TÀI KHOẢN ĐÃ HẾT HẠN SỬ DỤNG!\nNgày hết hạn của bạn là: ${userData.expireDate}\n\nVui lòng liên hệ Admin để gia hạn.`);
-                      await signOut(auth);
-                      router.push('/');
-                      return;
+                      // ĐÃ HẾT HẠN - MỞ POPUP VÀ CHẶN TRUY CẬP
+                      setExpiryData({ isExpired: true, daysLeft: diffDays, expireDate: userData.expireDate, email: currentUser.email });
+                      setShowExpiryModal(true);
+                      setLoading(false); 
+                      return; // Dừng luôn, không fetch data dashboard nữa
                   } else if (diffDays <= 3) {
+                      // SẮP HẾT HẠN - MỞ POPUP CẢNH BÁO
                       if (!sessionStorage.getItem('expire_warning_shown')) {
-                          alert(`⚠️ CHÚ Ý: Tài khoản của bạn sẽ hết hạn sau ${diffDays} ngày nữa (vào ngày ${userData.expireDate}).\n\nVui lòng liên hệ Admin để gia hạn tránh gián đoạn công việc!`);
+                          setExpiryData({ isExpired: false, daysLeft: diffDays, expireDate: userData.expireDate, email: currentUser.email });
+                          setShowExpiryModal(true);
                           sessionStorage.setItem('expire_warning_shown', 'true');
                       }
                   }
@@ -170,10 +176,9 @@ export default function Dashboard() {
           fetchAssignments(currentUser) 
       ]);
 
-      // [BỔ SUNG QUAN TRỌNG]: Tải danh sách giáo viên nếu là MASTER ADMIN
       if (isMaster) {
           await fetchAllowedEmails();
-          await fetchUserStats(); // Lấy thống kê User
+          await fetchUserStats(); 
       }
 
       setLoading(false);
@@ -183,7 +188,6 @@ export default function Dashboard() {
   }, [router, setUser]);
 
   // --- CÁC HÀM FETCH DATA ---
-  // Hàm tải danh sách User
   const fetchAllowedEmails = async () => {
       try {
           const q = query(collection(firestore, "allowed_emails"), orderBy("createdAt", "desc"));
@@ -192,10 +196,8 @@ export default function Dashboard() {
       } catch (e) { console.error("Lỗi tải danh sách giáo viên:", e); }
   };
 
-  // --- HÀM THỐNG KÊ NGƯỜI DÙNG CHUẨN XÁC ---
   const fetchUserStats = async () => {
       try {
-          // 1. Lấy dữ liệu Giáo viên từ bảng 'users'
           const usersSnap = await getDocs(collection(firestore, "users"));
           let tTotal = 0, tActive = 0, tExpired = 0;
           const now = new Date();
@@ -203,7 +205,6 @@ export default function Dashboard() {
 
           usersSnap.forEach(doc => {
               const data = doc.data();
-              // Lọc giáo viên (hoặc user chưa có role cụ thể)
               if (data.role === 'teacher' || !data.role) {
                   tTotal++;
                   if (data.expireDate) {
@@ -212,14 +213,13 @@ export default function Dashboard() {
                       if (expDate >= now) tActive++;
                       else tExpired++;
                   } else {
-                      tActive++; // Không có ngày hết hạn -> Còn hạn
+                      tActive++; 
                   }
               }
           });
 
-          // 2. Lấy dữ liệu Học sinh từ bảng 'student_profiles'
           const studentsSnap = await getDocs(collection(firestore, "student_profiles"));
-          const sTotal = studentsSnap.size; // Lấy tổng số lượng document học sinh
+          const sTotal = studentsSnap.size; 
           
           setUserStats({
               totalTeachers: tTotal,
@@ -383,7 +383,7 @@ export default function Dashboard() {
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617] text-white"><Loader2 className="animate-spin" size={40}/></div>;
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-slate-200 font-sans selection:bg-orange-500 selection:text-white flex">
+    <div className="min-h-screen bg-[#0f172a] text-slate-200 font-sans selection:bg-orange-500 selection:text-white flex relative">
         
       {/* NÚT MỞ MENU TRÊN MOBILE (Nút Hamburger) */}
       <button 
@@ -413,10 +413,7 @@ export default function Dashboard() {
                 <X size={24}/>
             </button>
         </div>
-{/* Header Sidebar */}
-      
 
-            
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
             <button onClick={() => {setActiveTab('LIBRARY'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'LIBRARY' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:bg-white/5'}`}><Gamepad2 size={18}/> ARENA KHO VŨ KHÍ</button>
             <button onClick={() => {setActiveTab('GAME_REPO'); setIsMobileMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm ${activeTab === 'GAME_REPO' ? 'bg-rose-600 text-white shadow-lg shadow-rose-500/20' : 'text-slate-400 hover:bg-white/5'}`}><Database size={18}/> ARENA KHO GAME</button>
@@ -441,24 +438,23 @@ export default function Dashboard() {
                     <Home size={16} /> VỀ TRANG CHỦ
                 </button>
         </div>
-        {/* --- BẮT ĐẦU PHẦN THÊM MỚI: THÔNG TIN USER & TRANG CHỦ --- */}
-            <div className="px-4 py-5 border-b border-slate-800 shrink-0">
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center text-white font-black shrink-0 border border-slate-700 shadow-md">
-                        {user?.displayName ? user.displayName.charAt(0).toUpperCase() : user?.email?.charAt(0).toUpperCase() || 'U'}
+        
+        <div className="px-4 py-5 border-b border-slate-800 shrink-0">
+            <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center text-white font-black shrink-0 border border-slate-700 shadow-md">
+                    {user?.displayName ? user.displayName.charAt(0).toUpperCase() : user?.email?.charAt(0).toUpperCase() || 'U'}
+                </div>
+                <div className="overflow-hidden">
+                    <div className="text-sm font-bold text-white truncate" title={user?.displayName || 'Quản trị viên'}>
+                        {user?.displayName || 'Quản trị viên'}
                     </div>
-                    <div className="overflow-hidden">
-                        <div className="text-sm font-bold text-white truncate" title={user?.displayName || 'Quản trị viên'}>
-                            {user?.displayName || 'Quản trị viên'}
-                        </div>
-                        <div className="text-[10px] text-slate-400 truncate" title={user?.email}>
-                            {user?.email}
-                        </div>
+                    <div className="text-[10px] text-slate-400 truncate" title={user?.email}>
+                        {user?.email}
                     </div>
                 </div>
-              
             </div>
-            {/* --- KẾT THÚC PHẦN THÊM MỚI --- */}
+          
+        </div>
       </aside>
 
       {/* KHUNG NỘI DUNG CHÍNH (MAIN) - Đã tối ưu padding cho Mobile */}
@@ -647,7 +643,7 @@ export default function Dashboard() {
             </div>
         )}
 
-        {/* TAB USER MANAGEMENT - ĐÃ ĐƯỢC CHUỐT LẠI */}
+        {/* TAB USER MANAGEMENT */}
         {activeTab === 'USERS' && MASTER_EMAILS.includes(user?.email) && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-500 max-w-5xl mx-auto pb-10">
                 <header className="mb-8">
@@ -704,7 +700,6 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* Nút Quản lý chi tiết */}
                 <div className="bg-[#1e293b] p-8 md:p-12 rounded-[2rem] border border-white/10 shadow-xl text-center flex flex-col items-center justify-center">
                     <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mb-6 border border-slate-700 shadow-lg">
                         <Database size={40} className="text-slate-400"/>
@@ -747,18 +742,18 @@ export default function Dashboard() {
                                     </div>
                                 </div>
                                 
-    <div>
-        <label className="block text-xs font-bold text-green-400 mb-2 uppercase">Dòng chữ chạy thông báo (Marquee)</label>
-        <input 
-            type="text" 
-            value={homeConfig.marqueeText || ''} 
-            onChange={(e) => setHomeConfig({...homeConfig, marqueeText: e.target.value})} 
-            placeholder="Ví dụ: Chào mừng năm học mới 2026! Arena chuẩn bị mở giải đấu lớn..."
-            className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-green-500 font-bold transition-all"
-        />
-        <p className="text-[10px] text-slate-500 mt-1 italic">* Để trống nếu không muốn hiển thị chữ chạy trên trang chủ.</p>
-    </div>
-    
+                                <div>
+                                    <label className="block text-xs font-bold text-green-400 mb-2 uppercase">Dòng chữ chạy thông báo (Marquee)</label>
+                                    <input 
+                                        type="text" 
+                                        value={homeConfig.marqueeText || ''} 
+                                        onChange={(e) => setHomeConfig({...homeConfig, marqueeText: e.target.value})} 
+                                        placeholder="Ví dụ: Chào mừng năm học mới 2026! Arena chuẩn bị mở giải đấu lớn..."
+                                        className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-green-500 font-bold transition-all"
+                                    />
+                                    <p className="text-[10px] text-slate-500 mt-1 italic">* Để trống nếu không muốn hiển thị chữ chạy trên trang chủ.</p>
+                                </div>
+                                
                                 <button type="submit" className="w-full bg-purple-600 hover:bg-purple-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95"><Save size={20}/> Lưu Giao Diện</button>
                             </form>
                         </div>
@@ -794,7 +789,6 @@ export default function Dashboard() {
                                     </select>
                                 </div>
                             </div>
-                            {/* --- BỔ SUNG: CẤU HÌNH THỜI GIAN GAME --- */}
                             <div className="space-y-4">
                                 <h3 className="text-emerald-400 font-bold uppercase text-sm border-b border-white/10 pb-2 flex items-center gap-2">
                                     <Clock size={16}/> Thời Gian Trả Lời (Chiến Binh Arena)
@@ -829,7 +823,6 @@ export default function Dashboard() {
                                     </div>
                                 </div>
                             </div>
-                            {/* --- KẾT THÚC BỔ SUNG --- */}
                             <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition active:scale-95"><Save size={20}/> Lưu Cấu Hình</button>
                         </form>
                     </div>
@@ -876,7 +869,71 @@ export default function Dashboard() {
             </div>
         )}
       </main>
-      <ExpiryAlert />
+
+      {/* POPUP CẢNH BÁO / HẾT HẠN TÀI KHOẢN (ĐÃ ĐƯỢC THU GỌN) */}
+      {showExpiryModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
+            <div className={`bg-[#0f172a] border ${expiryData.isExpired ? 'border-red-500/50 shadow-[0_0_30px_rgba(239,68,68,0.2)]' : 'border-yellow-500/50 shadow-[0_0_30px_rgba(234,179,8,0.2)]'} rounded-2xl w-full max-w-md overflow-hidden relative transform transition-all`}>
+                
+                {/* Header siêu gọn */}
+                <div className={`${expiryData.isExpired ? 'bg-red-600/20 border-red-500/30' : 'bg-yellow-600/20 border-yellow-500/30'} p-3 md:p-4 text-center border-b flex flex-col items-center justify-center gap-1`}>
+                    <div className="flex items-center gap-2">
+                        <AlertTriangle className={`${expiryData.isExpired ? 'text-red-500' : 'text-yellow-500'}`} size={24} />
+                        <h2 className="text-lg md:text-xl font-black text-white uppercase tracking-tighter leading-none">
+                            {expiryData.isExpired ? "Tài Khoản Đã Hết Hạn" : "Sắp Hết Hạn"}
+                        </h2>
+                    </div>
+                    <p className={`${expiryData.isExpired ? 'text-red-400' : 'text-yellow-400'} font-bold text-[11px] md:text-xs m-0`}>
+                        {expiryData.isExpired
+                            ? `Đã hết hạn vào ngày ${expiryData.expireDate}`
+                            : `Sẽ hết hạn sau ${expiryData.daysLeft} ngày nữa (${expiryData.expireDate})`}
+                    </p>
+                </div>
+
+                {/* Content */}
+                <div className="p-4 space-y-3">
+                    <p className="text-slate-300 text-center text-xs font-medium leading-relaxed">
+                        Tài khoản của bạn {expiryData.isExpired ? 'đã hết hạn' : 'gần hết hạn'}. Nạp <span className="text-yellow-400 font-black">AEC</span> để tiếp tục chiến đấu!
+                    </p>
+
+                    {/* QR Code Area thu nhỏ */}
+                    <div className="bg-white p-1.5 rounded-xl flex justify-center w-32 md:w-36 mx-auto shadow-md">
+                        <img src="/qr-bank.png" alt="QR Code Thanh Toán" className="w-full h-auto rounded-lg"/>
+                    </div>
+
+                    {/* Syntax Area mỏng lại */}
+                    <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-700 shadow-inner text-center">
+                        <div className="text-[9px] text-slate-400 uppercase font-bold mb-1 tracking-widest">Nội dung chuyển khoản</div>
+                        <div className="bg-black/60 p-2 rounded-lg border border-dashed border-cyan-500/50">
+                            <span className="text-cyan-400 font-mono font-bold text-xs sm:text-sm select-all tracking-wider">
+                                {expiryData.email ? `${expiryData.email.replace(/@/g, '-')} - NOP AEC` : 'EMAIL-CUA-BAN - NOP AEC'}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Contact Info dàn ngang */}
+                    <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 bg-blue-900/20 p-2.5 rounded-xl border border-blue-500/20">
+                        <span>Gửi bill qua Zalo:</span>
+                        <span className="text-emerald-400 font-black text-sm tracking-widest">0383 477 162</span>
+                    </div>
+                </div>
+
+                {/* Footer Buttons gọn gàng */}
+                <div className="p-3 bg-slate-900/90 border-t border-white/5 flex gap-3">
+                    {expiryData.isExpired ? (
+                        <button onClick={() => { signOut(auth); router.push('/'); }} className="w-full py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2">
+                            <LogOut size={16}/> Về Trang Chủ
+                        </button>
+                    ) : (
+                        <button onClick={() => setShowExpiryModal(false)} className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all border border-slate-600 active:scale-95 flex items-center justify-center gap-2">
+                            Đóng & Dùng Tiếp
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -65,36 +65,6 @@ export default function PDFPlay() {
         return () => clearInterval(timer);
     }, [isStarted, timeLeft, isSubmitting, isFinished]);
 
-    // [BẢO MẬT]: CHẶN LƯU (CTRL+S), IN (CTRL+P) VÀ CHUỘT PHẢI (TRÊN GIAO DIỆN WEB)
-    useEffect(() => {
-        const preventCheating = (e) => {
-            if (
-                (e.ctrlKey && ['s', 'p', 'c', 'u'].includes(e.key.toLowerCase())) || 
-                e.key === 'F12' ||
-                (e.ctrlKey && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase()))
-            ) {
-                e.preventDefault();
-                alert("⚠️ HỆ THỐNG BẢO MẬT: Tính năng này đã bị khóa trong giờ thi!");
-            }
-        };
-
-        const preventRightClick = (e) => {
-            if (e.target.tagName !== 'EMBED') {
-                e.preventDefault();
-            }
-        };
-
-        if (isStarted && !isFinished) {
-            window.addEventListener('keydown', preventCheating);
-            window.addEventListener('contextmenu', preventRightClick);
-        }
-
-        return () => {
-            window.removeEventListener('keydown', preventCheating);
-            window.removeEventListener('contextmenu', preventRightClick);
-        };
-    }, [isStarted, isFinished]);
-
     const formatTime = (seconds) => {
         const m = Math.floor(seconds / 60); const s = seconds % 60;
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
@@ -178,7 +148,7 @@ export default function PDFPlay() {
     });
 
     if (loading) return <div className="h-screen bg-[#09090b] flex items-center justify-center text-orange-500 font-black animate-pulse text-2xl drop-shadow-[0_0_15px_rgba(249,115,22,0.8)]"><Zap className="inline mr-2" size={30}/> ĐANG GIẢI MÃ...</div>;
-    if (!exam) return <div className="h-screen bg-[#09090b] flex items-center justify-center text-red-500 font-black text-xl"><Target className="inline mr-2" size={24}/> MÃ CHIẾN DỊCH KHÔNG TỒN TẠI!</div>;
+    if (!exam) return <div className="h-screen bg-[#09090b] flex items-center justify-center text-red-500 font-black text-xl"><Target className="inline mr-2" size={24}/> M mã CHIẾN DỊCH KHÔNG TỒN TẠI!</div>;
 
     const securePdfUrl = exam.pdfUrl?.replace('http://', 'https://');
 
@@ -245,7 +215,6 @@ export default function PDFPlay() {
 
     // ================= MÀN HÌNH LÀM BÀI (ACTIVE EXAM) =================
     return (
-        // [VÁ LỖI CỐT LÕI]: Dùng fixed inset-0 để ôm chặt cứng màn hình điện thoại, tránh lỗi tràn của 100dvh
         <div className="fixed inset-0 bg-[#09090b] flex flex-col overflow-hidden font-sans text-slate-200 printable-exam-area">
             
             {/* WRAPPER CHIA MÀN HÌNH (Mobile: Dọc, Desktop: Ngang) */}
@@ -269,11 +238,6 @@ export default function PDFPlay() {
                         </div>
 
                         <div className="flex items-center gap-3 sm:gap-6 shrink-0">
-                            {/* Cảnh báo khóa tải */}
-                            <div className="hidden lg:flex items-center gap-1.5 text-red-500 bg-red-950/30 px-3 py-1 rounded-lg border border-red-500/20 text-[10px] font-black uppercase tracking-widest">
-                                <Lock size={12}/> Đã khóa Tải/In
-                            </div>
-
                             <div className="hidden sm:flex items-center gap-2 bg-slate-900/80 border border-orange-500/30 pl-3 pr-1.5 py-1 rounded-full shadow-inner">
                                 <div className="flex flex-col items-end pr-2">
                                     <span className="text-[8px] font-black text-orange-400 uppercase tracking-widest">{studentInfo.isGuest ? 'Chế độ Khách' : 'Chiến Binh'}</span>
@@ -289,14 +253,7 @@ export default function PDFPlay() {
                     </div>
 
                     <div className="flex-1 w-full bg-white relative min-h-0">
-                        {/* BẢO MẬT PDF: Kính cường lực che chuột phải chỉ bật trên máy tính. Mobile để vuốt tự do. */}
-                        <div 
-                            className="hidden md:block absolute top-0 left-0 bottom-0 right-[20px] z-10 cursor-not-allowed"
-                            onContextMenu={(e) => {
-                                e.preventDefault();
-                                alert("⚠️ HỆ THỐNG BẢO MẬT: Chuột phải đã bị vô hiệu hóa trên vùng đề thi!");
-                            }}
-                        ></div>
+                        {/* Đã gỡ bỏ lớp kính cường lực chặn tương tác */}
                         <embed src={`${securePdfUrl}#view=FitH&toolbar=0&navpanes=0`} type="application/pdf" className="w-full h-full relative z-0" />
                     </div>
                 </div>
@@ -410,32 +367,6 @@ export default function PDFPlay() {
                     {isSubmitting ? 'ĐANG XỬ LÝ...' : <><Send size={16} strokeWidth={3}/> NỘP BÀI CHIẾN DỊCH</>}
                 </button>
             </div>
-
-            {/* BẢO MẬT PDF: Ép CSS màn hình in thành màu trắng bóc nếu học sinh cố tình dùng thủ thuật in */}
-            <style jsx global>{`
-                @media print {
-                    body * {
-                        visibility: hidden !important;
-                    }
-                    html, body {
-                        background-color: white !important;
-                    }
-                    html::before {
-                        content: "⚠️ TÍNH NĂNG IN ĐÃ BỊ HỆ THỐNG BẢO MẬT KHÓA ⚠️";
-                        visibility: visible !important;
-                        display: block;
-                        text-align: center;
-                        font-size: 24px;
-                        font-weight: bold;
-                        color: red;
-                        margin-top: 50px;
-                        width: 100%;
-                        position: absolute;
-                        top: 0;
-                        left: 0;
-                    }
-                }
-            `}</style>
 
             <style jsx>{`
                 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
