@@ -296,12 +296,14 @@ export default function HomePage() {
                   const isTest = index === 1;
                   const isMixer = index === 2; 
                   const isDuplicate = index === 3; // Nút Nhân Bản Đề mới ở ô 4
+                   const isquestion = index === 4; // Nút Câu hỏi mới ở ô 5
                   const isSubmit = index === 7; // Dời Cổng Nộp Bài về ô 8
                   
                   const title = isKHBD ? "Soạn KHBD" : 
                                 isTest ? "Soạn Đề KT" : 
                                 isMixer ? "Trộn Đề" : 
                                 isDuplicate ? "Nhân Bản Đề" : 
+                                isquestion ? "Tạo câu hỏi" : 
                                 isSubmit ? "Cổng Nộp Bài" : "";
 
                   const handleMenuClick = () => {
@@ -312,6 +314,7 @@ export default function HomePage() {
                               if (isTest) router.push('/create-test');
                               if (isMixer) router.push('/mixer'); 
                               if (isDuplicate) router.push('/clone-test'); // Bạn nhớ tạo route trang này nếu chưa có nhé
+                               if (isquestion) router.push('/generate-questions'); // Bạn nhớ tạo route trang này nếu chưa có nhé
                               if (isSubmit) router.push('/submit');
                           }
                       }
@@ -342,7 +345,7 @@ export default function HomePage() {
                 {/* Đổi flex-col md:flex-row thành flex-row luôn để tiêu đề và các lớp nằm ngang nhau */}
                 <div className="bg-gradient-to-br from-red-700 to-orange-800 px-2 md:px-3 w-[100px] sm:w-[120px] md:w-32 h-full flex items-center justify-center text-center shrink-0 border-r border-red-500/30">
                     <Target size={14} className="text-yellow-300 mr-1 md:mr-2 md:mb-0.5 animate-pulse drop-shadow-md md:w-5 md:h-5"/>
-                    <h2 className="text-[10px] sm:text-xs md:text-sm font-black uppercase text-white leading-none tracking-tighter drop-shadow-md">Luyện Tập</h2>
+                    <h2 className="text-[10px] sm:text-xs md:text-sm font-black uppercase text-white leading-none tracking-tighter drop-shadow-md">Luyện Game</h2>
                 </div>
                 
                 <div className="flex-1 flex overflow-x-auto no-scrollbar bg-slate-900/30 h-full">

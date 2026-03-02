@@ -791,6 +791,8 @@ ${getTotalQ_Normal('sa') > 0 ? `**PHẦN III. Câu trắc nghiệm trả lời n
                           <Target size={120} className="text-gray-800 drop-shadow-[0_0_15px_rgba(255,255,255,0.05)]"/>
                       </div>
                       <p className="text-2xl font-black uppercase tracking-[0.2em] text-center text-gray-600 drop-shadow-md">KHAI BÁO CẤU HÌNH<br/><span className="text-sm font-bold tracking-widest text-gray-500">ĐỂ BẮT ĐẦU TẠO ĐỀ</span></p>
+                                  <br/><span className="text-xs md:text-sm tracking-widest font-bold">Nguồn tự upload hoặc nhập tay ô phạm vi</span>
+                                  <br/><span className="text-xs md:text-sm tracking-widest font-bold">Nguồn tốt thì đề tạo ra tốt </span>
                   </div>
               )}
           </div>
