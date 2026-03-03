@@ -35,7 +35,6 @@ export default function BietDoiArenaHost() {
     const generatedPin = Math.floor(100000 + Math.random() * 900000).toString();
     setPin(generatedPin);
     
-    // [ĐÃ SỬA]: Xóa bỏ globalSolved để các đội không tranh giành/khóa câu hỏi của nhau nữa
     set(ref(db, `rooms/${generatedPin}`), { 
         status: 'LOBBY', 
         type: 'RACE', 
@@ -76,7 +75,6 @@ export default function BietDoiArenaHost() {
       const totalTeams = teams.length;
 
       if (totalTeams > 0) {
-          // [ĐÃ SỬA]: Chỉ tự động kết thúc game khi TẤT CẢ các đội đều đã làm xong bài (isFinished)
           if (finishedCount === totalTeams) {
               finishGame();
           }
@@ -89,7 +87,7 @@ export default function BietDoiArenaHost() {
     const interval = setInterval(() => {
         setTimeLeft((prev) => {
             if (prev <= 1) {
-                finishGame(); // Vẫn tự động thu bài nếu hết giờ
+                finishGame(); 
                 return 0;
             }
             return prev - 1;
@@ -105,7 +103,6 @@ export default function BietDoiArenaHost() {
     setTimeLeft(durationInSeconds);
     setGameState('RACING');
     
-    // [ĐÃ SỬA]: Không khởi tạo globalSolved nữa
     update(ref(db, `rooms/${pin}`), { 
         status: 'RACING', 
         quizData: quiz.questions, 
@@ -242,52 +239,82 @@ export default function BietDoiArenaHost() {
           </div>
         )}
 
-        {/* FINISHED VIEW */}
+        {/* FINISHED VIEW: ĐÃ FIX LỖI KHUẤT TRÊN VÀ BỔ SUNG DANH SÁCH TỔNG */}
         {gameState === 'FINISHED' && (
-            <div className="h-full flex flex-col items-center justify-center animate-in zoom-in duration-500 relative overflow-y-auto custom-scrollbar pb-6">
-                <Trophy className="w-16 h-16 md:w-24 md:h-24 text-yellow-400 mb-2 md:mb-4 animate-bounce drop-shadow-[0_0_50px_rgba(250,204,21,0.8)]" />
-                <h2 className="text-3xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-orange-500 italic uppercase mb-6 md:mb-8 drop-shadow-lg text-center leading-tight">
-                    TỔNG KẾT CHIẾN DỊCH
-                </h2>
+            <div className="absolute inset-0 overflow-y-auto custom-scrollbar bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black">
+                <div className="min-h-full flex flex-col items-center justify-start pt-8 pb-20 px-4 animate-in zoom-in duration-500">
+                    
+                    {/* TIÊU ĐỀ */}
+                    <Trophy className="w-16 h-16 md:w-24 md:h-24 text-yellow-400 mb-2 md:mb-4 animate-bounce drop-shadow-[0_0_50px_rgba(250,204,21,0.8)] shrink-0" />
+                    <h2 className="text-3xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-orange-500 italic uppercase mb-8 md:mb-12 drop-shadow-lg text-center leading-tight shrink-0">
+                        TỔNG KẾT CHIẾN DỊCH
+                    </h2>
 
-                <div className="flex items-end justify-center gap-2 md:gap-4 mb-8 md:mb-10 w-full max-w-4xl h-[30vh] md:h-[40vh]">
-                    {sortedTeams[1] && (
-                        <div className="flex flex-col items-center w-1/3 animate-in slide-in-from-bottom duration-700 delay-100">
-                             <div className="text-slate-400 font-black text-sm md:text-2xl mb-1 md:mb-2">🥈 Hạng 2</div>
-                             <div className="w-full bg-slate-700 h-[18vh] md:h-[25vh] rounded-t-xl md:rounded-t-3xl border-t-2 md:border-t-4 border-slate-500 flex flex-col items-center justify-start p-2 md:p-4 shadow-2xl relative">
-                                 <div className="text-sm md:text-3xl font-black text-white uppercase mb-1 text-center truncate w-full">{sortedTeams[1].name}</div>
-                                 <div className="text-xs md:text-2xl font-bold text-slate-300">{sortedTeams[1].score}đ</div>
-                             </div>
-                        </div>
-                    )}
-                    {sortedTeams[0] && (
-                        <div className="flex flex-col items-center w-1/3 z-10 animate-in slide-in-from-bottom duration-700">
-                             <Flame className="text-orange-500 mb-1 md:mb-2 animate-pulse w-8 h-8 md:w-10 md:h-10" fill="currentColor"/>
-                             <div className="text-yellow-400 font-black text-lg md:text-4xl mb-1 md:mb-2 drop-shadow-lg text-center">🥇 QUÁN QUÂN</div>
-                             <div className="w-full bg-gradient-to-b from-yellow-500 to-orange-600 h-[25vh] md:h-[35vh] rounded-t-xl md:rounded-t-3xl border-t-2 md:border-t-4 border-yellow-300 flex flex-col items-center justify-start p-3 md:p-6 shadow-[0_0_50px_rgba(234,88,12,0.5)] relative">
-                                 <div className="text-lg md:text-4xl font-black text-white uppercase mb-1 md:mb-2 text-center drop-shadow-md truncate w-full">{sortedTeams[0].name}</div>
-                                 <div className="text-xl md:text-5xl font-black text-yellow-100">{sortedTeams[0].score}đ</div>
-                             </div>
-                        </div>
-                    )}
-                    {sortedTeams[2] && (
-                        <div className="flex flex-col items-center w-1/3 animate-in slide-in-from-bottom duration-700 delay-200">
-                             <div className="text-orange-700 font-black text-sm md:text-2xl mb-1 md:mb-2">🥉 Hạng 3</div>
-                             <div className="w-full bg-orange-900 h-[12vh] md:h-[20vh] rounded-t-xl md:rounded-t-3xl border-t-2 md:border-t-4 border-orange-700 flex flex-col items-center justify-start p-2 md:p-4 shadow-2xl relative">
-                                 <div className="text-xs md:text-2xl font-black text-white uppercase mb-1 text-center truncate w-full">{sortedTeams[2].name}</div>
-                                 <div className="text-[10px] md:text-xl font-bold text-orange-200">{sortedTeams[2].score}đ</div>
-                             </div>
-                        </div>
-                    )}
-                </div>
+                    {/* BỤC VINH DANH TOP 3 */}
+                    <div className="flex items-end justify-center gap-2 md:gap-4 mb-10 w-full max-w-4xl h-[25vh] md:h-[35vh] shrink-0">
+                        {sortedTeams[1] && (
+                            <div className="flex flex-col items-center w-1/3 animate-in slide-in-from-bottom duration-700 delay-100">
+                                <div className="text-slate-400 font-black text-sm md:text-2xl mb-1 md:mb-2">🥈 Hạng 2</div>
+                                <div className="w-full bg-slate-700 h-[18vh] md:h-[25vh] rounded-t-xl md:rounded-t-3xl border-t-2 md:border-t-4 border-slate-500 flex flex-col items-center justify-start p-2 md:p-4 shadow-2xl relative">
+                                    <div className="text-sm md:text-3xl font-black text-white uppercase mb-1 text-center truncate w-full">{sortedTeams[1].name}</div>
+                                    <div className="text-xs md:text-2xl font-bold text-slate-300">{sortedTeams[1].score}đ</div>
+                                </div>
+                            </div>
+                        )}
+                        {sortedTeams[0] && (
+                            <div className="flex flex-col items-center w-1/3 z-10 animate-in slide-in-from-bottom duration-700">
+                                <Flame className="text-orange-500 mb-1 md:mb-2 animate-pulse w-8 h-8 md:w-10 md:h-10" fill="currentColor"/>
+                                <div className="text-yellow-400 font-black text-lg md:text-4xl mb-1 md:mb-2 drop-shadow-lg text-center">🥇 QUÁN QUÂN</div>
+                                <div className="w-full bg-gradient-to-b from-yellow-500 to-orange-600 h-[25vh] md:h-[35vh] rounded-t-xl md:rounded-t-3xl border-t-2 md:border-t-4 border-yellow-300 flex flex-col items-center justify-start p-3 md:p-6 shadow-[0_0_50px_rgba(234,88,12,0.5)] relative">
+                                    <div className="text-lg md:text-4xl font-black text-white uppercase mb-1 md:mb-2 text-center drop-shadow-md truncate w-full">{sortedTeams[0].name}</div>
+                                    <div className="text-xl md:text-5xl font-black text-yellow-100">{sortedTeams[0].score}đ</div>
+                                </div>
+                            </div>
+                        )}
+                        {sortedTeams[2] && (
+                            <div className="flex flex-col items-center w-1/3 animate-in slide-in-from-bottom duration-700 delay-200">
+                                <div className="text-orange-700 font-black text-sm md:text-2xl mb-1 md:mb-2">🥉 Hạng 3</div>
+                                <div className="w-full bg-orange-900 h-[12vh] md:h-[20vh] rounded-t-xl md:rounded-t-3xl border-t-2 md:border-t-4 border-orange-700 flex flex-col items-center justify-start p-2 md:p-4 shadow-2xl relative">
+                                    <div className="text-xs md:text-2xl font-black text-white uppercase mb-1 text-center truncate w-full">{sortedTeams[2].name}</div>
+                                    <div className="text-[10px] md:text-xl font-bold text-orange-200">{sortedTeams[2].score}đ</div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
-                <div className="flex flex-col sm:flex-row gap-3 md:gap-4 z-50 w-full sm:w-auto px-4">
-                     <button onClick={() => router.push('/dashboard')} className="w-full sm:w-auto bg-slate-800 text-white border-2 border-slate-600 px-6 py-3 md:px-8 md:py-3 rounded-full font-black text-sm md:text-lg hover:bg-slate-700 transition flex justify-center items-center gap-2 uppercase">
-                        <Home size={18} className="md:w-5 md:h-5"/> Về Trung Tâm
-                     </button>
-                     <button onClick={() => router.reload()} className="w-full sm:w-auto bg-orange-600 text-white px-6 py-3 md:px-8 md:py-3 rounded-full font-black text-sm md:text-lg hover:bg-orange-500 transition shadow-lg flex justify-center items-center gap-2 uppercase">
-                        <RotateCcw size={18} className="md:w-5 md:h-5"/> Tái Đấu
-                     </button>
+                    {/* NÚT THAO TÁC */}
+                    <div className="flex flex-col sm:flex-row gap-3 md:gap-4 z-50 w-full sm:w-auto px-4 mb-12 shrink-0">
+                        <button onClick={() => router.push('/dashboard')} className="w-full sm:w-auto bg-slate-800 text-white border-2 border-slate-600 px-6 py-3 md:px-8 md:py-3 rounded-full font-black text-sm md:text-lg hover:bg-slate-700 transition flex justify-center items-center gap-2 uppercase">
+                            <Home size={18} className="md:w-5 md:h-5"/> Về Trung Tâm
+                        </button>
+                        <button onClick={() => router.reload()} className="w-full sm:w-auto bg-orange-600 text-white px-6 py-3 md:px-8 md:py-3 rounded-full font-black text-sm md:text-lg hover:bg-orange-500 transition shadow-lg flex justify-center items-center gap-2 uppercase">
+                            <RotateCcw size={18} className="md:w-5 md:h-5"/> Tái Đấu
+                        </button>
+                    </div>
+
+                    {/* BẢNG XẾP HẠNG CHI TIẾT TẤT CẢ CÁC ĐỘI */}
+                    <div className="w-full max-w-4xl bg-slate-900/80 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl p-4 md:p-8 shrink-0">
+                        <h3 className="text-xl md:text-3xl font-black text-white text-center uppercase mb-6 tracking-widest border-b border-white/10 pb-4">Bảng Xếp Hạng Chi Tiết</h3>
+                        <div className="flex flex-col gap-2 md:gap-3">
+                            {sortedTeams.map((t, idx) => (
+                                <div key={t.id} className={`flex items-center justify-between p-3 md:p-5 rounded-2xl border border-white/5 transition-colors ${idx === 0 ? 'bg-yellow-500/20 border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.3)]' : idx === 1 ? 'bg-slate-400/20 border-slate-400/50' : idx === 2 ? 'bg-orange-700/30 border-orange-700/50' : 'bg-white/5 hover:bg-white/10'}`}>
+                                    <div className="flex items-center gap-3 md:gap-6">
+                                        <span className={`font-black text-xl md:text-3xl w-8 md:w-12 text-center ${idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-slate-300' : idx === 2 ? 'text-orange-400' : 'text-slate-500'}`}>
+                                            #{idx + 1}
+                                        </span>
+                                        <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center ${t.color?.bg || 'bg-slate-700'} border-2 ${t.color?.border || 'border-slate-500'} shadow-lg shrink-0`}>
+                                            <Users size={20} className={t.color?.text || 'text-white'}/>
+                                        </div>
+                                        <span className="font-bold text-base md:text-2xl uppercase text-slate-100 truncate max-w-[150px] md:max-w-[400px]">{t.name}</span>
+                                    </div>
+                                    <div className="font-black text-2xl md:text-4xl text-orange-400 font-mono drop-shadow-md">
+                                        {t.score}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
                 </div>
             </div>
         )}
