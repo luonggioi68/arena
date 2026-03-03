@@ -373,14 +373,13 @@ export default function ArenaHostController() {
 
         {/* FINISHED */}
         {gameState === 'FINISHED' && (
-            <div className="h-full flex flex-col items-center justify-center animate-in zoom-in duration-700 z-50 overflow-y-auto custom-scrollbar pb-10">
+            <div className="h-full flex flex-col items-center justify-center animate-in zoom-in duration-700 z-50 overflow-y-auto custom-scrollbar pb-10 pt-8 md:pt-10">
                 <Trophy className="text-yellow-400 mb-4 md:mb-6 animate-bounce drop-shadow-[0_0_50px_rgba(250,204,21,0.6)] w-20 h-20 md:w-32 md:h-32" />
                 <h2 className="text-4xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-orange-400 italic uppercase mb-6 md:mb-8 tracking-tighter text-center leading-tight">BẢNG XẾP HẠNG</h2>
                 <div className="flex flex-col sm:flex-row gap-3 md:gap-4 mb-6 md:mb-8 w-full sm:w-auto px-4">
                      <button onClick={exportToExcel} className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-black flex items-center justify-center gap-2 shadow-lg transition transform hover:-translate-y-1 text-sm md:text-base"><FileSpreadsheet size={20}/> Xuất Excel</button>
                      <button onClick={() => router.push('/dashboard')} className="w-full sm:w-auto bg-slate-200 text-slate-900 px-6 py-3 rounded-xl font-black hover:bg-white shadow-lg transition uppercase text-center text-sm md:text-base">Kết thúc</button>
                 </div>
-                {/* Đã bỏ hàm .slice(0,5) để hiển thị toàn bộ người chơi */}
                 <div className="bg-slate-900/90 backdrop-blur-xl p-4 md:p-6 rounded-2xl md:rounded-[2rem] w-full max-w-2xl border border-white/10 shadow-2xl mx-2 md:mx-0">
                     {players.sort((a,b) => b.score - a.score).map((p, idx) => (
                         <div key={p.id} className={`flex justify-between items-center p-3 md:p-4 border-b border-white/5 last:border-0 rounded-xl mb-1 md:mb-2 ${idx===0?'bg-yellow-500/10 border-yellow-500/30':''}`}>
