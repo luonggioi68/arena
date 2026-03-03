@@ -267,7 +267,6 @@ export default function ArenaHostController() {
         </div>
       </div>
 
-     {/* [VÁ LỖI CỐT LÕI]: Thêm min-h-0 vào main để ép khung giới hạn theo màn hình, không bị tràn phình to */}
      <main className="flex-1 min-h-0 p-2 md:p-4 flex flex-col overflow-hidden relative">
         
         {/* LOBBY */}
@@ -372,12 +371,12 @@ export default function ArenaHostController() {
             </div>
         )}
 
-        {/* FINISHED: ĐÃ KIẾN TRÚC LẠI BỐ CỤC ĐỂ KHÔNG BỊ TRÀN TOP 1, 2, 3 */}
+        {/* FINISHED: VÁ LỖI HIỂN THỊ TOP 1 BỊ KHUẤT TẬN GỐC */}
         {gameState === 'FINISHED' && (
-            <div className="h-full w-full flex flex-col items-center animate-in zoom-in duration-700 z-50 pt-4 md:pt-8 pb-2">
+            <div className="flex flex-col w-full h-full animate-in zoom-in duration-700 z-50">
                 
                 {/* PHẦN HEADER: CỐ ĐỊNH, KHÔNG BỊ CO RÚT (shrink-0) */}
-                <div className="shrink-0 flex flex-col items-center w-full px-2 mb-4">
+                <div className="shrink-0 flex flex-col items-center w-full px-2 mb-4 pt-4 md:pt-8">
                     <Trophy className="text-yellow-400 mb-2 md:mb-4 animate-bounce drop-shadow-[0_0_50px_rgba(250,204,21,0.6)] w-16 h-16 md:w-20 md:h-20" />
                     <h2 className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-orange-400 italic uppercase mb-4 tracking-tighter text-center leading-tight">BẢNG XẾP HẠNG</h2>
                     <div className="flex flex-col sm:flex-row gap-3 md:gap-4 w-full sm:w-auto justify-center">
@@ -386,11 +385,11 @@ export default function ArenaHostController() {
                     </div>
                 </div>
 
-                {/* PHẦN DANH SÁCH: CÓ THANH CUỘN BÊN TRONG, CHIẾM PHẦN CÒN LẠI CỦA MÀN HÌNH (flex-1 min-h-0) */}
-                <div className="flex-1 w-full max-w-2xl min-h-0 bg-slate-900/90 backdrop-blur-xl rounded-2xl md:rounded-[2rem] border border-white/10 shadow-2xl flex flex-col overflow-hidden">
-                    <div className="flex-1 overflow-y-auto custom-scrollbar p-3 md:p-6 flex flex-col justify-start">
+                {/* PHẦN DANH SÁCH: ÉP CHIỀU CAO VÀ CHỈ CUỘN BLOCK BÌNH THƯỜNG (KHÔNG DÙNG FLEX BÊN TRONG NỮA) */}
+                <div className="flex-1 min-h-0 w-full max-w-2xl mx-auto bg-slate-900/90 backdrop-blur-xl rounded-2xl md:rounded-[2rem] border border-white/10 shadow-2xl overflow-hidden flex flex-col mb-4">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-3 md:p-6">
                         {players.sort((a,b) => b.score - a.score).map((p, idx) => (
-                            <div key={p.id} className={`flex justify-between items-center p-3 md:p-4 border-b border-white/5 last:border-0 rounded-xl mb-1 md:mb-2 shrink-0 ${idx===0?'bg-yellow-500/10 border-yellow-500/30':''}`}>
+                            <div key={p.id} className={`flex justify-between items-center p-3 md:p-4 border-b border-white/5 last:border-0 rounded-xl mb-1 md:mb-2 ${idx===0?'bg-yellow-500/10 border-yellow-500/30':''}`}>
                                  <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
                                      <span className={`text-lg md:text-2xl w-6 md:w-8 text-center shrink-0 ${idx===0?'text-2xl md:text-4xl':''}`}>{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`}</span>
                                      <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${p.name}`} className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 shrink-0" />
