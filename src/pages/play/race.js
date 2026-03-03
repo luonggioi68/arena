@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { db } from '@/lib/firebase';
-import { ref, get, set, onValue, update, push, onDisconnect, remove } from 'firebase/database';
+import { ref, get, set, onValue, update, push, remove } from 'firebase/database'; // Đã gỡ bỏ onDisconnect
 import { Trophy, ShieldAlert, CheckCircle, X, Flame, Zap, Shield, Flag, Lock, Target, Swords, ArrowLeft, Send, Clock, Check, LogOut, Sparkles, Gem, Loader2, Volume2, VolumeX, Ban } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import MathRender from '@/components/MathRender'; 
@@ -93,7 +93,7 @@ export default function BietDoiArenaPlayer() {
     const newTeamRef = push(teamsRef);
     const newId = newTeamRef.key;
 
-    onDisconnect(newTeamRef).remove();
+    // [ĐÃ VÁ LỖI]: Xóa lệnh onDisconnect(newTeamRef).remove() để bảo vệ học sinh không bị out khi rớt mạng hoặc tắt màn hình
 
     await set(newTeamRef, { 
         id: newId, 
@@ -122,7 +122,7 @@ export default function BietDoiArenaPlayer() {
 
   // --- LOGIC GAMEPLAY ĐỘC LẬP CHO TỪNG ĐỘI ---
   useEffect(() => {
-    if (!joined || !pin) return;
+    if (!joined || !pin || !teamId) return;
     const roomRef = ref(db, `rooms/${pin}`);
     
     return onValue(roomRef, (snap) => {
@@ -131,7 +131,7 @@ export default function BietDoiArenaPlayer() {
         setRoomData(data);
 
         // Kiểm tra Hết câu hỏi (Chỉ dựa vào CÁ NHÂN, bỏ hoàn toàn Global Lock)
-        if (teamId && data.teams && data.teams[teamId] && data.quizData) {
+        if (data.teams && data.teams[teamId] && data.quizData) {
             const myTeam = data.teams[teamId];
             const mySolved = myTeam.solved || {};
             const totalQuestions = data.quizData.length;
@@ -152,25 +152,25 @@ export default function BietDoiArenaPlayer() {
             }
         }
 
-        // [ĐÃ SỬA] Logic Kết thúc Game: Chỉ nghe lệnh "FINISHED" từ Giáo viên
-        if (data.teams) {
-            if (data.status === 'FINISHED') {
-                setForceEnd(true);
-                setCurrentIdx(null);
-                if (bgmRef.current) bgmRef.current.pause();
-            }
+        // Logic Kết thúc Game: Chỉ nghe lệnh "FINISHED" từ Giáo viên
+        if (data.status === 'FINISHED') {
+            setForceEnd(true);
+            setCurrentIdx(null);
+            if (bgmRef.current) bgmRef.current.pause();
         }
 
-        if (data.teams && teamId && !data.teams[teamId]) {
-            alert("Bạn đã rời khỏi chiến dịch!");
+        // Kiểm tra bị kích/xóa khỏi phòng
+        if (data.teams && !data.teams[teamId]) {
+            alert("Bạn đã rời khỏi chiến dịch hoặc bị Giáo viên xóa!");
             router.push('/');
         }
       } else {
-          alert("Chiến dịch hủy!");
+          alert("Chiến dịch đã bị hủy!");
           router.push('/');
       }
     });
-  }, [joined, pin, teamId, currentIdx]);
+    // [ĐÃ VÁ LỖI]: Bỏ currentIdx khỏi dependency array để chống gọi lại Firebase mỗi lần mở câu hỏi
+  }, [joined, pin, teamId]); 
 
   useEffect(() => {
       const isPlaying = roomData?.status === 'RACING' || roomData?.status === 'PLAYING';
@@ -302,7 +302,7 @@ export default function BietDoiArenaPlayer() {
   const q = questions[currentIdx];
 
   // --- UI: LOBBY ---
-  if (roomData.status === 'LOBBY') return (
+  if (roomData.status === 'LOBBY' || roomData.status === 'WAITING') return (
     <div className="h-screen bg-[#050505] text-white flex flex-col items-center justify-center p-6 text-center bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]">
       <div className="animate-in zoom-in duration-500 relative">
           <div className="absolute inset-0 bg-purple-500 blur-[80px] opacity-20"></div>
@@ -383,7 +383,6 @@ export default function BietDoiArenaPlayer() {
             </h2>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 md:gap-4 w-full max-w-4xl px-2 overflow-y-auto max-h-[75vh] custom-scrollbar no-scrollbar">
               {questions.map((_, idx) => {
-                // CHỈ DỰA VÀO CÁ NHÂN ĐỂ KHÓA NÚT
                 const myStatus = team.solved ? team.solved[idx] : null; 
                 const isLocked = !!myStatus; 
                 
