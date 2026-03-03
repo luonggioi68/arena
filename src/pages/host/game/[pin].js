@@ -373,25 +373,32 @@ export default function ArenaHostController() {
 
         {/* FINISHED */}
         {gameState === 'FINISHED' && (
-            <div className="h-full flex flex-col items-center justify-center animate-in zoom-in duration-700 z-50 overflow-y-auto custom-scrollbar pb-10 pt-8 md:pt-10">
-                <Trophy className="text-yellow-400 mb-4 md:mb-6 animate-bounce drop-shadow-[0_0_50px_rgba(250,204,21,0.6)] w-20 h-20 md:w-32 md:h-32" />
-                <h2 className="text-4xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-orange-400 italic uppercase mb-6 md:mb-8 tracking-tighter text-center leading-tight">BẢNG XẾP HẠNG</h2>
-                <div className="flex flex-col sm:flex-row gap-3 md:gap-4 mb-6 md:mb-8 w-full sm:w-auto px-4">
-                     <button onClick={exportToExcel} className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-black flex items-center justify-center gap-2 shadow-lg transition transform hover:-translate-y-1 text-sm md:text-base"><FileSpreadsheet size={20}/> Xuất Excel</button>
-                     <button onClick={() => router.push('/dashboard')} className="w-full sm:w-auto bg-slate-200 text-slate-900 px-6 py-3 rounded-xl font-black hover:bg-white shadow-lg transition uppercase text-center text-sm md:text-base">Kết thúc</button>
+            <div className="h-full w-full flex flex-col items-center animate-in zoom-in duration-700 z-50 pt-6 md:pt-10 pb-6 px-2">
+                {/* PHẦN HEADER CỐ ĐỊNH CỦA BẢNG XẾP HẠNG */}
+                <div className="shrink-0 flex flex-col items-center">
+                    <Trophy className="text-yellow-400 mb-2 md:mb-4 animate-bounce drop-shadow-[0_0_50px_rgba(250,204,21,0.6)] w-16 h-16 md:w-24 md:h-24" />
+                    <h2 className="text-3xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-orange-400 italic uppercase mb-4 tracking-tighter text-center leading-tight">BẢNG XẾP HẠNG</h2>
+                    <div className="flex flex-col sm:flex-row gap-3 md:gap-4 mb-4 w-full sm:w-auto">
+                         <button onClick={exportToExcel} className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl font-black flex items-center justify-center gap-2 shadow-lg transition transform hover:-translate-y-1 text-sm md:text-base"><FileSpreadsheet size={20}/> Xuất Excel</button>
+                         <button onClick={() => router.push('/dashboard')} className="w-full sm:w-auto bg-slate-200 text-slate-900 px-6 py-2.5 rounded-xl font-black hover:bg-white shadow-lg transition uppercase text-center text-sm md:text-base">Kết thúc</button>
+                    </div>
                 </div>
-                <div className="bg-slate-900/90 backdrop-blur-xl p-4 md:p-6 rounded-2xl md:rounded-[2rem] w-full max-w-2xl border border-white/10 shadow-2xl mx-2 md:mx-0">
-                    {players.sort((a,b) => b.score - a.score).map((p, idx) => (
-                        <div key={p.id} className={`flex justify-between items-center p-3 md:p-4 border-b border-white/5 last:border-0 rounded-xl mb-1 md:mb-2 ${idx===0?'bg-yellow-500/10 border-yellow-500/30':''}`}>
-                             <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
-                                 <span className={`text-lg md:text-2xl w-6 md:w-8 text-center shrink-0 ${idx===0?'text-2xl md:text-4xl':''}`}>{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`}</span>
-                                 <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${p.name}`} className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 shrink-0" />
-                                 <span className="font-black text-sm md:text-lg uppercase italic tracking-tighter text-slate-200 truncate">{p.name}</span>
-                             </div>
-                             <span className="text-orange-400 font-black text-lg md:text-2xl shrink-0 ml-2">{p.score}</span>
-                        </div>
-                    ))}
-                    {players.length === 0 && <div className="text-center text-slate-500 py-6 text-sm">Chưa có người chơi nào.</div>}
+
+                {/* PHẦN DANH SÁCH CUỘN (Tự động lấp đầy phần màn hình còn lại và có thanh cuộn) */}
+                <div className="flex-1 w-full max-w-2xl min-h-0 bg-slate-900/90 backdrop-blur-xl rounded-2xl md:rounded-[2rem] border border-white/10 shadow-2xl overflow-hidden flex flex-col">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-2 md:p-6">
+                        {players.sort((a,b) => b.score - a.score).map((p, idx) => (
+                            <div key={p.id} className={`flex justify-between items-center p-3 md:p-4 border-b border-white/5 last:border-0 rounded-xl mb-1 md:mb-2 ${idx===0?'bg-yellow-500/10 border-yellow-500/30':''}`}>
+                                 <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
+                                     <span className={`text-lg md:text-2xl w-6 md:w-8 text-center shrink-0 ${idx===0?'text-2xl md:text-4xl':''}`}>{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`}</span>
+                                     <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${p.name}`} className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 shrink-0" />
+                                     <span className="font-black text-sm md:text-lg uppercase italic tracking-tighter text-slate-200 truncate">{p.name}</span>
+                                 </div>
+                                 <span className="text-orange-400 font-black text-lg md:text-2xl shrink-0 ml-2">{p.score}</span>
+                            </div>
+                        ))}
+                        {players.length === 0 && <div className="text-center text-slate-500 py-6 text-sm">Chưa có người chơi nào.</div>}
+                    </div>
                 </div>
             </div>
         )}
