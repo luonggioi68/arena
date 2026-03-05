@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import { firestore } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import useAuthStore from '@/store/useAuthStore';
-import { Timer, Send, Shield, CheckCircle, User, FileText, Edit3, Eye, PenTool, ArrowLeft, Target, Unlock, Users, Lock } from 'lucide-react';
+import { Timer, Send, Shield, CheckCircle, User, FileText, Edit3, Eye, PenTool, ArrowLeft, Target, Unlock, Users, Lock, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function PDFPlay() {
@@ -23,7 +23,6 @@ export default function PDFPlay() {
 
     const [answers, setAnswers] = useState({ part1: {}, part2: {}, part3: {} });
     
-    // Mã giáo viên và Tên Lớp
     const [teacherCodeInput, setTeacherCodeInput] = useState('');
     const [studentClassName, setStudentClassName] = useState('');
 
@@ -54,10 +53,21 @@ export default function PDFPlay() {
         }
     }, [user]);
 
+    // [TÍNH NĂNG MỚI] - Kiểm tra mã GV hợp lệ
+    const expectedTeacherCode = exam?.authorId ? exam.authorId.substring(0, 6).toUpperCase() : '';
+    const isValidTeacherCode = teacherCodeInput.trim().toUpperCase() === expectedTeacherCode && expectedTeacherCode !== '';
+
     const handleStartClick = () => {
-        if (exam?.allowedClasses && exam.allowedClasses.length > 0 && !studentClassName) {
-            alert("⚠️ Vui lòng chọn Tên Lớp của bạn trước khi làm bài!");
-            return;
+        // Kiểm tra đối với người dùng đã đăng nhập và có nhập mã GV
+        if (!studentInfo.isGuest && teacherCodeInput.trim() !== '') {
+            if (!isValidTeacherCode) {
+                alert("⚠️ Mã giáo viên không đúng! Vui lòng kiểm tra lại hoặc để trống nếu bạn tự luyện tập.");
+                return;
+            }
+            if (!studentClassName) {
+                alert("⚠️ Vui lòng chọn/nhập Tên Lớp của bạn để giáo viên thống kê!");
+                return;
+            }
         }
         setIsStarted(true);
     };
@@ -110,9 +120,9 @@ export default function PDFPlay() {
                     submittedAt: serverTimestamp(),
                     grade: exam.grade || 'Khác',
                     subject: exam.subject || 'Khác',
-                    teacherId: exam.authorId || '',
-                    teacherCode: teacherCodeInput.trim().toUpperCase(),
-                    studentClassName: studentClassName.trim().toUpperCase()
+                    teacherId: isValidTeacherCode ? exam.authorId : '',
+                    teacherCode: isValidTeacherCode ? teacherCodeInput.trim().toUpperCase() : '',
+                    studentClassName: isValidTeacherCode ? studentClassName.trim().toUpperCase() : ''
                 });
             }
             setIsFinished(true);
@@ -181,40 +191,53 @@ export default function PDFPlay() {
                         <CheckCircle size={18} className="text-emerald-400"/>
                     </div>
 
-                    {/* KHUNG CHỌN LỚP VÀ NHẬP MÃ GV */}
-                    <div className="bg-slate-900/80 border border-slate-700 p-4 rounded-xl mb-6 flex flex-col gap-3 text-left">
-                         <div>
-                             <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1"><Users size={12}/> Tên Lớp của bạn</p>
-                             {exam.allowedClasses && exam.allowedClasses.length > 0 ? (
-                                 <select 
-                                     value={studentClassName}
-                                     onChange={(e) => setStudentClassName(e.target.value)}
-                                     className="w-full bg-black/50 border border-slate-600 rounded-lg px-3 py-2.5 text-white outline-none focus:border-cyan-500 focus:shadow-[0_0_10px_rgba(6,182,212,0.3)] text-sm font-bold transition-all appearance-none cursor-pointer"
-                                 >
-                                     <option value="">-- Chọn lớp của bạn --</option>
-                                     {exam.allowedClasses.map(c => <option key={c} value={c}>{c}</option>)}
-                                 </select>
-                             ) : (
-                                 <input 
+                    {/* KHUNG NHẬP MÃ GV & CHỌN LỚP (CHỈ HIỆN VỚI CHIẾN BINH) */}
+                    {!studentInfo.isGuest && (
+                        <div className="bg-slate-900/80 border border-slate-700 p-4 rounded-xl mb-6 flex flex-col text-left transition-all">
+                            <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <p className="text-[10px] text-orange-400 font-bold uppercase tracking-widest flex items-center gap-1"><Lock size={12}/> Mã Giáo Viên (Tùy chọn)</p>
+                                    {teacherCodeInput.trim() !== '' && (
+                                        isValidTeacherCode 
+                                        ? <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1 animate-in zoom-in"><CheckCircle size={10}/> Mã Hợp lệ</span>
+                                        : <span className="text-[10px] text-red-400 font-bold flex items-center gap-1 animate-in zoom-in"><X size={10}/> Mã không đúng</span>
+                                    )}
+                                </div>
+                                <input 
                                     type="text" 
-                                    placeholder="VD: 12A1, 10A5... (Tùy chọn)"
-                                    value={studentClassName}
-                                    onChange={(e) => setStudentClassName(e.target.value)}
-                                    className="w-full bg-black/50 border border-slate-600 rounded-lg px-3 py-2.5 text-white outline-none focus:border-cyan-500 focus:shadow-[0_0_10px_rgba(6,182,212,0.3)] text-sm font-bold transition-all placeholder:text-slate-600 uppercase"
-                                 />
-                             )}
-                         </div>
-                         <div>
-                             <p className="text-[10px] text-orange-400 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1"><Lock size={12}/> Mã Giáo Viên (Tùy chọn)</p>
-                             <input 
-                                type="text" 
-                                placeholder="Nhập mã GV nếu có yêu cầu..."
-                                value={teacherCodeInput}
-                                onChange={(e) => setTeacherCodeInput(e.target.value)}
-                                className="w-full bg-black/50 border border-slate-600 rounded-lg px-3 py-2.5 text-white outline-none focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.3)] text-sm font-bold transition-all placeholder:text-slate-600 uppercase"
-                             />
-                         </div>
-                    </div>
+                                    placeholder="Nhập mã GV nếu được yêu cầu..."
+                                    value={teacherCodeInput}
+                                    onChange={(e) => setTeacherCodeInput(e.target.value)}
+                                    className={`w-full bg-black/50 border rounded-lg px-3 py-2.5 text-white outline-none text-sm font-bold transition-all placeholder:text-slate-600 uppercase ${teacherCodeInput.trim() !== '' ? (isValidTeacherCode ? 'border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'border-red-500 focus:shadow-[0_0_10px_rgba(239,68,68,0.2)]') : 'border-slate-600 focus:border-orange-500 focus:shadow-[0_0_10px_rgba(249,115,22,0.3)]'}`}
+                                />
+                            </div>
+
+                            {/* CHỈ HIỆN LỚP KHI MÃ GV ĐÚNG */}
+                            {isValidTeacherCode && (
+                                <div className="animate-in fade-in slide-in-from-top-2 duration-500 mt-4 border-t border-slate-700/50 pt-4">
+                                    <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1"><Users size={12}/> Tên Lớp của bạn</p>
+                                    {exam.allowedClasses && exam.allowedClasses.length > 0 ? (
+                                        <select 
+                                            value={studentClassName}
+                                            onChange={(e) => setStudentClassName(e.target.value)}
+                                            className="w-full bg-black/50 border border-cyan-500/50 rounded-lg px-3 py-2.5 text-white outline-none focus:border-cyan-400 focus:shadow-[0_0_10px_rgba(6,182,212,0.3)] text-sm font-bold transition-all appearance-none cursor-pointer"
+                                        >
+                                            <option value="">-- Chọn danh sách lớp --</option>
+                                            {exam.allowedClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    ) : (
+                                        <input 
+                                            type="text" 
+                                            placeholder="VD: 12A1, 10A5..."
+                                            value={studentClassName}
+                                            onChange={(e) => setStudentClassName(e.target.value)}
+                                            className="w-full bg-black/50 border border-cyan-500/50 rounded-lg px-3 py-2.5 text-white outline-none focus:border-cyan-400 focus:shadow-[0_0_10px_rgba(6,182,212,0.3)] text-sm font-bold transition-all placeholder:text-slate-500 uppercase"
+                                        />
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <button onClick={handleStartClick} className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 text-white py-4 rounded-2xl font-black text-lg uppercase tracking-widest shadow-[0_0_30px_rgba(6,182,212,0.5)] transition-all hover:scale-105 active:scale-95">
                         BẮT ĐẦU LÀM BÀI
