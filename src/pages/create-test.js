@@ -221,7 +221,11 @@ ${contextPrompt}
 1. TUYỆT ĐỐI KHÔNG GỘP CHUNG VÀO 1 HÀNG: Phải phân tách "Phạm vi kiến thức" thành ít nhất 2 đến 4 "Chủ đề/Chương" (hàng) khác nhau. Hãy rải đều số lượng câu hỏi vào các hàng này.
 2. ĐỒNG BỘ 100%: Nội dung của Cột "Chủ đề/Chương" và Cột "Nội dung/đơn vị kiến thức" ở BẢNG MA TRẬN (Phần 1) BẮT BUỘC PHẢI GIỐNG HỆT 100% với BẢNG ĐẶC TẢ (Phần 2). Không được sai lệch dù chỉ 1 chữ.
 3. TÊN BÀI CHÍNH XÁC: Nếu phạm vi kiến thức chứa tên bài, BẮT BUỘC lấy đúng tên bài đó (trong sách giáo khoa), TUYỆT ĐỐI KHÔNG bịa thêm hay sửa tên bài.
-
+**QUY TẮC TÍNH CỘT "TỈ LỆ % ĐIỂM" TRONG BẢNG MA TRẬN (SỐNG CÒN):**
+Tại bảng Ma trận Phần 1, đối với MỖI HÀNG nội dung kiến thức mà bạn tạo ra, BẮT BUỘC phải tính và điền kết quả vào cột cuối cùng ("Tỉ lệ % điểm"). 
+- Hệ số điểm để tính: Trắc nghiệm = ${matrix.mcq.point}đ/câu; 1 ý Đúng/Sai = ${matrix.tf.point / 4}đ/ý; Trả lời ngắn = ${matrix.sa.point}đ/câu; Tự luận = ${matrix.essay.point}đ/câu.
+- CÁCH TÍNH: Lấy tổng điểm của tất cả các câu hỏi trong hàng đó chia cho 10.0, rồi nhân với 100. (Ví dụ: Hàng có tổng 1.5 điểm -> Tỉ lệ là 15%).
+- Ghi kèm ký tự "%" vào kết quả. TUYỆT ĐỐI KHÔNG ĐƯỢC ĐỂ TRỐNG CỘT NÀY.
 **QUY TẮC TÍNH ĐIỂM (NGHIÊM CẤM TỰ TÍNH):**
 Tại bảng Ma trận Phần 1, phần TỔNG ĐIỂM của mỗi cột, bạn TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ TÍNH. Hãy điền các chuỗi sau đây vào ô tương ứng (Hệ thống sẽ tự động thay thế bằng số chính xác):
 - Cột MCQ (Biết): ##DIEM_MCQ_B##
