@@ -10,10 +10,10 @@ export default function SetupConfig() {
     const [user, setUser] = useState(null);
     const [saving, setSaving] = useState(false);
     
-    // Quản lý trạng thái mở/đóng hướng dẫn (Mặc định mở hướng dẫn Gemini)
+    // Quản lý trạng thái mở/đóng hướng dẫn
     const [openGuide, setOpenGuide] = useState('gemini');
 
-    // Cấu hình mặc định theo yêu cầu
+    // Cấu hình mặc định
     const [userConfig, setUserConfig] = useState({
         submissionCode: '',
         cloudinaryName: 'dfjm4v0wy', 
@@ -28,7 +28,8 @@ export default function SetupConfig() {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
             if (!currentUser) {
-                router.push('/');
+                // Sửa lỗi Turbopack: dùng replace thay vì push khi chưa có user
+                router.replace('/');
             } else {
                 setUser(currentUser);
                 setUserConfig(prev => ({
@@ -44,15 +45,32 @@ export default function SetupConfig() {
         e.preventDefault();
         setSaving(true);
         try {
+            // 1. Lưu cấu hình API (Dùng merge: true để ghi đè an toàn, không tạo rác)
             await setDoc(doc(firestore, "user_configs", user.uid), {
                 ...userConfig,
                 email: user.email
-            });
-            router.push('/dashboard');
+            }, { merge: true });
+
+            // 2. CHỐT CHẶN BẢO VỆ: Cập nhật luôn bảng users bằng đúng UID của Firebase Auth
+            // Nếu đã có -> Cập nhật. Nếu chưa có -> Tạo mới 1 bản duy nhất.
+            await setDoc(doc(firestore, "users", user.uid), {
+                email: user.email,
+                name: user.displayName || user.email.split('@')[0],
+                role: 'teacher',
+                status: 'active'
+            }, { merge: true });
+
+            // Sửa lỗi Turbopack: Phải có await trước router.push
+            await router.push('/dashboard');
         } catch (error) {
             alert("Lỗi khi lưu cấu hình: " + error.message);
             setSaving(false);
         }
+    };
+
+    const handleSkip = async () => {
+        // Sửa lỗi Turbopack cho nút Bỏ qua
+        await router.push('/dashboard');
     };
 
     if (!user) return <div className="h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-cyan-500" size={40}/></div>;
@@ -62,7 +80,7 @@ export default function SetupConfig() {
             {/* Background Effects */}
             <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-[#020617] to-[#020617] -z-10"></div>
             
-            {/* HEADER - Đã làm gọn tối đa */}
+            {/* HEADER */}
             <header className="text-center mb-4 lg:mb-6 animate-in fade-in slide-in-from-top-4">
                 <div className="flex items-center justify-center gap-2 mb-1">
                     <div className="bg-gradient-to-br from-cyan-600 to-blue-700 p-1.5 rounded-lg shadow-[0_0_10px_rgba(6,182,212,0.4)]">
@@ -81,7 +99,6 @@ export default function SetupConfig() {
                 <div className="bg-[#1e293b] p-4 md:p-5 rounded-2xl border border-cyan-500/30 shadow-xl relative overflow-hidden flex flex-col justify-between">
                     <form onSubmit={handleSaveConfig} className="space-y-4 relative z-10 flex-1">
                         
-                        {/* Mã Nộp Bài - Chuyển sang hàng ngang để tiết kiệm chiều dọc */}
                         <div className="bg-slate-900/50 p-3 rounded-xl border border-blue-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
                                 <h3 className="text-blue-400 font-bold uppercase text-xs flex items-center gap-1.5 mb-0.5"><QrCode size={14}/> Mã Nộp Bài Cho Học Sinh</h3>
@@ -90,7 +107,6 @@ export default function SetupConfig() {
                             <input required value={userConfig.submissionCode} onChange={e=>setUserConfig({...userConfig, submissionCode: e.target.value.toUpperCase()})} className="w-full sm:w-32 bg-slate-900 border border-blue-500/50 p-2 rounded-lg text-white font-black text-lg text-center outline-none focus:border-blue-500 tracking-widest uppercase" placeholder="TIN10A"/>
                         </div>
 
-                        {/* Cloudinary */}
                         <div>
                             <h3 className="text-orange-400 font-bold uppercase text-xs mb-1.5 border-b border-white/10 pb-1 flex items-center gap-1.5"><Image size={14}/> Lưu Trữ Ảnh (Cloudinary)</h3>
                             <div className="grid grid-cols-2 gap-3">
@@ -105,7 +121,6 @@ export default function SetupConfig() {
                             </div>
                         </div>
 
-                        {/* Gemini */}
                         <div>
                             <div className="flex justify-between items-end border-b border-white/10 pb-1 mb-1.5">
                                 <h3 className="text-purple-400 font-bold uppercase text-xs flex items-center gap-1.5"><Cpu size={14}/> Trí Tuệ Nhân Tạo (Gemini)</h3>
@@ -121,14 +136,14 @@ export default function SetupConfig() {
                                     <select value={userConfig.geminiModel} onChange={e=>setUserConfig({...userConfig, geminiModel: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-lg text-white outline-none focus:border-purple-500 text-xs">
                                         <option value="gemini-3-flash-preview">gemini-3-flash-preview(free)</option>
                                         <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
-                                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Nhanh free)</option>                                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
+                                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Nhanh free)</option>                                        
+                                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
                                         <option value="gemini-1.5-pro">Gemini-1.5-pro</option>
                                     </select>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Thời gian */}
                         <div>
                             <div className="flex justify-between items-end border-b border-white/10 pb-1 mb-1.5">
                                 <h3 className="text-emerald-400 font-bold uppercase text-xs flex items-center gap-1.5"><Clock size={14}/> Cài đặt Game (Giây)</h3>
@@ -163,9 +178,8 @@ export default function SetupConfig() {
                     </div>
 
                     <div className="space-y-3 flex-1">
-                        {/* Accordion Hướng dẫn lấy Key Gemini */}
                         <div className="bg-[#1e293b] rounded-xl border border-white/10 overflow-hidden">
-                            <button onClick={() => setOpenGuide(openGuide === 'gemini' ? null : 'gemini')} className="w-full p-3 flex items-center justify-between bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                            <button type="button" onClick={() => setOpenGuide(openGuide === 'gemini' ? null : 'gemini')} className="w-full p-3 flex items-center justify-between bg-slate-800/50 hover:bg-slate-800 transition-colors">
                                 <span className="font-bold text-purple-400 uppercase text-xs flex items-center gap-2"><Cpu size={16}/> 1. Cách lấy Gemini API Key</span>
                                 {openGuide === 'gemini' ? <ChevronUp size={16} className="text-slate-400"/> : <ChevronDown size={16} className="text-slate-400"/>}
                             </button>
@@ -179,9 +193,8 @@ export default function SetupConfig() {
                             )}
                         </div>
 
-                        {/* Accordion Hướng dẫn cấu hình Cloudinary */}
                         <div className="bg-[#1e293b] rounded-xl border border-white/10 overflow-hidden">
-                            <button onClick={() => setOpenGuide(openGuide === 'cloudinary' ? null : 'cloudinary')} className="w-full p-3 flex items-center justify-between bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                            <button type="button" onClick={() => setOpenGuide(openGuide === 'cloudinary' ? null : 'cloudinary')} className="w-full p-3 flex items-center justify-between bg-slate-800/50 hover:bg-slate-800 transition-colors">
                                 <span className="font-bold text-orange-400 uppercase text-xs flex items-center gap-2"><Image size={16}/> 2. Cách tạo Cloudinary (Tự chọn)</span>
                                 {openGuide === 'cloudinary' ? <ChevronUp size={16} className="text-slate-400"/> : <ChevronDown size={16} className="text-slate-400"/>}
                             </button>
@@ -197,7 +210,7 @@ export default function SetupConfig() {
                         </div>
                     </div>
 
-                    <button onClick={() => router.push('/dashboard')} className="w-full py-2.5 text-slate-500 hover:text-white text-[10px] md:text-xs font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1 mt-auto">
+                    <button type="button" onClick={handleSkip} className="w-full py-2.5 text-slate-500 hover:text-white text-[10px] md:text-xs font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-1 mt-auto">
                         Bỏ qua bước này, tôi sẽ cài đặt sau <ArrowRight size={14}/>
                     </button>
                 </div>

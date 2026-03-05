@@ -9,15 +9,15 @@ import {
     updateProfile 
 } from 'firebase/auth'; 
 import { auth, googleProvider, firestore } from '@/lib/firebase';
-import { collection, query, where, getDocs, doc, onSnapshot, setDoc, serverTimestamp, orderBy, limit, addDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, onSnapshot, setDoc, serverTimestamp, orderBy, limit, getDoc } from 'firebase/firestore';
 import { 
     Flame, ChevronLeft, Trophy, Star, X, Gamepad2, Shield, Crown, Swords, PlayCircle, 
-    LogIn, UserPlus, LogOut, Gift, LayoutGrid, CircleDashed, DollarSign, Grid3X3, 
-    User, Phone, Lock, Eye, EyeOff, AlertCircle, KeyRound, Check, FileText, ChevronDown, ChevronUp, Info 
+    LogIn, UserPlus, Info, LayoutGrid, CircleDashed, DollarSign, Grid3X3, 
+    User, Phone, Lock, Eye, EyeOff, AlertCircle, KeyRound, Check, FileText, ChevronDown, ChevronUp 
 } from 'lucide-react';
 import useAuthStore from '@/store/useAuthStore';
 
-// [MỚI] KHAI BÁO SUPER ADMIN
+// KHAI BÁO SUPER ADMIN
 const MASTER_EMAILS = ["luonggioi68@gmail.com"];
 
 // Hàm "đánh lừa" Firebase Auth để dùng SĐT như Email
@@ -32,13 +32,9 @@ export default function TrainingPage() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // State kiểm tra giáo viên / Admin
   const [isTeacher, setIsTeacher] = useState(false);
-
-  // State mở rộng/thu gọn danh sách đề
   const [expandedSubjects, setExpandedSubjects] = useState({});
 
-  // STATE AUTH
   const [authMode, setAuthMode] = useState(null); 
   const [showPassword, setShowPassword] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
@@ -52,20 +48,24 @@ export default function TrainingPage() {
   const [studentProfile, setStudentProfile] = useState(null);
   const [selectedQuiz, setSelectedQuiz] = useState(null); 
 
-  // 1. AUTH LISTENER & TỰ ĐỘNG TẠO PROFILE
+  // 1. AUTH LISTENER & TỰ ĐỘNG TẠO PROFILE (ĐÃ FIX LỖI GIÁO VIÊN)
   useEffect(() => {
+    let unsubProfile = () => {}; // Hàm dọn dẹp listener của học sinh
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
         setUser(currentUser);
         if (currentUser) {
             let isTeacherRole = false;
             
+            // BƯỚC 1: KIỂM TRA QUYỀN GIÁO VIÊN CHUẨN XÁC
             if (MASTER_EMAILS.includes(currentUser.email)) {
                 isTeacherRole = true;
             } else {
                 try {
-                    const configRef = doc(firestore, "user_configs", currentUser.uid);
-                    const configSnap = await getDoc(configRef);
-                    if (configSnap.exists() && configSnap.data().role === 'TEACHER') {
+                    // SỬA LỖI: Chọc đúng vào bảng users thay vì user_configs
+                    const teacherRef = doc(firestore, "users", currentUser.uid);
+                    const teacherSnap = await getDoc(teacherRef);
+                    if (teacherSnap.exists() && teacherSnap.data().role === 'teacher') {
                         isTeacherRole = true;
                     }
                 } catch (e) { console.error("Lỗi check GV:", e); }
@@ -73,33 +73,51 @@ export default function TrainingPage() {
             
             setIsTeacher(isTeacherRole);
 
-            const userRef = doc(firestore, "student_profiles", currentUser.uid);
-            const unsubProfile = onSnapshot(userRef, async (docSnap) => {
-                if (docSnap.exists()) {
-                    setStudentProfile(docSnap.data());
-                } else {
-                    const defaultProfile = {
-                        uid: currentUser.uid,
-                        email: currentUser.email,
-                        phone: currentUser.email ? currentUser.email.split('@')[0] : '',
-                        fullName: currentUser.displayName || "Học sinh mới",
-                        nickname: currentUser.displayName || "Học sinh mới",
-                        photoURL: currentUser.photoURL || `https://ui-avatars.com/api/?name=${currentUser.displayName || "HS"}&background=random`,
-                        grade: "10",
-                        totalScore: 0,
-                        role: 'STUDENT',
-                        createdAt: serverTimestamp()
-                    };
-                    await setDoc(userRef, defaultProfile);
-                }
-            });
-            return () => unsubProfile();
+            // BƯỚC 2: RẼ NHÁNH LOGIC TẠO PROFILE
+            if (isTeacherRole) {
+                // NẾU LÀ GIÁO VIÊN: Set profile ảo trên RAM để đi test, KHÔNG DÙNG LỆNH setDoc
+                setStudentProfile({
+                    uid: currentUser.uid,
+                    nickname: (currentUser.displayName || "Giáo Viên") + " 👑",
+                    photoURL: currentUser.photoURL || `https://ui-avatars.com/api/?name=GV&background=random`,
+                    grade: "MASTER", // Cấp bậc vô hạn để qua mặt mọi vòng check
+                    totalScore: "∞",
+                    role: 'TEACHER'
+                });
+            } else {
+                // NẾU LÀ HỌC SINH THẬT SỰ: Lắng nghe và tạo tài khoản
+                const userRef = doc(firestore, "student_profiles", currentUser.uid);
+                unsubProfile = onSnapshot(userRef, async (docSnap) => {
+                    if (docSnap.exists()) {
+                        setStudentProfile(docSnap.data());
+                    } else {
+                        const defaultProfile = {
+                            uid: currentUser.uid,
+                            email: currentUser.email || "",
+                            phone: currentUser.email ? currentUser.email.split('@')[0] : '',
+                            fullName: currentUser.displayName || "Học sinh mới",
+                            nickname: currentUser.displayName || "Học sinh mới",
+                            photoURL: currentUser.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || "HS")}&background=random`,
+                            grade: "10",
+                            totalScore: 0,
+                            role: 'STUDENT',
+                            createdAt: serverTimestamp()
+                        };
+                        await setDoc(userRef, defaultProfile);
+                    }
+                });
+            }
         } else {
             setStudentProfile(null);
             setIsTeacher(false);
+            unsubProfile(); 
         }
     });
-    return () => unsubscribe();
+
+    return () => {
+        unsubscribe();
+        unsubProfile();
+    };
   }, [setUser]);
 
   // 2. LẤY GRADE
@@ -170,7 +188,7 @@ export default function TrainingPage() {
           await setDoc(doc(firestore, "student_profiles", userCredential.user.uid), {
               uid: userCredential.user.uid,
               email: fakeEmail, phone, fullName, nickname: fullName,
-              photoURL: `https://ui-avatars.com/api/?name=${fullName}&background=random`,
+              photoURL: `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=random`,
               grade: selectedGrade ? selectedGrade.toString() : "10",
               totalScore: 0, role: 'STUDENT', createdAt: serverTimestamp()
           });
@@ -247,15 +265,13 @@ export default function TrainingPage() {
     } catch (e) { alert("Lỗi tạo tên: " + e.message); }
   };
 
-  // [ĐÃ FIX] Cho phép vào chơi không cần đăng nhập
   const handleQuizClick = (quiz) => {
-      // 1. Trường hợp chưa đăng nhập: Cho phép vào chơi bình thường
       if (!user) {
           router.push(`/arcade/lobby/${quiz.id}`);
           return;
       }
       
-      // 2. Trường hợp đã đăng nhập: Kiểm tra lớp (Bỏ qua nếu là Master/Teacher)
+      // ĐÃ FIX: Giáo viên được miễn trừ vòng kiểm tra lớp học
       if (studentProfile && !isTeacher) { 
           const userClass = parseInt(studentProfile.grade);
           const currentClass = parseInt(selectedGrade);
@@ -265,7 +281,7 @@ export default function TrainingPage() {
           }
       }
       
-      if (!studentProfile && user) setShowNicknameModal(true);
+      if (!studentProfile && user && !isTeacher) setShowNicknameModal(true);
       else router.push(`/arcade/lobby/${quiz.id}`);
   };
 
@@ -283,7 +299,6 @@ export default function TrainingPage() {
     <div className="min-h-screen bg-[#050505] text-white font-sans relative overflow-hidden flex flex-col">
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-red-900/30 via-black to-black -z-20"></div>
       
-      {/* HEADER */}
       <header className="sticky top-0 z-50 bg-black/90 backdrop-blur-md border-b border-red-600/30">
           <div className="container mx-auto px-4 h-16 flex justify-between items-center">
               <button onClick={() => router.push('/')} className="flex items-center gap-2 text-slate-400 hover:text-white transition"><ChevronLeft size={20}/><span className="hidden md:block font-bold text-xs uppercase tracking-widest">QUAY LẠI</span></button>
@@ -298,7 +313,7 @@ export default function TrainingPage() {
                                       <div className="text-xs font-black text-orange-400 uppercase">{studentProfile.nickname}</div>
                                       <div className="text-[9px] text-slate-400 font-mono group-hover:text-yellow-400 transition-colors">{studentProfile.totalScore || 0} XP</div>
                                   </div>
-                                  <img src={user.photoURL} className="w-9 h-9 rounded-full border-2 border-orange-500 object-cover"/>
+                                  <img src={studentProfile.photoURL || user.photoURL} className="w-9 h-9 rounded-full border-2 border-orange-500 object-cover"/>
                               </div>
                           ) : (
                               <button onClick={()=>setShowNicknameModal(true)} className="flex items-center gap-2 text-xs font-bold bg-yellow-600 text-black px-4 py-2 rounded-lg uppercase shadow-lg animate-pulse"><UserPlus size={16}/> Tạo tên</button>
@@ -311,24 +326,16 @@ export default function TrainingPage() {
           </div>
       </header>
 
-      {/* MAIN CONTENT */}
       <main className="flex-1 container mx-auto px-2 md:px-4 py-6 overflow-y-auto custom-scrollbar">
           {loading ? ( <div className="flex justify-center py-20"><Flame className="animate-bounce text-red-500" size={48}/></div> ) : (
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full">
-                {/* LEFT - DANH SÁCH GAME */}
                 <div className="lg:col-span-3 space-y-8 pb-20">
-                    
-                    {/* [MỚI] THÔNG BÁO CHO HỌC SINH CHƯA ĐĂNG NHẬP */}
                     {!user && (
                         <div className="bg-gradient-to-r from-blue-900/40 via-indigo-900/40 to-blue-900/40 border-2 border-blue-500/30 p-4 rounded-2xl animate-in fade-in slide-in-from-top-4 duration-700 flex flex-col md:flex-row items-center gap-4 shadow-[0_0_30px_rgba(59,130,246,0.15)]">
-                            <div className="p-3 bg-blue-500/20 rounded-full text-blue-400 shrink-0 shadow-inner">
-                                <Info size={28} />
-                            </div>
+                            <div className="p-3 bg-blue-500/20 rounded-full text-blue-400 shrink-0 shadow-inner"><Info size={28} /></div>
                             <div className="flex-1 text-center md:text-left">
                                 <h4 className="text-blue-300 font-black uppercase text-sm mb-1 tracking-wider">🌟 Chế độ chơi thử đang bật</h4>
-                                <p className="text-slate-300 text-xs font-bold uppercase leading-relaxed">
-                                    Bạn có thể chơi nhiệm vụ ngay, nhưng nếu <button onClick={() => setAuthMode('LOGIN')} className="text-yellow-400 underline hover:text-white transition-colors">Đăng nhập</button>, bạn sẽ có tên trong <span className="text-yellow-400">BẢNG VÀNG</span> danh giá và tích lũy XP!
-                                </p>
+                                <p className="text-slate-300 text-xs font-bold uppercase leading-relaxed">Bạn có thể chơi nhiệm vụ ngay, nhưng nếu <button onClick={() => setAuthMode('LOGIN')} className="text-yellow-400 underline hover:text-white transition-colors">Đăng nhập</button>, bạn sẽ có tên trong <span className="text-yellow-400">BẢNG VÀNG</span> danh giá và tích lũy XP!</p>
                             </div>
                             <button onClick={() => setAuthMode('LOGIN')} className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95 shrink-0">Đăng nhập ngay</button>
                         </div>
@@ -363,7 +370,6 @@ export default function TrainingPage() {
                         })
                     )}
                 </div>
-                {/* RIGHT - BXH */}
                 <div className="lg:col-span-1">
                     <div className="sticky top-24 bg-[#0a0a0a] border border-yellow-600/30 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(234,179,8,0.05)]">
                         <div className="bg-gradient-to-b from-yellow-900/30 to-transparent p-6 text-center border-b border-yellow-600/20"><Crown size={32} className="mx-auto text-yellow-400 mb-2 animate-bounce drop-shadow-[0_0_10px_#facc15]"/><h3 className="text-2xl font-black text-yellow-400 uppercase italic tracking-widest">BẢNG VÀNG</h3><p className="text-[9px] text-yellow-200/50 uppercase font-bold tracking-[0.3em] mt-1">TOP CHIẾN BINH</p></div>
@@ -376,7 +382,6 @@ export default function TrainingPage() {
           )}
       </main>
 
-      {/* MODAL GAME */}
       {selectedQuiz && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in fade-in zoom-in duration-200">
             <div className="relative bg-[#111] border border-red-600/40 p-6 md:p-8 rounded-[2rem] w-full max-w-3xl shadow-[0_0_60px_rgba(220,38,38,0.2)] overflow-hidden">
@@ -394,13 +399,11 @@ export default function TrainingPage() {
         </div>
       )}
 
-      {/* MODAL AUTH */}
       {authMode && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in zoom-in duration-300">
            <div className="bg-[#1e1e24] border-2 border-orange-500 p-8 rounded-3xl w-full max-w-sm shadow-[0_0_50px_#f97316] relative">
               <button onClick={() => { setAuthMode(null); setResetStep(1); }} className="absolute top-4 right-4 text-slate-500 hover:text-white"><X size={20}/></button>
               
-              {/* LOGIN */}
               {authMode === 'LOGIN' && (
                   <form onSubmit={handleLogin} className="space-y-4">
                       <div className="text-center mb-6"><LogIn size={48} className="mx-auto text-orange-500 mb-2"/><h4 className="text-2xl font-black text-white uppercase">ĐĂNG NHẬP DÀNH CHO HỌC SINH</h4></div>
@@ -411,7 +414,6 @@ export default function TrainingPage() {
                       
                       <div className="relative my-4"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-700"></span></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-[#1e1e24] px-2 text-slate-500 font-bold">Hoặc</span></div></div>
                       
-                      {/* NÚT GOOGLE */}
                       <button type="button" onClick={handleLoginGoogle} className="w-full bg-white text-black py-3 rounded-xl font-bold uppercase shadow-lg hover:bg-slate-200 transition flex items-center justify-center gap-2">
                           <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5"/> Đăng nhập Google
                       </button>
@@ -420,7 +422,6 @@ export default function TrainingPage() {
                   </form>
               )}
 
-              {/* REGISTER */}
               {authMode === 'REGISTER' && (
                   <form onSubmit={handleRegister} className="space-y-4">
                       <div className="text-center mb-6"><UserPlus size={48} className="mx-auto text-orange-500 mb-2"/><h3 className="text-2xl font-black text-white uppercase">ĐĂNG KÝ MỚI DÀNH CHO HỌC SINH</h3></div>
@@ -433,7 +434,6 @@ export default function TrainingPage() {
                   </form>
               )}
 
-              {/* FORGOT */}
               {authMode === 'FORGOT' && (
                   <div className="space-y-4">
                       <div className="text-center mb-6"><KeyRound size={48} className="mx-auto text-yellow-500 mb-2"/><h3 className="text-2xl font-black text-white uppercase">KHÔI PHỤC</h3><p className="text-xs text-slate-400">{resetStep === 1 ? 'Nhập SĐT để tìm tài khoản' : 'Thiết lập mật khẩu mới'}</p></div>
@@ -457,7 +457,6 @@ export default function TrainingPage() {
         </div>
       )}
 
-      {/* MODAL NICKNAME */}
       {showNicknameModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in zoom-in duration-300">
            <div className="bg-[#1e1e24] border-2 border-orange-500 p-8 rounded-3xl w-full max-w-sm shadow-[0_0_50px_#f97316] relative text-center">
