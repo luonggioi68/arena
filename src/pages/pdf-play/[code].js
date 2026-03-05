@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import { firestore } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import useAuthStore from '@/store/useAuthStore';
-import {Loader2, Timer, Send, Shield, CheckCircle, User, FileText, Edit3, Eye, EyeOff, PenTool, ArrowLeft, Zap, Target, Trophy, Lock, Users, Key } from 'lucide-react';
+import { Timer, Send, Shield, CheckCircle, User, FileText, Edit3, Eye, EyeOff, PenTool, ArrowLeft, Zap, Target, Trophy, Lock, Users, Key, ChevronDown } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function PDFPlay() {
@@ -125,7 +125,6 @@ export default function PDFPlay() {
             const finalScore = calculateScore();
             setScore(finalScore);
 
-            // Đồng bộ lưu vào pdf_exam_results
             if (!studentInfo.isGuest) {
                 await addDoc(collection(firestore, "pdf_exam_results"), {
                     examId: exam.id, 
@@ -157,6 +156,15 @@ export default function PDFPlay() {
     useEffect(() => {
         handleSubmitRef.current = handleSubmit;
     });
+
+    const handleStartCampaign = () => {
+        // Validation bắt buộc chọn lớp nếu đã nhập Mã GV
+        if (!studentInfo.isGuest && teacherCodeInput.trim().length > 0 && !studentClassInput.trim()) {
+            alert("⚠️ Vui lòng chọn hoặc nhập Tên lớp của bạn để Giáo viên ghi nhận điểm!");
+            return;
+        }
+        setIsStarted(true);
+    };
 
     if (loading) return <div className="h-screen bg-[#09090b] flex items-center justify-center text-orange-500 font-black animate-pulse text-2xl drop-shadow-[0_0_15px_rgba(249,115,22,0.8)]"><Zap className="inline mr-2" size={30}/> ĐANG GIẢI MÃ...</div>;
     if (!exam) return <div className="h-screen bg-[#09090b] flex items-center justify-center text-red-500 font-black text-xl"><Target className="inline mr-2" size={24}/> MÃ CHIẾN DỊCH KHÔNG TỒN TẠI!</div>;
@@ -192,7 +200,7 @@ export default function PDFPlay() {
 
                     {/* KHU VỰC ĐIỀN THÔNG TIN NẾU LÀ HỌC SINH ĐĂNG NHẬP */}
                     {!studentInfo.isGuest && (
-                        <div className="flex flex-col gap-3 mb-8 animate-in fade-in slide-in-from-bottom-2">
+                        <div className="flex flex-col gap-3 mb-8 animate-in fade-in slide-in-from-bottom-2 text-left">
                             <div className="relative">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-orange-500/50"><Key size={18}/></div>
                                 <input 
@@ -201,18 +209,41 @@ export default function PDFPlay() {
                                     className="w-full bg-black/50 border border-orange-500/30 text-orange-200 text-sm font-bold rounded-xl pl-12 pr-4 py-3.5 outline-none focus:border-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] transition-all placeholder:text-orange-900/60 uppercase"
                                 />
                             </div>
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-orange-500/50"><Users size={18}/></div>
-                                <input 
-                                    type="text" value={studentClassInput} onChange={e => setStudentClassInput(e.target.value.toUpperCase())}
-                                    placeholder="Lớp của bạn (VD: 12A1)" 
-                                    className="w-full bg-black/50 border border-orange-500/30 text-orange-200 text-sm font-bold rounded-xl pl-12 pr-4 py-3.5 outline-none focus:border-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] transition-all placeholder:text-orange-900/60 uppercase"
-                                />
-                            </div>
+                            
+                            {/* CHỈ HIỂN THỊ CHỌN LỚP SAU KHI ĐÃ ĐIỀN MÃ GIÁO VIÊN */}
+                            {teacherCodeInput.trim().length > 0 && (
+                                <div className="relative animate-in fade-in slide-in-from-top-2">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-orange-500/50"><Users size={18}/></div>
+                                    
+                                    {exam.allowedClasses && exam.allowedClasses.length > 0 ? (
+                                        <>
+                                            <select 
+                                                value={studentClassInput} 
+                                                onChange={e => setStudentClassInput(e.target.value)}
+                                                className="w-full bg-black/50 border border-orange-500/30 text-orange-200 text-sm font-bold rounded-xl pl-12 pr-10 py-3.5 outline-none focus:border-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] transition-all uppercase cursor-pointer appearance-none"
+                                            >
+                                                <option value="" disabled>-- CHỌN LỚP CỦA BẠN --</option>
+                                                {exam.allowedClasses.map((c, idx) => (
+                                                    <option key={idx} value={c}>{c}</option>
+                                                ))}
+                                            </select>
+                                            <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-orange-500/50">
+                                                <ChevronDown size={18}/>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <input 
+                                            type="text" value={studentClassInput} onChange={e => setStudentClassInput(e.target.value.toUpperCase())}
+                                            placeholder="Nhập Tên Lớp (VD: 12A1)" 
+                                            className="w-full bg-black/50 border border-orange-500/30 text-orange-200 text-sm font-bold rounded-xl pl-12 pr-4 py-3.5 outline-none focus:border-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] transition-all placeholder:text-orange-900/60 uppercase"
+                                        />
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
 
-                    <button onClick={() => setIsStarted(true)} className="w-full bg-gradient-to-b from-orange-500 to-red-600 border-b-4 border-red-900 active:translate-y-1 active:border-b-0 text-white py-4 rounded-2xl font-black text-xl uppercase tracking-widest shadow-[0_0_30px_rgba(249,115,22,0.4)] transition-all flex items-center justify-center gap-2">
+                    <button onClick={handleStartCampaign} className="w-full bg-gradient-to-b from-orange-500 to-red-600 border-b-4 border-red-900 active:translate-y-1 active:border-b-0 text-white py-4 rounded-2xl font-black text-xl uppercase tracking-widest shadow-[0_0_30px_rgba(249,115,22,0.4)] transition-all flex items-center justify-center gap-2">
                         BẮT ĐẦU CHIẾN DỊCH
                     </button>
                 </div>
