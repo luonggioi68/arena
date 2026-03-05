@@ -1,16 +1,20 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import useAuthStore from '@/store/useAuthStore';
-import { auth, firestore } from '@/lib/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { auth, firestore, googleProvider } from '@/lib/firebase';
+import { onAuthStateChanged, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
+import { collection, query, where, getDocs, orderBy, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { 
     ArrowLeft, Loader2, Shield, Trophy, Medal, BookOpen, Clock, 
     CheckCircle, Target, Sparkles, AlertCircle, LogIn, User, Play, 
-    CalendarDays, ChevronDown, ChevronUp, Search, X, FileText 
+    CalendarDays, ChevronDown, ChevronUp, Search, X, FileText,
+    Phone, Lock, Eye, EyeOff, UserPlus, KeyRound, Check 
 } from 'lucide-react';
 
 const GRADES = ['12', '11', '10', '9', '8', '7', '6', 'Khác'];
+
+// Hàm "đánh lừa" Firebase Auth để dùng SĐT như Email
+const createFakeEmail = (phone) => `${phone}@eduarena.vn`;
 
 export default function ArenaOnThi() {
     const router = useRouter();
@@ -22,13 +26,22 @@ export default function ArenaOnThi() {
     const [activeGrade, setActiveGrade] = useState('12');
     const [searchTeacher, setSearchTeacher] = useState('');
 
+    // ================= STATE AUTH TỪ TRANG TRAINING =================
+    const [authMode, setAuthMode] = useState(null); 
+    const [showPassword, setShowPassword] = useState(false);
+    const [authLoading, setAuthLoading] = useState(false);
+    const [resetStep, setResetStep] = useState(1);
+    const [formData, setFormData] = useState({
+        fullName: '', phone: '', password: '', confirmPassword: ''
+    });
+
     useEffect(() => {
-        // 1. Lắng nghe trạng thái auth chỉ để hiển thị giao diện góc phải (Đăng nhập / Tên User)
+        // 1. Lắng nghe trạng thái auth
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
             setUser(currentUser);
         });
 
-        // 2. Tải dữ liệu Đề thi và Bảng xếp hạng TRỰC TIẾP (Không cần chờ đăng nhập)
+        // 2. Tải dữ liệu Đề thi và Bảng xếp hạng TRỰC TIẾP
         const fetchData = async () => {
             try {
                 // Tải toàn bộ Đề thi
@@ -101,6 +114,87 @@ export default function ArenaOnThi() {
 
     const formatDate = (ts) => ts ? new Date(ts.seconds * 1000).toLocaleDateString('vi-VN') : '---';
 
+    // ================= HANDLERS AUTH =================
+    const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+
+    const handleRegister = async (e) => {
+        e.preventDefault();
+        const { fullName, phone, password, confirmPassword } = formData;
+        if (!fullName || !phone || !password) return alert("Điền đầy đủ thông tin!");
+        if (password !== confirmPassword) return alert("Mật khẩu không khớp!");
+        if (password.length < 6) return alert("Mật khẩu tối thiểu 6 ký tự!");
+        if (!/^\d{9,11}$/.test(phone)) return alert("SĐT không hợp lệ!");
+
+        setAuthLoading(true);
+        try {
+            const fakeEmail = createFakeEmail(phone);
+            const userCredential = await createUserWithEmailAndPassword(auth, fakeEmail, password);
+            await updateProfile(userCredential.user, { displayName: fullName });
+            
+            await setDoc(doc(firestore, "student_profiles", userCredential.user.uid), {
+                uid: userCredential.user.uid,
+                email: fakeEmail, phone, fullName, nickname: fullName,
+                photoURL: `https://ui-avatars.com/api/?name=${fullName}&background=random`,
+                grade: activeGrade ? activeGrade.toString() : "12",
+                totalScore: 0, role: 'STUDENT', createdAt: serverTimestamp()
+            });
+            alert("Đăng ký thành công!");
+            setAuthMode(null);
+        } catch (error) { 
+            if(error.code === 'auth/email-already-in-use') alert("Số điện thoại này đã được sử dụng!");
+            else alert("Lỗi đăng ký: " + error.message); 
+        } finally { setAuthLoading(false); }
+    };
+
+    const handleLogin = async (e) => {
+        e.preventDefault();
+        setAuthLoading(true);
+        try {
+            await signInWithEmailAndPassword(auth, createFakeEmail(formData.phone), formData.password);
+            setAuthMode(null);
+        } catch (error) { alert("Sai số điện thoại hoặc mật khẩu!"); } finally { setAuthLoading(false); }
+    };
+
+    const handleLoginGoogle = async () => {
+        try { 
+            await signInWithPopup(auth, googleProvider); 
+            setAuthMode(null);
+        } catch (e) { alert("Lỗi Google: " + e.message); }
+    };
+
+    const handleCheckPhone = async (e) => {
+        e.preventDefault();
+        const { phone } = formData;
+        if (!phone) return alert("Vui lòng nhập số điện thoại!");
+        setAuthLoading(true);
+        try {
+            const q = query(collection(firestore, "student_profiles"), where("phone", "==", phone));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) setResetStep(2);
+            else alert("Số điện thoại này chưa được đăng ký!");
+        } catch (e) { alert("Lỗi: " + e.message); } finally { setAuthLoading(false); }
+    };
+
+    const handleResetPassword = async (e) => {
+        e.preventDefault();
+        const { phone, password, confirmPassword } = formData;
+        if (password !== confirmPassword) return alert("Mật khẩu không khớp!");
+        if (password.length < 6) return alert("Mật khẩu tối thiểu 6 ký tự!");
+        setAuthLoading(true);
+        try {
+            const response = await fetch('/api/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone, newPassword: password })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                alert("✅ Đổi mật khẩu thành công!");
+                setResetStep(1); setAuthMode('LOGIN'); setFormData({ ...formData, password: '', confirmPassword: '' });
+            } else { throw new Error(data.message); }
+        } catch (e) { alert("Thất bại: " + e.message); } finally { setAuthLoading(false); }
+    };
+
     if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617]"><Loader2 className="animate-spin text-cyan-500" size={60} /></div>;
 
     return (
@@ -153,7 +247,11 @@ export default function ArenaOnThi() {
                     {/* CỤM PHẢI: User Badge hoặc Nút Đăng nhập 3D */}
                     <div className="shrink-0">
                         {user ? (
-                            <div className="flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-red-950 to-[#0a0a0a] border-2 border-orange-600/50 pl-2 sm:pl-4 pr-1 sm:pr-1.5 py-1 sm:py-1.5 rounded-full shadow-[0_0_15px_rgba(249,115,22,0.2)]">
+                            <div 
+                                onClick={async () => { if(confirm("Bạn muốn đăng xuất?")) await signOut(auth); }} 
+                                className="cursor-pointer flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-red-950 to-[#0a0a0a] border-2 border-orange-600/50 pl-2 sm:pl-4 pr-1 sm:pr-1.5 py-1 sm:py-1.5 rounded-full shadow-[0_0_15px_rgba(249,115,22,0.2)] hover:scale-105 transition-transform"
+                                title="Nhấn để đăng xuất"
+                            >
                                 <span className="text-[10px] sm:text-xs font-black text-yellow-100 hidden sm:block truncate max-w-[100px] lg:max-w-[150px] drop-shadow-md tracking-wider">
                                     {user.displayName || user.email}
                                 </span>
@@ -162,7 +260,7 @@ export default function ArenaOnThi() {
                                 </div>
                             </div>
                         ) : (
-                            <button onClick={() => router.push('/')} className="relative px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-b from-yellow-400 via-orange-500 to-red-600 border-b-4 border-red-900 rounded-xl text-[10px] sm:text-xs font-black text-white uppercase tracking-widest active:translate-y-1 active:border-b-0 transition-all shadow-[0_0_20px_rgba(249,115,22,0.5)] overflow-hidden group">
+                            <button onClick={() => setAuthMode('LOGIN')} className="relative px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-b from-yellow-400 via-orange-500 to-red-600 border-b-4 border-red-900 rounded-xl text-[10px] sm:text-xs font-black text-white uppercase tracking-widest active:translate-y-1 active:border-b-0 transition-all shadow-[0_0_20px_rgba(249,115,22,0.5)] overflow-hidden group">
                                 <div className="absolute inset-0 bg-white/20 translate-y-[-100%] group-hover:translate-y-[100%] transition-transform duration-500"></div>
                                 <span className="relative z-10 flex items-center gap-1.5 drop-shadow-md">
                                     <LogIn size={14} className="hidden sm:block" strokeWidth={3}/> Đăng nhập
@@ -320,6 +418,69 @@ export default function ArenaOnThi() {
                     </div>
                 </div>
             </main>
+
+            {/* MODAL AUTH TỪ TRANG TRAINING */}
+            {authMode && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in zoom-in duration-300">
+                <div className="bg-[#1e1e24] border-2 border-orange-500 p-8 rounded-3xl w-full max-w-sm shadow-[0_0_50px_#f97316] relative">
+                    <button onClick={() => { setAuthMode(null); setResetStep(1); }} className="absolute top-4 right-4 text-slate-500 hover:text-white"><X size={20}/></button>
+                    
+                    {/* LOGIN */}
+                    {authMode === 'LOGIN' && (
+                        <form onSubmit={handleLogin} className="space-y-4">
+                            <div className="text-center mb-6"><LogIn size={48} className="mx-auto text-orange-500 mb-2"/><h4 className="text-2xl font-black text-white uppercase">ĐĂNG NHẬP DÀNH CHO HỌC SINH</h4></div>
+                            <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Phone size={18} className="text-slate-500"/><input name="phone" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Số điện thoại" type="tel"/></div>
+                            <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Lock size={18} className="text-slate-500"/><input name="password" type={showPassword ? "text" : "password"} onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Mật khẩu"/><button type="button" onClick={() => setShowPassword(!showPassword)} className="text-slate-500 hover:text-white">{showPassword ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div>
+                            
+                            <button disabled={authLoading} className="w-full bg-gradient-to-r from-orange-600 to-red-600 text-white py-3 rounded-xl font-black uppercase shadow-lg hover:scale-105 transition">{authLoading ? 'Đang xử lý...' : 'VÀO NGAY'}</button>
+                            
+                            <div className="relative my-4"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-700"></span></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-[#1e1e24] px-2 text-slate-500 font-bold">Hoặc</span></div></div>
+                            
+                            {/* NÚT GOOGLE */}
+                            <button type="button" onClick={handleLoginGoogle} className="w-full bg-white text-black py-3 rounded-xl font-bold uppercase shadow-lg hover:bg-slate-200 transition flex items-center justify-center gap-2">
+                                <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5"/> Đăng nhập Google
+                            </button>
+
+                            <div className="flex justify-between text-xs font-bold mt-4"><button type="button" onClick={() => setAuthMode('FORGOT')} className="text-slate-500 hover:text-orange-400">Quên mật khẩu?</button><button type="button" onClick={() => setAuthMode('REGISTER')} className="text-orange-500 hover:text-white">Tạo tài khoản mới</button></div>
+                        </form>
+                    )}
+
+                    {/* REGISTER */}
+                    {authMode === 'REGISTER' && (
+                        <form onSubmit={handleRegister} className="space-y-4">
+                            <div className="text-center mb-6"><UserPlus size={48} className="mx-auto text-orange-500 mb-2"/><h3 className="text-2xl font-black text-white uppercase">ĐĂNG KÝ MỚI DÀNH CHO HỌC SINH</h3></div>
+                            <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><User size={18} className="text-slate-500"/><input name="fullName" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Họ và tên học sinh"/></div>
+                            <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Phone size={18} className="text-slate-500"/><input name="phone" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Số điện thoại" type="tel"/></div>
+                            <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Lock size={18} className="text-slate-500"/><input name="password" type="password" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Mật khẩu (min 6 số)"/></div>
+                            <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Lock size={18} className="text-slate-500"/><input name="confirmPassword" type="password" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Nhập lại mật khẩu"/></div>
+                            <button disabled={authLoading} className="w-full bg-gradient-to-r from-orange-600 to-red-600 text-white py-3 rounded-xl font-black uppercase shadow-lg hover:scale-105 transition">{authLoading ? 'Đang tạo...' : 'XÁC NHẬN ĐĂNG KÝ'}</button>
+                            <div className="text-center text-xs font-bold mt-4"><span className="text-slate-500">Đã có tài khoản? </span><button type="button" onClick={() => setAuthMode('LOGIN')} className="text-orange-500 hover:text-white">Đăng nhập</button></div>
+                        </form>
+                    )}
+
+                    {/* FORGOT */}
+                    {authMode === 'FORGOT' && (
+                        <div className="space-y-4">
+                            <div className="text-center mb-6"><KeyRound size={48} className="mx-auto text-yellow-500 mb-2"/><h3 className="text-2xl font-black text-white uppercase">KHÔI PHỤC</h3><p className="text-xs text-slate-400">{resetStep === 1 ? 'Nhập SĐT để tìm tài khoản' : 'Thiết lập mật khẩu mới'}</p></div>
+                            {resetStep === 1 ? (
+                                <form onSubmit={handleCheckPhone} className="space-y-4">
+                                    <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Phone size={18} className="text-slate-500"/><input name="phone" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Số điện thoại đã đăng ký" type="tel"/></div>
+                                    <button disabled={authLoading} className="w-full bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-bold uppercase transition flex items-center justify-center gap-2">{authLoading ? 'Đang kiểm tra...' : 'TIẾP TỤC'}</button>
+                                </form>
+                            ) : (
+                                <form onSubmit={handleResetPassword} className="space-y-4 animate-in slide-in-from-right">
+                                    <div className="bg-green-900/30 p-3 rounded-lg border border-green-500/30 text-green-400 text-xs font-bold text-center flex items-center justify-center gap-2"><Check size={14}/> Tài khoản hợp lệ: {formData.phone}</div>
+                                    <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Lock size={18} className="text-slate-500"/><input name="password" type="password" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Mật khẩu mới"/></div>
+                                    <div className="bg-black border border-orange-900/50 rounded-xl p-3 flex items-center gap-3"><Lock size={18} className="text-slate-500"/><input name="confirmPassword" type="password" onChange={handleInputChange} className="bg-transparent w-full text-white font-bold outline-none placeholder:text-slate-600" placeholder="Nhập lại mật khẩu mới"/></div>
+                                    <button disabled={authLoading} className="w-full bg-gradient-to-r from-yellow-600 to-orange-600 text-white py-3 rounded-xl font-black uppercase shadow-lg hover:scale-105 transition">{authLoading ? 'Đang cập nhật...' : 'ĐỔI MẬT KHẨU'}</button>
+                                </form>
+                            )}
+                            <div className="text-center text-xs font-bold mt-4"><button type="button" onClick={() => { setAuthMode('LOGIN'); setResetStep(1); }} className="text-orange-500 hover:text-white">Quay lại đăng nhập</button></div>
+                        </div>
+                    )}
+                </div>
+                </div>
+            )}
 
             <style jsx global>{`
                 .no-scrollbar::-webkit-scrollbar { display: none; }
