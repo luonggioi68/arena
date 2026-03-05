@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import { firestore } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import useAuthStore from '@/store/useAuthStore';
-import { Timer, Send, Shield, CheckCircle, User, FileText, Edit3, Eye, EyeOff, PenTool, ArrowLeft, Zap, Target, Trophy, Lock, Users, Key } from 'lucide-react';
+import {Loader2, Timer, Send, Shield, CheckCircle, User, FileText, Edit3, Eye, EyeOff, PenTool, ArrowLeft, Zap, Target, Trophy, Lock, Users, Key } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function PDFPlay() {
@@ -15,7 +15,7 @@ export default function PDFPlay() {
     const [loading, setLoading] = useState(true);
     const [studentInfo, setStudentInfo] = useState({ name: '', isGuest: true });
     
-    // State ghi danh mới
+    // State ghi danh
     const [teacherCodeInput, setTeacherCodeInput] = useState('');
     const [studentClassInput, setStudentClassInput] = useState('');
     
@@ -24,7 +24,7 @@ export default function PDFPlay() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isFinished, setIsFinished] = useState(false);
     const [score, setScore] = useState(0);
-    const [showAnswerKey, setShowAnswerKey] = useState(false); // State show đáp án
+    const [showAnswerKey, setShowAnswerKey] = useState(false);
 
     const [answers, setAnswers] = useState({ part1: {}, part2: {}, part3: {} });
 
@@ -125,17 +125,17 @@ export default function PDFPlay() {
             const finalScore = calculateScore();
             setScore(finalScore);
 
-            // Lưu vào collection exam_results để file pdf-manager đọc được
+            // Đồng bộ lưu vào pdf_exam_results
             if (!studentInfo.isGuest) {
-                await addDoc(collection(firestore, "exam_results"), {
+                await addDoc(collection(firestore, "pdf_exam_results"), {
                     examId: exam.id, 
                     examCode: exam.code,
                     examTitle: exam.title,
                     studentName: studentInfo.name, 
                     studentEmail: user?.email || '',
-                    studentClassName: studentClassInput || 'Chưa phân lớp', // Lấy từ ô input
-                    teacherCode: teacherCodeInput || '', // Lấy từ ô input
-                    teacherId: exam.authorId || '', // Gắn ID GV tạo đề
+                    studentClassName: studentClassInput || 'Chưa phân lớp', 
+                    teacherCode: teacherCodeInput || '', 
+                    teacherId: exam.authorId || '', 
                     grade: exam.grade || 'Khác',
                     subject: exam.subject || 'Khác',
                     score: parseFloat(finalScore),
@@ -364,7 +364,6 @@ export default function PDFPlay() {
                     </div>
 
                     <div className="flex-1 w-full bg-white relative min-h-0">
-                        {/* Đã gỡ bỏ lớp kính cường lực chặn tương tác */}
                         <embed src={`${securePdfUrl}#view=FitH&toolbar=0&navpanes=0`} type="application/pdf" className="w-full h-full relative z-0" />
                     </div>
                 </div>
@@ -378,7 +377,6 @@ export default function PDFPlay() {
                         <span className="text-[10px] md:text-xs font-black text-red-400 uppercase tracking-[0.3em] flex items-center gap-2 drop-shadow-md"><PenTool size={14} className="md:w-4 md:h-4"/> PHIẾU ĐIỀN ĐÁP ÁN</span>
                     </div>
 
-                    {/* Vùng chứa cuộn: Đã thêm min-h-0 ở các lớp cha để đảm bảo overflow-y-auto hoạt động */}
                     <div className="flex-1 overflow-y-auto min-h-0 p-3 sm:p-4 pb-8 custom-scrollbar space-y-4 md:space-y-6">
                         {/* TRẮC NGHIỆM */}
                         {exam.answerKey?.part1 && Object.keys(exam.answerKey.part1).length > 0 && (
