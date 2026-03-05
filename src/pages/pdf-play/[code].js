@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import { firestore } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import useAuthStore from '@/store/useAuthStore';
-import { Timer, Send, Shield, CheckCircle, User, FileText, Edit3, Eye, PenTool, ArrowLeft, Target, Unlock, Users, Lock, X } from 'lucide-react';
+import { Timer, Send, Shield, CheckCircle, FileText, Edit3, Eye, PenTool, Target, Unlock, Users, Lock, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function PDFPlay() {
@@ -21,7 +21,6 @@ export default function PDFPlay() {
     const [isFinished, setIsFinished] = useState(false);
     const [score, setScore] = useState(0);
 
-    // BIẾN ĐIỀU KHIỂN TAB MOBILE (CHỐNG TRÔI)
     const [mobileTab, setMobileTab] = useState('PDF'); 
 
     const [answers, setAnswers] = useState({ part1: {}, part2: {}, part3: {} });
@@ -59,9 +58,7 @@ export default function PDFPlay() {
     const expectedTeacherCode = (exam && exam.authorId) ? String(exam.authorId).substring(0, 6).toUpperCase() : '';
     const isValidTeacherCode = teacherCodeInput.trim().toUpperCase() === expectedTeacherCode && expectedTeacherCode !== '';
 
-    // LOGIC KIỂM TRA TRƯỚC KHI VÀO THI
     const handleStartClick = () => {
-        // Chỉ kiểm tra nếu người dùng (đã đăng nhập) CỐ TÌNH nhập mã GV
         if (!studentInfo.isGuest && teacherCodeInput.trim() !== '') {
             if (!isValidTeacherCode) {
                 alert("⚠️ Mã giáo viên không đúng! Vui lòng kiểm tra lại hoặc để trống nếu bạn tự luyện tập.");
@@ -111,7 +108,6 @@ export default function PDFPlay() {
         setScore(finalScore);
 
         try {
-            // Nếu là khách -> không lưu dữ liệu
             if (!studentInfo.isGuest) {
                 await addDoc(collection(firestore, "exam_results"), {
                     module: 'PDF_ARENA',
@@ -125,7 +121,6 @@ export default function PDFPlay() {
                     submittedAt: serverTimestamp(),
                     grade: exam.grade || 'Khác',
                     subject: exam.subject || 'Khác',
-                    // Chỉ gán ID Giáo Viên nếu học sinh đã nhập đúng Mã GV
                     teacherId: isValidTeacherCode ? exam.authorId : '',
                     teacherCode: isValidTeacherCode ? teacherCodeInput.trim().toUpperCase() : '',
                     studentClassName: isValidTeacherCode ? studentClassName.trim().toUpperCase() : ''
@@ -141,16 +136,19 @@ export default function PDFPlay() {
         }
     };
     
-    handleSubmitRef.current = handleSubmit;
+    // Cập nhật Reference một cách an toàn cho Timer
+    useEffect(() => {
+        handleSubmitRef.current = handleSubmit;
+    });
 
     useEffect(() => {
         let timer;
-        if (isStarted && timeLeft > 0 && !isSubmitting && !isFinished) {
+        if (isStarted && !isSubmitting && !isFinished) {
             timer = setInterval(() => {
                 setTimeLeft(prev => {
                     if (prev <= 1) { 
                         clearInterval(timer); 
-                        handleSubmitRef.current(true); 
+                        if (handleSubmitRef.current) handleSubmitRef.current(true); 
                         return 0; 
                     }
                     return prev - 1;
@@ -200,7 +198,6 @@ export default function PDFPlay() {
                         <CheckCircle size={20} className="text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.8)]"/>
                     </div>
 
-                    {/* NẾU LÀ CHIẾN BINH THÌ MỚI HIỂN THỊ Ô NHẬP MÃ GV */}
                     {!studentInfo.isGuest && (
                         <div className="bg-slate-900/80 border border-slate-700 p-4 rounded-xl mb-6 flex flex-col text-left transition-all shadow-inner">
                             <div>
@@ -214,15 +211,13 @@ export default function PDFPlay() {
                                 </div>
                                 <input 
                                     type="text" 
-                                    placeholder="Nhập mã GV nếu có yêu cầu..."
+                                    placeholder="Nhập mã GV nếu có..."
                                     value={teacherCodeInput}
                                     onChange={(e) => setTeacherCodeInput(e.target.value)}
-                                    // text-base ĐỂ CHỐNG ZOOM TRÊN IPHONE
                                     className={`w-full bg-black/50 border rounded-lg px-3 py-2.5 text-white outline-none text-base font-bold transition-all placeholder:text-slate-600 uppercase ${teacherCodeInput.trim() !== '' ? (isValidTeacherCode ? 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'border-red-500 focus:shadow-[0_0_15px_rgba(239,68,68,0.3)]') : 'border-slate-700 focus:border-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)]'}`}
                                 />
                             </div>
 
-                            {/* CHỈ HIỆN CHỌN LỚP KHI MÃ GV HỢP LỆ */}
                             {isValidTeacherCode && (
                                 <div className="animate-in fade-in slide-in-from-top-2 duration-500 mt-4 border-t border-slate-700/50 pt-4">
                                     <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1"><Users size={12}/> Tên Lớp của bạn</p>
@@ -258,7 +253,7 @@ export default function PDFPlay() {
     }
 
     // ===============================================
-    // 2. MÀN HÌNH KẾT QUẢ (HIỂN THỊ ĐÁP ÁN NẾU ĐƯỢC PHÉP)
+    // 2. MÀN HÌNH KẾT QUẢ
     // ===============================================
     if (isFinished) {
         return (
@@ -273,9 +268,8 @@ export default function PDFPlay() {
                         <p className="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-b from-emerald-300 to-emerald-600 drop-shadow-[0_0_15px_rgba(52,211,153,0.8)]">{score}</p>
                     </div>
 
-                    {/* HIỂN THỊ ĐÁP ÁN THEO CÀI ĐẶT CỦA GIÁO VIÊN */}
                     {exam.showAnswers && exam.answerKey && (
-                        <div className="bg-slate-900/90 border border-cyan-500/50 p-4 rounded-2xl mb-6 text-left text-sm text-slate-300 shadow-[inset_0_0_15px_rgba(6,182,212,0.2)] animate-in fade-in duration-500">
+                        <div className="bg-slate-900/90 border border-cyan-500/50 p-4 rounded-2xl mb-6 text-left text-sm text-slate-300 shadow-[inset_0_0_15px_rgba(6,182,212,0.2)]">
                             <p className="text-cyan-400 font-black uppercase tracking-widest text-xs mb-3 flex items-center gap-2 border-b border-cyan-900 pb-2 drop-shadow-md"><Unlock size={14}/> ĐÁP ÁN CHUẨN CỦA GV</p>
                             
                             {exam.answerKey.part1 && Object.keys(exam.answerKey.part1).length > 0 && (
@@ -320,14 +314,12 @@ export default function PDFPlay() {
     }
 
     // ===============================================
-    // 3. MÀN HÌNH LÀM BÀI CHÍNH (KHÓA CỨNG CHỐNG TRÔI)
+    // 3. MÀN HÌNH LÀM BÀI CHÍNH
     // ===============================================
     return (
         <div className="fixed inset-0 bg-[#020617] flex flex-col md:flex-row overflow-hidden font-sans text-slate-200 selection:bg-cyan-500 selection:text-white">
             
-            {/* CỘT TRÁI: ĐỀ PDF (Bật/Tắt trên Mobile dựa theo mobileTab) */}
             <div className={`${mobileTab === 'PDF' ? 'flex' : 'hidden'} md:flex h-full md:flex-[3] flex-col relative bg-[#09090b] z-10 border-b md:border-b-0 border-cyan-900/50 pb-[60px] md:pb-0`}>
-                
                 <div className="h-[55px] sm:h-[65px] bg-[#020617] flex items-center justify-between px-3 md:px-6 shrink-0 shadow-[0_5px_30px_rgba(6,182,212,0.15)] z-10">
                     <div className="flex items-center gap-2 md:gap-4 overflow-hidden max-w-[50%]">
                         <div className="p-2 bg-gradient-to-br from-cyan-600 to-blue-700 rounded-xl shadow-[0_0_15px_rgba(6,182,212,0.5)] hidden sm:flex">
@@ -357,9 +349,7 @@ export default function PDFPlay() {
                 </div>
             </div>
 
-            {/* CỘT PHẢI: BẢNG TRẢ LỜI (Bật/Tắt trên Mobile dựa theo mobileTab) */}
             <div className={`${mobileTab === 'ANSWERS' ? 'flex' : 'hidden'} md:flex h-full md:flex-[1.5] md:max-w-[340px] xl:max-w-[380px] bg-[#020617] border-slate-800 flex-col md:shadow-[-10px_0_30px_rgba(0,0,0,0.8)] relative z-20 pb-[60px] md:pb-0`}>
-                
                 <div className="h-[45px] sm:h-[55px] bg-[#050505] border-b border-slate-800 flex items-center justify-between px-4 shrink-0 shadow-md">
                     <div className="flex items-center gap-2 text-cyan-500 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]">
                         <PenTool size={16}/>
@@ -369,7 +359,6 @@ export default function PDFPlay() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-2 sm:p-3 custom-scrollbar space-y-4 sm:space-y-6 bg-[#09090b]">
-                    
                     {exam.answerKey?.part1 && Object.keys(exam.answerKey.part1).length > 0 && (
                         <div className="bg-slate-900/60 rounded-2xl p-2 sm:p-3 border border-slate-800 shadow-inner">
                             <div className="text-[10px] sm:text-xs font-black text-cyan-400 uppercase tracking-widest mb-3 flex items-center gap-1.5 drop-shadow-md"><FileText size={14}/> I. TRẮC NGHIỆM</div>
@@ -437,7 +426,6 @@ export default function PDFPlay() {
                                 {Object.keys(exam.answerKey.part3).sort((a,b)=>a-b).map(qNum => (
                                     <div key={`p3-${qNum}`} className="flex items-center bg-black/60 border border-slate-800 rounded-xl overflow-hidden shadow-[inset_0_0_8px_rgba(0,0,0,0.8)] focus-within:border-yellow-500/80 focus-within:shadow-[0_0_10px_rgba(234,179,8,0.3)] transition-all">
                                         <span className="w-6 sm:w-8 bg-slate-950 text-center text-xs sm:text-sm font-bold text-slate-600 py-1.5 sm:py-2 shrink-0 border-r border-slate-800">{qNum}</span>
-                                        {/* text-base ĐỂ CHỐNG ZOOM TRÊN IPHONE KHI GÕ */}
                                         <input 
                                             type="text" value={answers.part3[qNum] || ''} onChange={(e) => handlePart3(qNum, e.target.value)}
                                             className="w-full bg-transparent text-base sm:text-sm font-black text-yellow-400 text-center outline-none px-2 py-1.5 sm:py-2 placeholder:text-slate-700"
@@ -450,7 +438,6 @@ export default function PDFPlay() {
                     )}
                 </div>
 
-                {/* NÚT NỘP BÀI DÀNH CHO BẢN MÁY TÍNH */}
                 <div className="hidden md:block h-[70px] bg-[#020617] border-t border-slate-800 p-3 shrink-0 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.8)]">
                     <button onClick={() => handleSubmit(false)} disabled={isSubmitting} className="w-full h-full bg-gradient-to-r from-cyan-600 to-blue-600 border border-cyan-400 text-white rounded-xl font-black uppercase text-sm tracking-widest shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.7)] active:scale-95 flex items-center justify-center gap-2 transition-all">
                         {isSubmitting ? 'ĐANG XỬ LÝ...' : <><Send size={16} strokeWidth={3} className="drop-shadow-md"/> NỘP BÀI CHIẾN DỊCH</>}
@@ -458,7 +445,7 @@ export default function PDFPlay() {
                 </div>
             </div>
 
-            {/* THANH CÔNG CỤ DƯỚI ĐÁY CHO MOBILE (CHỐNG TRÔI) */}
+            {/* TAB BOTTOM MOBILE */}
             <div className="md:hidden absolute bottom-0 left-0 right-0 h-[60px] bg-[#050505] border-t border-cyan-900/50 flex items-center justify-between p-1.5 shrink-0 z-50">
                 <button onClick={() => setMobileTab('PDF')} className={`flex-1 flex flex-col items-center justify-center rounded-lg h-full transition-colors ${mobileTab === 'PDF' ? 'bg-cyan-900/50 text-cyan-400 border border-cyan-500/50 shadow-[inset_0_0_10px_rgba(6,182,212,0.3)]' : 'text-slate-500 hover:text-slate-300'}`}>
                     <Eye size={20} className="mb-0.5"/><span className="text-[10px] font-black uppercase tracking-widest">Xem Đề</span>
