@@ -250,7 +250,6 @@ export default function ArenaOnThi() {
                                             <div className="h-px bg-gradient-to-r from-purple-500/50 to-transparent flex-1"></div>
                                         </div>
 
-                                        {/* GIAO DIỆN BẢNG RESPONSIVE (MỚI) */}
                                         <div className="bg-[#0f172a]/90 backdrop-blur-md rounded-[1.5rem] border border-cyan-900/50 overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
                                             
                                             {/* Header Desktop (Ẩn trên Mobile) */}
@@ -261,7 +260,7 @@ export default function ArenaOnThi() {
                                                 <div className="w-20 text-center shrink-0">Số Câu</div>
                                                 <div className="w-24 text-center shrink-0">Thời Gian</div>
                                                 <div className="w-40 px-2 shrink-0">Giáo Viên</div>
-                                                <div className="w-36 text-center shrink-0">Thao Tác</div>
+                                                <div className="w-40 text-center shrink-0">Thao Tác</div>
                                             </div>
 
                                             {/* Danh sách Đề Thi */}
@@ -269,9 +268,6 @@ export default function ArenaOnThi() {
                                                 {visibleExams.map((exam, index) => (
                                                     <div key={`exam-${exam.id}`} className="flex flex-col md:flex-row md:items-center px-4 py-5 md:px-4 md:py-3 hover:bg-slate-800/60 transition-colors group relative gap-4 md:gap-0">
                                                         
-                                                        {/* Glow Hover Background */}
-                                                        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 via-cyan-500/5 to-cyan-500/0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-
                                                         {/* Top Row Mobile: TT + Ngày */}
                                                         <div className="flex justify-between items-center md:hidden w-full mb-1">
                                                             <span className="text-[10px] text-slate-400 font-black bg-black/50 px-2.5 py-1 rounded-md border border-slate-800">#{index + 1}</span>
@@ -289,7 +285,7 @@ export default function ArenaOnThi() {
                                                         <div 
                                                             className="flex-1 md:px-4 cursor-pointer z-10" 
                                                             onClick={() => router.push(`/pdf-play/${exam.code}`)}
-                                                            title="Nhấn vào đây để thi"
+                                                            title="Nhấn vào đây để vào thi"
                                                         >
                                                             <div className="font-black text-white text-lg md:text-lg mb-1.5 md:mb-1 group-hover:text-cyan-300 transition-colors line-clamp-2 drop-shadow-md">
                                                                 {exam.title}
@@ -307,7 +303,7 @@ export default function ArenaOnThi() {
                                                         </div>
 
                                                         {/* Stats Box */}
-                                                        <div className="flex items-center justify-between md:justify-start bg-black/40 md:bg-transparent p-3 md:p-0 rounded-xl border border-slate-800 md:border-none w-full md:w-auto mt-2 md:mt-0 z-10 gap-2 md:gap-0">
+                                                        <div className="flex items-center justify-between md:justify-start bg-black/40 md:bg-transparent p-3 md:p-0 rounded-xl border border-slate-800 md:border-none w-full md:w-auto mt-1 md:mt-0 z-10 gap-2 md:gap-0">
                                                             
                                                             <div className="flex flex-col items-center w-auto md:w-20 shrink-0">
                                                                 <div className="text-[9px] text-slate-500 uppercase tracking-widest md:hidden mb-1">Số câu</div>
@@ -338,14 +334,15 @@ export default function ArenaOnThi() {
                                                             </div>
                                                         </div>
 
-                                                        {/* ACTION BUTTON (Tối ưu cho Mobile) */}
-                                                        <div className="w-full md:w-36 shrink-0 z-10 mt-3 md:mt-0">
+                                                        {/* ACTION BUTTON (Nút VÀO THI 3D Nổi Bật Cho Mobile) */}
+                                                        <div className="w-full md:w-40 shrink-0 z-10 mt-4 md:mt-0 px-1 md:px-0">
                                                             <button 
                                                                 type="button"
-                                                                onClick={() => router.push(`/pdf-play/${exam.code}`)} 
-                                                                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white py-3.5 md:py-2.5 rounded-xl font-black text-sm md:text-xs uppercase tracking-widest shadow-[0_0_25px_rgba(6,182,212,0.6)] transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 border border-cyan-300 group-hover:animate-pulse"
+                                                                onClick={(e) => { e.stopPropagation(); router.push(`/pdf-play/${exam.code}`); }} 
+                                                                className="w-full bg-gradient-to-b from-cyan-400 to-blue-600 md:bg-gradient-to-r md:from-cyan-600 md:to-blue-600 border border-cyan-300 text-white py-3.5 md:py-2.5 rounded-2xl md:rounded-xl font-black text-base md:text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-[0_6px_0_#1e3a8a,0_15px_25px_rgba(6,182,212,0.4)] active:shadow-[0_0px_0_#1e3a8a,0_0px_0_rgba(6,182,212,0.4)] active:translate-y-[6px] md:shadow-[0_0_20px_rgba(6,182,212,0.5)] md:active:translate-y-0 md:hover:scale-105 group-hover:border-white animate-pulse md:animate-none md:group-hover:animate-pulse"
                                                             >
-                                                                <Play size={16} fill="currentColor"/> VÀO THI NGAY
+                                                                <Play size={20} fill="currentColor" className="drop-shadow-md md:w-4 md:h-4"/> 
+                                                                VÀO THI NGAY
                                                             </button>
                                                         </div>
 
@@ -371,7 +368,6 @@ export default function ArenaOnThi() {
                     )}
                 </div>
 
-                {/* CỘT PHẢI BẢNG VÀNG */}
                 <div className="w-full xl:w-[28%] shrink-0">
                     <div className="sticky top-[100px] bg-[#0f172a]/90 backdrop-blur-xl p-6 rounded-[2rem] border border-orange-500/50 shadow-[0_0_40px_rgba(249,115,22,0.2)] relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-40 h-40 bg-orange-600/20 blur-[60px] rounded-full pointer-events-none"></div>
