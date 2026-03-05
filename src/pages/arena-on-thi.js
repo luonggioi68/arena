@@ -77,17 +77,14 @@ export default function ArenaOnThi() {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             setUser(currentUser);
             try {
-                // 1. Tải toàn bộ Đề thi
                 const qExams = query(collection(firestore, "pdf_exams"), where("status", "==", "OPEN"));
                 const snapExams = await getDocs(qExams);
                 const examsData = snapExams.docs.map(d => ({ id: d.id, ...d.data() }));
                 examsData.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
                 setExams(examsData);
 
-                // Lọc ra danh sách ID của các đề thi PDF để làm mốc tính điểm Bảng vàng
                 const validPdfExamIds = new Set(examsData.map(e => e.id));
 
-                // 2. Tải Bảng Xếp Hạng (CHỈ LẤY ĐIỂM CỦA MODULE PDF NÀY)
                 const snapResults = await getDocs(collection(firestore, "exam_results"));
                 const scoresMap = {};
                 
@@ -95,16 +92,15 @@ export default function ArenaOnThi() {
                     const data = doc.data();
                     const sName = data.studentName;
                     const sScore = parseFloat(data.score) || 0;
-                    const sClass = data.studentClassName || ''; // Lấy thông tin lớp học
+                    const sClass = data.studentClassName || '';
                     
-                    // Bỏ qua khách, và BỎ QUA NẾU examId KHÔNG NẰM TRONG TẬP validPdfExamIds
                     if (!sName || sName.includes('ẩn danh') || sName.includes('Khách_') || sName.trim() === '') return;
                     if (!validPdfExamIds.has(data.examId) && data.module !== 'PDF_ARENA') return;
 
                     if (!scoresMap[sName]) {
                         scoresMap[sName] = { name: sName, className: sClass, totalScore: 0, examsCount: 0 };
                     } else if (!scoresMap[sName].className && sClass) {
-                        scoresMap[sName].className = sClass; // Nếu trước đó chưa có lớp thì cập nhật
+                        scoresMap[sName].className = sClass;
                     }
                     scoresMap[sName].totalScore += sScore;
                     scoresMap[sName].examsCount += 1;
@@ -144,12 +140,10 @@ export default function ArenaOnThi() {
 
     return (
         <div className="min-h-screen bg-[#020617] text-slate-200 font-sans selection:bg-cyan-500 selection:text-white pb-20 overflow-x-hidden relative">
-            {/* BACKGROUND NEON GLOW */}
             <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-cyan-900/30 via-[#020617] to-black -z-20"></div>
             <div className="fixed top-1/4 left-0 w-[500px] h-[500px] bg-blue-600/10 blur-[150px] rounded-full pointer-events-none -z-10 animate-pulse"></div>
             <div className="fixed bottom-1/4 right-0 w-[500px] h-[500px] bg-purple-600/10 blur-[150px] rounded-full pointer-events-none -z-10 animate-pulse"></div>
 
-            {/* HEADER */}
             <header className="sticky top-0 z-40 bg-[#020617]/80 backdrop-blur-xl border-b border-cyan-500/30 shadow-[0_5px_30px_rgba(6,182,212,0.2)]">
                 <div className="max-w-[1500px] mx-auto px-4 sm:px-6 h-[70px] flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3 md:gap-4 shrink-0">
@@ -257,72 +251,110 @@ export default function ArenaOnThi() {
                                         </div>
 
                                         <div className="bg-[#0f172a]/90 backdrop-blur-md rounded-[1.5rem] border border-cyan-900/50 overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
-                                            <div className="overflow-x-auto custom-scrollbar">
-                                                <table className="w-full text-left border-collapse min-w-[800px]">
-                                                    <thead className="bg-slate-950/80 border-b border-cyan-900/50">
-                                                        <tr>
-                                                            <th className="p-4 text-center text-xs font-black text-cyan-400 uppercase tracking-widest w-12">TT</th>
-                                                            <th className="p-4 text-xs font-black text-cyan-400 uppercase tracking-widest">Tên Đề / Mã</th>
-                                                            <th className="p-4 text-center text-xs font-black text-cyan-400 uppercase tracking-widest w-28">Ngày Tạo</th>
-                                                            <th className="p-4 text-center text-xs font-black text-cyan-400 uppercase tracking-widest w-24">Số Câu</th>
-                                                            <th className="p-4 text-center text-xs font-black text-cyan-400 uppercase tracking-widest w-24">Thời Gian</th>
-                                                            <th className="p-4 text-xs font-black text-cyan-400 uppercase tracking-widest w-40">Giáo Viên</th>
-                                                            <th className="p-4 text-center text-xs font-black text-cyan-400 uppercase tracking-widest w-32">Thao Tác</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-slate-800/60">
-                                                        {visibleExams.map((exam, index) => (
-                                                            <tr key={`exam-${exam.id}`} className="hover:bg-slate-800/60 transition-colors group">
-                                                                <td className="p-4 text-center text-slate-500 font-mono font-bold text-sm">{index + 1}</td>
-                                                                <td className="p-4">
-                                                                    <div className="font-bold text-white text-base md:text-lg mb-1 group-hover:text-cyan-300 transition-colors line-clamp-2">{exam.title}</div>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-700 shadow-[0_0_10px_rgba(6,182,212,0.2)]">Mã: {exam.code}</span>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="p-4 text-center text-slate-400 text-xs font-mono">
-                                                                    <div className="flex items-center justify-center gap-1.5 bg-slate-900/80 py-1.5 rounded-lg border border-slate-700">
-                                                                        <CalendarDays size={12}/> {formatDate(exam.createdAt)}
-                                                                    </div>
-                                                                </td>
-                                                                <td className="p-4 text-center">
-                                                                    <span className="text-white font-black text-lg bg-slate-900 w-10 h-10 flex items-center justify-center rounded-xl border border-slate-700 mx-auto shadow-inner">{exam.totalQuestions}</span>
-                                                                </td>
-                                                                <td className="p-4 text-center">
-                                                                    <div className="text-orange-400 font-black text-lg flex flex-col items-center leading-none drop-shadow-[0_0_8px_rgba(249,115,22,0.5)]">
-                                                                        {exam.timeLimit} <span className="text-[9px] uppercase tracking-widest text-slate-500 mt-1">Phút</span>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="p-4">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-[10px] font-black text-white shrink-0 shadow-[0_0_10px_rgba(168,85,247,0.6)]">
-                                                                            {(exam.authorName || exam.authorEmail || 'G').charAt(0).toUpperCase()}
-                                                                        </div>
-                                                                        <span className="text-xs font-bold text-slate-300 truncate max-w-[120px] group-hover:text-white transition-colors" title={exam.authorName || exam.authorEmail}>
-                                                                            {exam.authorName || exam.authorEmail || 'Arena GV'}
-                                                                        </span>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="p-4 text-center">
-                                                                    <button 
-                                                                        type="button"
-                                                                        onClick={() => router.push(`/pdf-play/${exam.code}`)} 
-                                                                        className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-[0_4px_15px_rgba(6,182,212,0.5)] transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 border border-cyan-400/50 group-hover:animate-pulse"
-                                                                    >
-                                                                        <Play size={14} fill="currentColor"/> VÀO THI
-                                                                    </button>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
+                                            
+                                            {/* Header Desktop (Ẩn trên Mobile) */}
+                                            <div className="hidden md:flex items-center px-4 py-4 bg-slate-950/80 border-b border-cyan-900/50 text-xs font-black text-cyan-400 uppercase tracking-widest">
+                                                <div className="w-12 text-center shrink-0">TT</div>
+                                                <div className="flex-1 px-4">Tên Đề / Mã</div>
+                                                <div className="w-28 text-center shrink-0">Ngày Tạo</div>
+                                                <div className="w-20 text-center shrink-0">Số Câu</div>
+                                                <div className="w-24 text-center shrink-0">Thời Gian</div>
+                                                <div className="w-40 px-2 shrink-0">Giáo Viên</div>
+                                                <div className="w-40 text-center shrink-0">Thao Tác</div>
+                                            </div>
+
+                                            {/* Danh sách Đề Thi */}
+                                            <div className="flex flex-col divide-y divide-slate-800/60">
+                                                {visibleExams.map((exam, index) => (
+                                                    <div key={`exam-${exam.id}`} className="flex flex-col md:flex-row md:items-center px-4 py-5 md:px-4 md:py-3 hover:bg-slate-800/60 transition-colors group relative gap-4 md:gap-0">
+                                                        
+                                                        {/* Top Row Mobile: TT + Ngày */}
+                                                        <div className="flex justify-between items-center md:hidden w-full mb-1">
+                                                            <span className="text-[10px] text-slate-400 font-black bg-black/50 px-2.5 py-1 rounded-md border border-slate-800">#{index + 1}</span>
+                                                            <div className="text-[10px] text-slate-400 flex items-center gap-1 bg-black/40 px-2.5 py-1 rounded-md border border-slate-800">
+                                                                <CalendarDays size={12}/> {formatDate(exam.createdAt)}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Desktop Index */}
+                                                        <div className="hidden md:flex w-12 justify-center text-slate-500 font-mono font-bold text-sm shrink-0 z-10">
+                                                            {index + 1}
+                                                        </div>
+
+                                                        {/* CLICKABLE TITLE */}
+                                                        <div 
+                                                            className="flex-1 md:px-4 cursor-pointer z-10" 
+                                                            onClick={() => router.push(`/pdf-play/${exam.code}`)}
+                                                            title="Nhấn vào đây để vào thi"
+                                                        >
+                                                            <div className="font-black text-white text-lg md:text-lg mb-1.5 md:mb-1 group-hover:text-cyan-300 transition-colors line-clamp-2 drop-shadow-md">
+                                                                {exam.title}
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-700 shadow-[0_0_10px_rgba(6,182,212,0.2)] tracking-widest uppercase">Mã: {exam.code}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Desktop Date */}
+                                                        <div className="hidden md:flex w-28 justify-center text-slate-400 text-xs font-mono shrink-0 z-10">
+                                                            <div className="flex items-center justify-center gap-1.5 bg-slate-900/80 px-2 py-1.5 rounded-lg border border-slate-700">
+                                                                <CalendarDays size={12}/> {formatDate(exam.createdAt)}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Stats Box */}
+                                                        <div className="flex items-center justify-between md:justify-start bg-black/40 md:bg-transparent p-3 md:p-0 rounded-xl border border-slate-800 md:border-none w-full md:w-auto mt-1 md:mt-0 z-10 gap-2 md:gap-0">
+                                                            
+                                                            <div className="flex flex-col items-center w-auto md:w-20 shrink-0">
+                                                                <div className="text-[9px] text-slate-500 uppercase tracking-widest md:hidden mb-1">Số câu</div>
+                                                                <span className="text-white font-black text-base md:text-lg bg-slate-900 w-10 h-10 flex items-center justify-center rounded-xl border border-slate-700 shadow-inner">{exam.totalQuestions}</span>
+                                                            </div>
+
+                                                            <div className="h-8 w-px bg-slate-800 md:hidden mx-1"></div>
+
+                                                            <div className="flex flex-col items-center w-auto md:w-24 shrink-0">
+                                                                <div className="text-[9px] text-slate-500 uppercase tracking-widest md:hidden mb-1">Thời gian</div>
+                                                                <div className="text-orange-400 font-black text-base md:text-lg flex flex-col items-center leading-none drop-shadow-[0_0_8px_rgba(249,115,22,0.5)]">
+                                                                    {exam.timeLimit} <span className="text-[9px] uppercase tracking-widest text-slate-500 mt-1">Phút</span>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="h-8 w-px bg-slate-800 md:hidden mx-1"></div>
+
+                                                            <div className="flex items-center gap-2 md:w-40 md:px-2 shrink-0 justify-end md:justify-start max-w-[40%] md:max-w-none">
+                                                                <div className="hidden md:flex w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 items-center justify-center text-[10px] font-black text-white shrink-0 shadow-[0_0_10px_rgba(168,85,247,0.6)]">
+                                                                    {(exam.authorName || exam.authorEmail || 'G').charAt(0).toUpperCase()}
+                                                                </div>
+                                                                <div className="flex flex-col items-end md:items-start overflow-hidden">
+                                                                    <div className="text-[9px] text-slate-500 uppercase tracking-widest md:hidden mb-1">Giáo viên</div>
+                                                                    <span className="text-xs font-bold text-slate-300 truncate w-full group-hover:text-white transition-colors text-right md:text-left" title={exam.authorName || exam.authorEmail}>
+                                                                        {exam.authorName || exam.authorEmail || 'Arena GV'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* ACTION BUTTON (Nút VÀO THI 3D Nổi Bật Cho Mobile) */}
+                                                        <div className="w-full md:w-40 shrink-0 z-10 mt-4 md:mt-0 px-1 md:px-0">
+                                                            <button 
+                                                                type="button"
+                                                                onClick={(e) => { e.stopPropagation(); router.push(`/pdf-play/${exam.code}`); }} 
+                                                                className="w-full bg-gradient-to-b from-cyan-400 to-blue-600 md:bg-gradient-to-r md:from-cyan-600 md:to-blue-600 border border-cyan-300 text-white py-3.5 md:py-2.5 rounded-2xl md:rounded-xl font-black text-base md:text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-[0_6px_0_#1e3a8a,0_15px_25px_rgba(6,182,212,0.4)] active:shadow-[0_0px_0_#1e3a8a,0_0px_0_rgba(6,182,212,0.4)] active:translate-y-[6px] md:shadow-[0_0_20px_rgba(6,182,212,0.5)] md:active:translate-y-0 md:hover:scale-105 group-hover:border-white animate-pulse md:animate-none md:group-hover:animate-pulse"
+                                                            >
+                                                                <Play size={20} fill="currentColor" className="drop-shadow-md md:w-4 md:h-4"/> 
+                                                                VÀO THI NGAY
+                                                            </button>
+                                                        </div>
+
+                                                    </div>
+                                                ))}
                                             </div>
                                             
                                             {hasMore && (
-                                                <div className="bg-slate-900/80 border-t border-cyan-900/50 p-3 flex justify-center backdrop-blur-sm">
+                                                <div className="bg-slate-900/80 border-t border-cyan-900/50 p-4 flex justify-center backdrop-blur-sm">
                                                     <button 
                                                         onClick={() => toggleExpand(subject)} 
-                                                        className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 font-bold text-xs uppercase tracking-widest transition-colors bg-cyan-900/20 hover:bg-cyan-900/40 px-6 py-2 rounded-full border border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.2)]"
+                                                        className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 font-bold text-xs uppercase tracking-widest transition-colors bg-cyan-900/20 hover:bg-cyan-900/40 px-6 py-2.5 rounded-full border border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.2)]"
                                                     >
                                                         {isExpanded ? <><ChevronUp size={16}/> Thu gọn danh sách</> : <><ChevronDown size={16}/> Xem thêm {subExams.length - 5} đề nữa</>}
                                                     </button>
