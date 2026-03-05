@@ -76,10 +76,12 @@ export default function PDFManager() {
 
     const fetchStudentResults = async (userId, tCode) => {
         try {
-            const q1 = query(collection(firestore, "exam_results"), where("teacherId", "==", userId));
+            // Sửa tại đây: Thay exam_results thành pdf_exam_results
+            const q1 = query(collection(firestore, "pdf_exam_results"), where("teacherId", "==", userId));
             const snap1 = await getDocs(q1);
             
-            const q2 = query(collection(firestore, "exam_results"), where("teacherCode", "==", tCode));
+            // Sửa tại đây: Thay exam_results thành pdf_exam_results
+            const q2 = query(collection(firestore, "pdf_exam_results"), where("teacherCode", "==", tCode));
             const snap2 = await getDocs(q2);
 
             const uniqueMap = new Map();
@@ -322,7 +324,8 @@ export default function PDFManager() {
                 const row = studentResults.find(r => r.key === key);
                 if(row) idsToDelete.push(...row.docIds);
             });
-            for(const id of idsToDelete) { await deleteDoc(doc(firestore, "exam_results", id)); }
+            // Sửa tại đây: Thay exam_results thành pdf_exam_results để lệnh xóa hoạt động chính xác
+            for(const id of idsToDelete) { await deleteDoc(doc(firestore, "pdf_exam_results", id)); }
             setSelectedRows([]);
             await fetchStudentResults(user.uid, myTeacherCode); 
             alert("✅ Đã xóa thành công!");
