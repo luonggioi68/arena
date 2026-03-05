@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import { firestore } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import useAuthStore from '@/store/useAuthStore';
-import { Timer, Send, Shield, CheckCircle, User, FileText, Edit3, Eye, PenTool, ArrowLeft, Zap, Target, Trophy, Lock } from 'lucide-react';
+import { Timer, Send, Shield, CheckCircle, User, FileText, Edit3, Eye, EyeOff, PenTool, ArrowLeft, Zap, Target, Trophy, Lock, Users, Key } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function PDFPlay() {
@@ -15,11 +15,16 @@ export default function PDFPlay() {
     const [loading, setLoading] = useState(true);
     const [studentInfo, setStudentInfo] = useState({ name: '', isGuest: true });
     
+    // State ghi danh mới
+    const [teacherCodeInput, setTeacherCodeInput] = useState('');
+    const [studentClassInput, setStudentClassInput] = useState('');
+    
     const [isStarted, setIsStarted] = useState(false);
     const [timeLeft, setTimeLeft] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isFinished, setIsFinished] = useState(false);
     const [score, setScore] = useState(0);
+    const [showAnswerKey, setShowAnswerKey] = useState(false); // State show đáp án
 
     const [answers, setAnswers] = useState({ part1: {}, part2: {}, part3: {} });
 
@@ -120,13 +125,19 @@ export default function PDFPlay() {
             const finalScore = calculateScore();
             setScore(finalScore);
 
+            // Lưu vào collection exam_results để file pdf-manager đọc được
             if (!studentInfo.isGuest) {
-                await addDoc(collection(firestore, "pdf_exam_results"), {
+                await addDoc(collection(firestore, "exam_results"), {
                     examId: exam.id, 
                     examCode: exam.code,
                     examTitle: exam.title,
                     studentName: studentInfo.name, 
-                    studentClass: exam.grade || 'Tự do',
+                    studentEmail: user?.email || '',
+                    studentClassName: studentClassInput || 'Chưa phân lớp', // Lấy từ ô input
+                    teacherCode: teacherCodeInput || '', // Lấy từ ô input
+                    teacherId: exam.authorId || '', // Gắn ID GV tạo đề
+                    grade: exam.grade || 'Khác',
+                    subject: exam.subject || 'Khác',
                     score: parseFloat(finalScore),
                     answers: answers,
                     submittedAt: serverTimestamp()
@@ -148,7 +159,7 @@ export default function PDFPlay() {
     });
 
     if (loading) return <div className="h-screen bg-[#09090b] flex items-center justify-center text-orange-500 font-black animate-pulse text-2xl drop-shadow-[0_0_15px_rgba(249,115,22,0.8)]"><Zap className="inline mr-2" size={30}/> ĐANG GIẢI MÃ...</div>;
-    if (!exam) return <div className="h-screen bg-[#09090b] flex items-center justify-center text-red-500 font-black text-xl"><Target className="inline mr-2" size={24}/> M mã CHIẾN DỊCH KHÔNG TỒN TẠI!</div>;
+    if (!exam) return <div className="h-screen bg-[#09090b] flex items-center justify-center text-red-500 font-black text-xl"><Target className="inline mr-2" size={24}/> MÃ CHIẾN DỊCH KHÔNG TỒN TẠI!</div>;
 
     const securePdfUrl = exam.pdfUrl?.replace('http://', 'https://');
 
@@ -168,7 +179,7 @@ export default function PDFPlay() {
                         <span className="bg-orange-950/50 px-3 py-1 rounded-lg border border-orange-500/30">{exam.totalQuestions} Câu</span>
                     </div>
 
-                    <div className="bg-gradient-to-r from-[#0a0a0a] to-red-950/30 border border-orange-500/30 p-4 rounded-2xl mb-8 flex items-center justify-between shadow-inner">
+                    <div className="bg-gradient-to-r from-[#0a0a0a] to-red-950/30 border border-orange-500/30 p-4 rounded-2xl mb-6 flex items-center justify-between shadow-inner">
                         <div className="text-left flex items-center gap-3">
                             <div className="bg-orange-500/20 p-2 rounded-full border border-orange-500/50 text-orange-400"><User size={20}/></div>
                             <div>
@@ -178,6 +189,28 @@ export default function PDFPlay() {
                         </div>
                         <CheckCircle size={24} className="text-emerald-500 drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]"/>
                     </div>
+
+                    {/* KHU VỰC ĐIỀN THÔNG TIN NẾU LÀ HỌC SINH ĐĂNG NHẬP */}
+                    {!studentInfo.isGuest && (
+                        <div className="flex flex-col gap-3 mb-8 animate-in fade-in slide-in-from-bottom-2">
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-orange-500/50"><Key size={18}/></div>
+                                <input 
+                                    type="text" value={teacherCodeInput} onChange={e => setTeacherCodeInput(e.target.value.toUpperCase())}
+                                    placeholder="Nhập Mã Giáo Viên (Nếu có)" 
+                                    className="w-full bg-black/50 border border-orange-500/30 text-orange-200 text-sm font-bold rounded-xl pl-12 pr-4 py-3.5 outline-none focus:border-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] transition-all placeholder:text-orange-900/60 uppercase"
+                                />
+                            </div>
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-orange-500/50"><Users size={18}/></div>
+                                <input 
+                                    type="text" value={studentClassInput} onChange={e => setStudentClassInput(e.target.value.toUpperCase())}
+                                    placeholder="Lớp của bạn (VD: 12A1)" 
+                                    className="w-full bg-black/50 border border-orange-500/30 text-orange-200 text-sm font-bold rounded-xl pl-12 pr-4 py-3.5 outline-none focus:border-orange-500 focus:shadow-[0_0_15px_rgba(249,115,22,0.3)] transition-all placeholder:text-orange-900/60 uppercase"
+                                />
+                            </div>
+                        </div>
+                    )}
 
                     <button onClick={() => setIsStarted(true)} className="w-full bg-gradient-to-b from-orange-500 to-red-600 border-b-4 border-red-900 active:translate-y-1 active:border-b-0 text-white py-4 rounded-2xl font-black text-xl uppercase tracking-widest shadow-[0_0_30px_rgba(249,115,22,0.4)] transition-all flex items-center justify-center gap-2">
                         BẮT ĐẦU CHIẾN DỊCH
@@ -193,22 +226,100 @@ export default function PDFPlay() {
             <div className="min-h-screen bg-[#09090b] flex items-center justify-center p-4 font-sans relative overflow-hidden">
                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-yellow-600/20 via-transparent to-transparent pointer-events-none"></div>
                  
-                 <div className="bg-[#0f172a]/90 backdrop-blur-xl border-2 border-yellow-500/50 p-8 md:p-10 rounded-[2.5rem] w-full max-w-md text-center relative z-10 animate-in zoom-in">
-                    <Trophy size={80} className="text-yellow-400 mx-auto mb-6 drop-shadow-[0_0_30px_rgba(250,204,21,0.8)]"/>
-                    <h2 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 to-orange-500 uppercase italic tracking-tighter mb-2 drop-shadow-md">HOÀN THÀNH</h2>
-                    <p className="text-orange-200 font-bold uppercase tracking-widest text-xs mb-8">Chiến binh: <span className="text-white">{studentInfo.name}</span></p>
-                    
-                    <div className="bg-black/80 border-2 border-yellow-500/30 p-8 rounded-3xl mb-8 shadow-[inset_0_0_30px_rgba(250,204,21,0.1)] relative">
-                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow-500 text-black font-black text-[10px] px-3 py-1 rounded-full uppercase tracking-widest">TỔNG ĐIỂM</div>
-                        <p className="text-7xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-orange-400 to-red-500 drop-shadow-lg">
-                            {score}
-                        </p>
+                 <div className="bg-[#0f172a]/90 backdrop-blur-xl border-2 border-yellow-500/50 p-6 md:p-10 rounded-[2.5rem] w-full max-w-lg text-center relative z-10 animate-in zoom-in max-h-[95vh] flex flex-col">
+                    <div className="shrink-0">
+                        <Trophy size={60} className="text-yellow-400 mx-auto mb-4 drop-shadow-[0_0_30px_rgba(250,204,21,0.8)]"/>
+                        <h2 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 to-orange-500 uppercase italic tracking-tighter mb-2 drop-shadow-md">HOÀN THÀNH</h2>
+                        <p className="text-orange-200 font-bold uppercase tracking-widest text-xs mb-6">Chiến binh: <span className="text-white">{studentInfo.name}</span></p>
+                        
+                        <div className="bg-black/80 border-2 border-yellow-500/30 p-6 rounded-3xl mb-6 shadow-[inset_0_0_30px_rgba(250,204,21,0.1)] relative">
+                            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow-500 text-black font-black text-[10px] px-3 py-1 rounded-full uppercase tracking-widest">TỔNG ĐIỂM</div>
+                            <p className="text-7xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-orange-400 to-red-500 drop-shadow-lg">
+                                {score}
+                            </p>
+                        </div>
                     </div>
 
-                    <button onClick={() => router.push('/arena-on-thi')} className="w-full bg-gradient-to-b from-slate-700 to-slate-900 border-b-4 border-black active:translate-y-1 active:border-b-0 hover:from-slate-600 hover:to-slate-800 text-white py-4 rounded-xl font-black uppercase tracking-widest transition-all shadow-lg">
+                    {/* HIỂN THỊ ĐÁP ÁN NẾU GV CHO PHÉP */}
+                    {exam.showAnswers && (
+                        <div className="flex-1 min-h-0 flex flex-col mb-6">
+                            <button onClick={() => setShowAnswerKey(!showAnswerKey)} className="text-orange-400 font-bold text-xs uppercase flex items-center justify-center gap-2 mx-auto mb-3 hover:text-white transition-colors bg-orange-900/30 px-4 py-2 rounded-full border border-orange-500/30">
+                                {showAnswerKey ? <EyeOff size={16}/> : <Eye size={16}/>} 
+                                {showAnswerKey ? 'ĐÓNG ĐÁP ÁN CHI TIẾT' : 'XEM ĐÁP ÁN CHI TIẾT'}
+                            </button>
+                            
+                            {showAnswerKey && (
+                                <div className="bg-black/60 border border-yellow-500/30 rounded-2xl p-4 text-left overflow-y-auto custom-scrollbar text-sm space-y-4 animate-in slide-in-from-top-2">
+                                    {exam.answerKey?.part1 && Object.keys(exam.answerKey.part1).length > 0 && (
+                                        <div>
+                                            <h4 className="text-orange-500 font-black mb-2 border-b border-orange-900/50 pb-1 text-xs">I. TRẮC NGHIỆM</h4>
+                                            <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                                                {Object.entries(exam.answerKey.part1).sort(([a],[b])=>a-b).map(([q, a]) => (
+                                                    <div key={q} className="flex gap-1 text-[11px] sm:text-xs bg-slate-900/50 px-1 py-0.5 rounded">
+                                                        <span className="text-slate-400 font-bold">{q}.</span>
+                                                        <span className={answers.part1[q] === a ? "text-emerald-400 font-black" : "text-red-400 font-black"}>{a}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {exam.answerKey?.part2 && Object.keys(exam.answerKey.part2).length > 0 && (
+                                        <div>
+                                            <h4 className="text-yellow-500 font-black mb-2 border-b border-yellow-900/50 pb-1 text-xs">II. ĐÚNG/SAI</h4>
+                                            <div className="space-y-1.5">
+                                                {Object.entries(exam.answerKey.part2).sort(([a],[b])=>a-b).map(([q, ansArr]) => (
+                                                    <div key={q} className="flex items-center gap-2 bg-slate-900/50 p-1.5 rounded">
+                                                        <span className="text-slate-400 font-bold text-xs w-10">Câu {q}:</span>
+                                                        <div className="flex gap-2">
+                                                            {ansArr.map((a, i) => {
+                                                                const stuAns = answers.part2[q]?.[i];
+                                                                const isCorrect = stuAns === a;
+                                                                return (
+                                                                    <span key={i} className={`px-1.5 py-0.5 rounded text-[10px] font-black ${isCorrect ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-800' : 'bg-red-900/30 text-red-400 border border-red-800 line-through'}`}>
+                                                                        {['a','b','c','d'][i]}:{a}
+                                                                    </span>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {exam.answerKey?.part3 && Object.keys(exam.answerKey.part3).length > 0 && (
+                                        <div>
+                                            <h4 className="text-red-500 font-black mb-2 border-b border-red-900/50 pb-1 text-xs">III. TRẢ LỜI NGẮN</h4>
+                                            <div className="space-y-1.5">
+                                                {Object.entries(exam.answerKey.part3).sort(([a],[b])=>a-b).map(([q, a]) => {
+                                                    const stuAns = String(answers.part3[q] || "").trim().toLowerCase();
+                                                    const trueAns = String(a || "").trim().toLowerCase();
+                                                    const isCorrect = stuAns === trueAns && stuAns !== "";
+                                                    return (
+                                                        <div key={q} className="flex justify-between items-center bg-slate-900/50 p-1.5 rounded">
+                                                            <span className="text-slate-400 font-bold text-[11px] sm:text-xs">Câu {q}:</span>
+                                                            <span className="text-slate-500 text-[10px] sm:text-xs">Bạn điền: <span className={isCorrect ? "text-emerald-400 font-bold" : "text-red-400 line-through font-bold"}>{answers.part3[q] || 'trống'}</span></span>
+                                                            <span className="text-emerald-400 font-black text-[11px] sm:text-xs">Đ/A: {a}</span>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <button onClick={() => router.push('/arena-on-thi')} className="w-full shrink-0 bg-gradient-to-b from-slate-700 to-slate-900 border-b-4 border-black active:translate-y-1 active:border-b-0 hover:from-slate-600 hover:to-slate-800 text-white py-4 rounded-xl font-black uppercase tracking-widest transition-all shadow-lg">
                         VỀ TRANG CHỦ
                     </button>
                  </div>
+                 
+                 <style jsx>{`
+                    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                    .custom-scrollbar::-webkit-scrollbar-thumb { background: #eab308; border-radius: 4px; }
+                 `}</style>
             </div>
         );
     }
