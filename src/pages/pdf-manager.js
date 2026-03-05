@@ -20,6 +20,18 @@ const SUBJECTS = [
     { id: 'Khác', name: 'Khác' }
 ];
 
+// Hàm chuyển đổi UID thành mã đúng 6 số cố định
+const generateNumericCode = (uid) => {
+    if (!uid) return '---';
+    let hash = 0;
+    for (let i = 0; i < uid.length; i++) {
+        hash = (hash << 5) - hash + uid.charCodeAt(i);
+        hash |= 0; // Chuyển thành số nguyên 32bit
+    }
+    // Lấy trị tuyệt đối, chia lấy dư cho 1.000.000 và thêm số 0 ở đầu nếu cần
+    return Math.abs(hash % 1000000).toString().padStart(6, '0');
+};
+
 export default function PDFManager() {
     const router = useRouter();
     const { user, setUser } = useAuthStore();
@@ -32,7 +44,8 @@ export default function PDFManager() {
     const [isUploadingPdf, setIsUploadingPdf] = useState(false);
     const [editingExamId, setEditingExamId] = useState(null); 
     
-    const myTeacherCode = user?.uid?.substring(0, 6).toUpperCase() || '---';
+    // Áp dụng hàm tạo mã 6 số thay cho hàm cắt chuỗi cũ
+    const myTeacherCode = generateNumericCode(user?.uid);
 
     const [studentResults, setStudentResults] = useState([]);
     const [filterGrade, setFilterGrade] = useState('Tất cả');
@@ -57,7 +70,9 @@ export default function PDFManager() {
                 if (configSnap.exists()) setUserConfig(configSnap.data());
                 
                 await fetchPdfExams(currentUser.uid);
-                await fetchStudentResults(currentUser.uid, currentUser.uid.substring(0, 6).toUpperCase());
+                
+                // Đồng bộ mã 6 số vào hàm fetch
+                await fetchStudentResults(currentUser.uid, generateNumericCode(currentUser.uid));
 
             } catch (e) { console.error(e); } finally { setLoading(false); }
         });
@@ -76,19 +91,15 @@ export default function PDFManager() {
 
     const fetchStudentResults = async (userId, tCode) => {
         try {
-            // Sửa tại đây: Thay exam_results thành pdf_exam_results
             const q1 = query(collection(firestore, "pdf_exam_results"), where("teacherId", "==", userId));
             const snap1 = await getDocs(q1);
             
-            // Sửa tại đây: Thay exam_results thành pdf_exam_results
             const q2 = query(collection(firestore, "pdf_exam_results"), where("teacherCode", "==", tCode));
             const snap2 = await getDocs(q2);
 
             const uniqueMap = new Map();
-            // Lấy thêm docId vào data để dễ thao tác xóa sau này
             [...snap1.docs, ...snap2.docs].forEach(d => uniqueMap.set(d.id, { ...d.data(), docId: d.id }));
 
-            // Sắp xếp theo thời gian nộp bài tăng dần để lượt 1, lượt 2 hiển thị đúng chuẩn
             const sortedDocs = Array.from(uniqueMap.values()).sort((a, b) => {
                 const timeA = a.submittedAt?.seconds || 0;
                 const timeB = b.submittedAt?.seconds || 0;
@@ -118,7 +129,6 @@ export default function PDFManager() {
                 stats[key].scores.push(score);
             });
 
-            // Vẫn sắp xếp danh sách ưu tiên người có điểm cao nhất ở một lượt nào đó lên đầu
             const resultsArray = Object.values(stats).sort((a,b) => Math.max(...b.scores) - Math.max(...a.scores));
             setStudentResults(resultsArray);
 
@@ -324,7 +334,6 @@ export default function PDFManager() {
                 const row = studentResults.find(r => r.key === key);
                 if(row) idsToDelete.push(...row.docIds);
             });
-            // Sửa tại đây: Thay exam_results thành pdf_exam_results để lệnh xóa hoạt động chính xác
             for(const id of idsToDelete) { await deleteDoc(doc(firestore, "pdf_exam_results", id)); }
             setSelectedRows([]);
             await fetchStudentResults(user.uid, myTeacherCode); 
@@ -348,7 +357,7 @@ export default function PDFManager() {
                         </button>
                         <div className="h-6 w-px bg-cyan-500/30"></div>
                         <div className="flex items-center gap-2 font-black italic text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 uppercase tracking-tighter text-xl drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]">
-                            <Shield className="text-cyan-400" size={24} /> QUẢN TRỊ ARENA
+                            <Shield className="text-cyan-400" size={24} /> QUẢN TRỊ ARENA ÔN THI
                         </div>
                     </div>
 
