@@ -3,14 +3,15 @@ import { useRouter } from 'next/router';
 import { 
     signInWithPopup, signOut, onAuthStateChanged, 
     createUserWithEmailAndPassword, signInWithEmailAndPassword, 
-    sendPasswordResetEmail, updateProfile 
+    sendPasswordResetEmail, updateProfile, 
+    sendEmailVerification // [MỚI] Thêm hàm gửi email xác thực
 } from 'firebase/auth';
 import { auth, googleProvider, firestore } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, increment, onSnapshot, setDoc, serverTimestamp, addDoc, collection } from 'firebase/firestore'; 
+import { doc, getDoc, updateDoc, increment, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore'; 
 import useAuthStore from '@/store/useAuthStore';
 import { 
     LogIn, LogOut, Sword, Shield, BookOpen, Users, X, ArrowRight, 
-    Gamepad2, Settings, UploadCloud, Zap, Eye, Target, Disc, BarChart2,
+    Gamepad2, Settings, Zap, Target, Disc, BarChart2,
     Mail, Lock, User, Phone, CheckCircle, AlertCircle, Trophy
 } from 'lucide-react';
 
@@ -73,7 +74,6 @@ export default function HomePage() {
           const userSnap = await getDoc(userRef);
 
           if (!userSnap.exists()) {
-              // NẾU TÀI KHOẢN MỚI -> LƯU VÀO DB VÀ ĐẨY SANG SETUP-CONFIG
               await setDoc(userRef, {
                   name: user.displayName,
                   email: user.email,
@@ -85,7 +85,6 @@ export default function HomePage() {
               setShowAuthModal(false);
               router.push('/setup-config'); 
           } else {
-              // NẾU TÀI KHOẢN ĐÃ CÓ -> ĐẨY THẲNG VÀO DASHBOARD
               setShowAuthModal(false);
               router.push('/dashboard');
           }
@@ -106,6 +105,9 @@ export default function HomePage() {
               const user = userCredential.user;
               await updateProfile(user, { displayName: authData.name });
 
+              // [MỚI] GỬI EMAIL XÁC THỰC SAU KHI TẠO TÀI KHOẢN
+              await sendEmailVerification(user);
+
               await setDoc(doc(firestore, 'users', user.uid), {
                   name: authData.name,
                   email: authData.email,
@@ -116,16 +118,47 @@ export default function HomePage() {
                   createdAt: serverTimestamp()
               });
 
-              setShowAuthModal(false);
-              router.push('/setup-config'); 
+              // [MỚI] ĐĂNG XUẤT NGAY ĐỂ ÉP NGƯỜI DÙNG VÀO MAIL KÍCH HOẠT
+              await signOut(auth);
+              
+              setAuthSuccess("Đăng ký thành công! Vui lòng kiểm tra hộp thư Email (kể cả Thư rác/Spam) để kích hoạt tài khoản.");
+              
+              // Chuyển về màn hình đăng nhập sau 5 giây
+              setTimeout(() => {
+                  setAuthMode('LOGIN');
+                  setAuthSuccess('');
+                  setAuthData({...authData, password: ''}); // Xóa pass cho an toàn
+              }, 5000);
 
-          } else if (authMode === 'LOGIN') {
-              await signInWithEmailAndPassword(auth, authData.email, authData.password);
+        } else if (authMode === 'LOGIN') {
+              const userCredential = await signInWithEmailAndPassword(auth, authData.email, authData.password);
+              const user = userCredential.user;
+
+              // 1. KIỂM TRA XEM ĐÃ BẤM VÀO LINK TRONG MAIL CHƯA
+              if (!user.emailVerified) {
+                  await signOut(auth); 
+                  setAuthError("Tài khoản chưa được kích hoạt! Vui lòng kiểm tra hộp thư Email của bạn để xác thực.");
+                  setAuthLoading(false);
+                  return; 
+              }
+
+              // 2. [MỚI FIX] KIỂM TRA XEM ĐÃ CẤU HÌNH SETUP-CONFIG CHƯA
+              const configRef = doc(firestore, 'user_configs', user.uid);
+              const configSnap = await getDoc(configRef);
+
               setShowAuthModal(false);
-              router.push('/dashboard');
+              
+              if (!configSnap.exists()) {
+                  // Nếu chưa có file cấu hình (Đăng nhập lần đầu sau khi kích hoạt) -> Đẩy qua trang Setup
+                  router.push('/setup-config');
+              } else {
+                  // Nếu đã cấu hình rồi (Đăng nhập các lần sau) -> Vào thẳng Dashboard
+                  router.push('/dashboard');
+              }
           }
       } catch (error) {
           if (error.code === 'auth/invalid-credential') setAuthError("Email hoặc mật khẩu không chính xác!");
+          else if (error.code === 'auth/email-already-in-use') setAuthError("Email này đã được đăng ký trước đó!");
           else setAuthError(error.message);
       } finally {
           setAuthLoading(false);
@@ -220,7 +253,6 @@ export default function HomePage() {
       {homeConfig.leftBanner && (<div className="fixed top-0 left-0 w-[15%] h-full hidden 2xl:block z-0 pointer-events-none"><img src={homeConfig.leftBanner} className="w-full h-full object-cover opacity-80 mask-image-right"/></div>)}
       {homeConfig.rightBanner && (<div className="fixed top-0 right-0 w-[15%] h-full hidden 2xl:block z-0 pointer-events-none"><img src={homeConfig.rightBanner} className="w-full h-full object-cover opacity-80 mask-image-left"/></div>)}
 
-      {/* HEADER */}
       <header className="h-[50px] md:h-[60px] shrink-0 z-[100] transition-all duration-300 bg-black/40 backdrop-blur-md border-b border-white/5 shadow-lg relative">
           {homeConfig.topBanner && (
               <div className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden">
@@ -275,7 +307,6 @@ export default function HomePage() {
           </div>
       </header>
 
-      {/* MARQUEE */}
       {homeConfig.marqueeText && (
           <div className="w-full bg-gradient-to-r from-red-600 to-orange-600 border-b border-orange-500/50 text-white overflow-hidden flex items-center h-5 md:h-8 shrink-0 relative z-40">
               <div className="animate-marquee whitespace-nowrap font-bold text-[8px] md:text-xs tracking-widest drop-shadow-md flex items-center gap-3">
@@ -286,18 +317,16 @@ export default function HomePage() {
           </div>
       )}
         
-      {/* MAIN CONTENT - KHÓA OVERFLOW ĐỂ NGĂN CUỘN */}
       <div className="flex-1 w-full lg:max-w-[80%] 2xl:max-w-[70%] mx-auto flex flex-col gap-2 md:gap-3 px-2 md:px-4 py-2 min-h-0 overflow-hidden">
           
-          {/* MENU 8 Ô RỰC LỬA - CẬP NHẬT VỊ TRÍ NÚT */}
           <div className="w-full grid grid-cols-4 md:grid-cols-8 gap-1.5 md:gap-2 shrink-0 relative z-20">
               {[...Array(8)].map((_, index) => {
                   const isKHBD = index === 0;
                   const isTest = index === 1;
                   const isMixer = index === 2; 
-                  const isDuplicate = index === 3; // Nút Nhân Bản Đề mới ở ô 4
-                   const isquestion = index === 4; // Nút Câu hỏi mới ở ô 5
-                  const isSubmit = index === 7; // Dời Cổng Nộp Bài về ô 8
+                  const isDuplicate = index === 3; 
+                  const isquestion = index === 4; 
+                  const isSubmit = index === 7; 
                   
                   const title = isKHBD ? "Soạn KHBD" : 
                                 isTest ? "Soạn Đề KT" : 
@@ -313,8 +342,8 @@ export default function HomePage() {
                               if (isKHBD) router.push('/lesson-plan');
                               if (isTest) router.push('/create-test');
                               if (isMixer) router.push('/mixer'); 
-                              if (isDuplicate) router.push('/clone-test'); // Bạn nhớ tạo route trang này nếu chưa có nhé
-                               if (isquestion) router.push('/generate-questions'); // Bạn nhớ tạo route trang này nếu chưa có nhé
+                              if (isDuplicate) router.push('/clone-test');
+                              if (isquestion) router.push('/generate-questions');
                               if (isSubmit) router.push('/submit');
                           }
                       }
@@ -340,9 +369,7 @@ export default function HomePage() {
               })}
           </div>
 
-          {/* THANH LUYỆN TẬP - VÁ LỖI HIỂN THỊ MOBILE */}
           <div className="shrink-0 w-full bg-black/80 backdrop-blur-xl border-2 border-red-600/50 rounded-lg md:rounded-2xl flex flex-row overflow-hidden shadow-lg animate-in fade-in slide-in-from-top-4 relative z-20 h-[50px] md:h-[65px]">
-                {/* Đổi flex-col md:flex-row thành flex-row luôn để tiêu đề và các lớp nằm ngang nhau */}
                 <div className="bg-gradient-to-br from-red-700 to-orange-800 px-2 md:px-3 w-[100px] sm:w-[120px] md:w-32 h-full flex items-center justify-center text-center shrink-0 border-r border-red-500/30">
                     <Target size={14} className="text-yellow-300 mr-1 md:mr-2 md:mb-0.5 animate-pulse drop-shadow-md md:w-5 md:h-5"/>
                     <h2 className="text-[10px] sm:text-xs md:text-sm font-black uppercase text-white leading-none tracking-tighter drop-shadow-md">Luyện Tập</h2>
@@ -364,7 +391,6 @@ export default function HomePage() {
                 </div>
           </div>
 
-          {/* GRID GAMES - FLEX-1 */}
           <div className="flex-1 flex flex-col min-h-0"> 
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 w-full h-full">
                   <CyberCard title="Chiến Binh Arena" subtitle="Đấu trường sinh tử" icon={Sword} color="purple" delay={0} onClick={() => openGamePortal('CLASSIC')}/>
@@ -376,7 +402,6 @@ export default function HomePage() {
               </div>
           </div>
 
-          {/* BOTTOM BAR MENU */}
           <div className="shrink-0 w-full bg-black/80 backdrop-blur-xl border-t-2 border-cyan-600/50 rounded-xl md:rounded-2xl overflow-hidden shadow-lg relative z-20 h-[55px] md:h-[70px] mt-auto">
               <div className="flex w-full h-full bg-slate-900/50 overflow-x-auto no-scrollbar md:grid md:grid-cols-8">
                   {[...Array(8)].map((_, index) => {
@@ -422,7 +447,6 @@ export default function HomePage() {
           </div>
       </div>
 
-      {/* FOOTER */}
       <footer className="h-6 md:h-8 shrink-0 bg-[#0a0a0a]/90 backdrop-blur border-t border-white/5 flex items-center justify-center px-4 z-20">
         <p className="text-center text-slate-600 text-[8px] md:text-[9px] font-bold uppercase tracking-widest leading-none">
           Lượt truy cập: <span className="text-white font-mono">{realVisitorCount.toLocaleString()}</span> <br/>
@@ -430,7 +454,6 @@ export default function HomePage() {
         </p>
       </footer>
 
-      {/* MODAL PIN */}
       {showPinModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-[#0f172a] border border-cyan-500/30 p-6 md:p-8 rounded-[2rem] w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.2)] relative animate-in zoom-in-95">
@@ -448,7 +471,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* MODAL AUTH */}
       {showAuthModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in fade-in duration-300">
             <div className="bg-[#0f172a] border border-cyan-500/30 p-6 md:p-8 rounded-[2rem] w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.2)] relative animate-in zoom-in-95">
@@ -459,6 +481,7 @@ export default function HomePage() {
                     <h2 className="text-xl md:text-2xl font-black text-white uppercase italic tracking-tighter">
                         {authMode === 'LOGIN' ? 'Đăng Nhập Giáo Viên' : authMode === 'REGISTER' ? 'Đăng Ký Giáo viên' : 'Quên Mật Khẩu'}
                     </h2>
+                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">Địa chỉ email phải đúng để kích hoạt tài khoản</p>
                     <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">Học sinh đăng nhập/đăng ký trong Luyện Tập</p>
                 </div>
 
