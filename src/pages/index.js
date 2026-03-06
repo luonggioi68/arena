@@ -130,29 +130,36 @@ export default function HomePage() {
                   setAuthData({...authData, password: ''}); // Xóa pass cho an toàn
               }, 5000);
 
-        } else if (authMode === 'LOGIN') {
+      } else if (authMode === 'LOGIN') {
               const userCredential = await signInWithEmailAndPassword(auth, authData.email, authData.password);
               const user = userCredential.user;
 
-              // 1. KIỂM TRA XEM ĐÃ BẤM VÀO LINK TRONG MAIL CHƯA
-              if (!user.emailVerified) {
+              // 1. KIỂM TRA TÀI KHOẢN CŨ HAY MỚI (Luật Đặc Xá)
+              const creationTime = new Date(user.metadata.creationTime).getTime();
+              // Mốc thời gian trước lúc cập nhật tính năng xác thực (VD: lấy ngày 5/3/2026)
+              const updateTime = new Date('2026-03-05T00:00:00').getTime(); 
+              const isOldAccount = creationTime < updateTime;
+
+              // 2. KIỂM TRA XÁC THỰC MAIL (Chỉ áp dụng với tài khoản MỚI)
+              if (!isOldAccount && !user.emailVerified) {
+                  // Tự động gửi lại mail phòng khi user làm thất lạc
+                  try { await sendEmailVerification(user); } catch(e) { console.error(e) }
+
                   await signOut(auth); 
-                  setAuthError("Tài khoản chưa được kích hoạt! Vui lòng kiểm tra hộp thư Email của bạn để xác thực.");
+                  setAuthError("Tài khoản chưa được kích hoạt! Hệ thống vừa gửi lại Email xác thực, vui lòng check hộp thư (kể cả Thư Rác) để vào hệ thống.");
                   setAuthLoading(false);
                   return; 
               }
 
-              // 2. [MỚI FIX] KIỂM TRA XEM ĐÃ CẤU HÌNH SETUP-CONFIG CHƯA
+              // 3. KIỂM TRA XEM ĐÃ CẤU HÌNH SETUP-CONFIG CHƯA (Dành cho cả tài khoản cũ & mới)
               const configRef = doc(firestore, 'user_configs', user.uid);
               const configSnap = await getDoc(configRef);
 
               setShowAuthModal(false);
               
               if (!configSnap.exists()) {
-                  // Nếu chưa có file cấu hình (Đăng nhập lần đầu sau khi kích hoạt) -> Đẩy qua trang Setup
                   router.push('/setup-config');
               } else {
-                  // Nếu đã cấu hình rồi (Đăng nhập các lần sau) -> Vào thẳng Dashboard
                   router.push('/dashboard');
               }
           }
