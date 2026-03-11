@@ -56,6 +56,11 @@ export default function PDFManager() {
     const [selectedRows, setSelectedRows] = useState([]);
     const [isDeletingStudents, setIsDeletingStudents] = useState(false);
 
+    // State lọc danh sách Đề Thi
+    const [examFilterGrade, setExamFilterGrade] = useState('Tất cả');
+    const [examFilterSubject, setExamFilterSubject] = useState('Tất cả');
+    const [isSystemFilter, setIsSystemFilter] = useState(false);
+
     const [pdfFormData, setPdfFormData] = useState({
         format: '2025', title: '', timeLimit: 45, pdfUrl: '', grade: '12', subject: 'Toán học',
         allowedClasses: '', showAnswers: false, answersP1: '', answersP2: '', answersP3: ''    
@@ -69,7 +74,8 @@ export default function PDFManager() {
                 const configSnap = await getDoc(doc(firestore, "user_configs", currentUser.uid));
                 if (configSnap.exists()) setUserConfig(configSnap.data());
                 
-                await fetchPdfExams(currentUser.uid);
+                // Mặc định lúc vào chỉ tải đề của bản thân để giảm tải trang
+                await fetchPdfExams(currentUser.uid, currentUser.email);
                 
                 // Đồng bộ mã 6 số vào hàm fetch
                 await fetchStudentResults(currentUser.uid, generateNumericCode(currentUser.uid));
@@ -79,13 +85,36 @@ export default function PDFManager() {
         return () => unsubscribe();
     }, [router, setUser]);
 
-    const fetchPdfExams = async (userId) => {
+    const fetchPdfExams = async (userId, userEmail, grade = 'Tất cả', subject = 'Tất cả', systemWide = false) => {
         try {
-            const q = query(collection(firestore, "pdf_exams"), where("authorId", "==", userId));
+            const isAdmin = userEmail === 'luonggioi68@gmail.com';
+            let qConstraints = [];
+
+            // Nếu không phải admin hoặc admin nhưng không bật lọc toàn hệ thống (để trang nhẹ ban đầu)
+            if (!isAdmin || !systemWide) {
+                qConstraints.push(where("authorId", "==", userId));
+            } else {
+                // Admin đang tìm kiếm trên toàn hệ thống
+                if (grade !== 'Tất cả') {
+                    qConstraints.push(where("grade", "==", grade));
+                }
+            }
+
+            const q = query(collection(firestore, "pdf_exams"), ...qConstraints);
             const s = await getDocs(q);
-            const list = s.docs.map(d => ({ id: d.id, ...d.data() }));
+            let list = s.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            // Lọc cục bộ các tham số còn lại
+            if (grade !== 'Tất cả' && (!isAdmin || !systemWide)) {
+                 list = list.filter(exam => exam.grade === grade);
+            }
+            if (subject !== 'Tất cả') {
+                 list = list.filter(exam => exam.subject === subject);
+            }
+
             list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
             setPdfExams(list);
+            setIsSystemFilter(systemWide); // Lưu trạng thái có đang hiển thị toàn bộ hay không
         } catch (e) { console.error(e); }
     };
 
@@ -111,9 +140,7 @@ export default function PDFManager() {
                 // Giữ nguyên dòng loại bỏ tài khoản Khách
                 if (!data.studentName || data.studentName.includes('Khách_')) return;
 
-                // 🔴 THÊM DÒNG NÀY ĐỂ FIX LỖI:
                 // Chỉ hiển thị nếu học sinh nhập ĐÚNG Mã GV của thầy. 
-                // (Thêm data.teacherCode !== undefined để không làm mất dữ liệu từ các kỳ thi cũ)
                 if (data.teacherCode !== undefined && data.teacherCode !== tCode) return;
 
                 const grade = data.grade || 'Khác';
@@ -152,19 +179,23 @@ export default function PDFManager() {
         setIsUploadingPdf(true);
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("upload_preset", userConfig.cloudinaryPreset || 'gameedu'); 
+        // Ép buộc dùng chung Cloudinary của hệ thống để tránh lỗi CORS cho giáo viên khác
+        formData.append("upload_preset", 'gameedu'); 
 
         try {
-            const cloudName = userConfig.cloudinaryName || 'dcnsjzq0i'; 
+            const cloudName = 'dcnsjzq0i'; 
             const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: "POST", body: formData });
             const data = await res.json();
             if (data.secure_url) {
                 let finalUrl = data.secure_url;
-                if (!finalUrl.endsWith('.pdf')) finalUrl += '.pdf';
+                if (!finalUrl.toLowerCase().endsWith('.pdf')) finalUrl += '.pdf';
                 setPdfFormData(prev => ({ ...prev, pdfUrl: finalUrl }));
             } else { alert("Lỗi Cloudinary: " + (data.error?.message || "Không xác định")); }
         } catch (err) { alert("Lỗi mạng: " + err.message); } 
-        finally { setIsUploadingPdf(false); }
+        finally { 
+            setIsUploadingPdf(false); 
+            e.target.value = ''; // Reset lại input để có thể chọn lại cùng 1 file
+        }
     };
 
     const handleExcelUpload = (e) => {
@@ -303,7 +334,9 @@ export default function PDFManager() {
                 });
                 alert(`✅ Đã lưu bộ đề thành công với ${totalQ} câu hỏi!`);
             }
-            handleCancelForm(); fetchPdfExams(user.uid); 
+            handleCancelForm(); 
+            // Load lại danh sách dựa theo bộ lọc hiện tại
+            fetchPdfExams(user.uid, user.email, examFilterGrade, examFilterSubject, isSystemFilter); 
         } catch (err) { alert('Lỗi lưu dữ liệu: ' + err.message); }
     };
 
@@ -446,11 +479,25 @@ export default function PDFManager() {
                                     </div>
                                     <div className="flex flex-col">
                                         <label className="block text-[10px] font-bold text-cyan-400 mb-2 uppercase tracking-widest">6. Tải Lên Đề (PDF)</label>
-                                        <label className="flex items-center justify-center gap-2 cursor-pointer w-full bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-700 hover:border-cyan-400 text-cyan-300 hover:text-white p-4 rounded-xl font-bold transition-all h-[60px] shadow-[inset_0_0_10px_rgba(6,182,212,0.2)]">
-                                            {isUploadingPdf ? <Loader2 className="animate-spin" size={20} /> : <UploadCloud size={20} />}
-                                            {isUploadingPdf ? 'Đang Xử...' : (pdfFormData.pdfUrl && editingExamId ? 'Đổi file .PDF' : 'Chọn file')}
-                                            <input type="file" className="hidden" accept=".pdf" onChange={handlePdfUpload} />
-                                        </label>
+                                        <div className="flex items-center gap-2 h-[60px]">
+                                            <label className="flex-1 flex items-center justify-center gap-2 cursor-pointer bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-700 hover:border-cyan-400 text-cyan-300 hover:text-white p-4 rounded-xl font-bold transition-all h-full shadow-[inset_0_0_10px_rgba(6,182,212,0.2)]">
+                                                {isUploadingPdf ? <Loader2 className="animate-spin" size={20} /> : <UploadCloud size={20} />}
+                                                {isUploadingPdf ? 'Đang Xử...' : (pdfFormData.pdfUrl ? 'Đổi file .PDF' : 'Chọn file')}
+                                                <input type="file" className="hidden" accept=".pdf" onChange={handlePdfUpload} />
+                                            </label>
+                                            
+                                            {/* Thêm nút Xóa file PDF hiện tại */}
+                                            {pdfFormData.pdfUrl && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPdfFormData(prev => ({ ...prev, pdfUrl: '' }))}
+                                                    className="h-full px-4 flex items-center justify-center bg-red-900/30 hover:bg-red-600 border border-red-700 hover:border-red-400 text-red-400 hover:text-white rounded-xl transition-all shadow-sm"
+                                                    title="Xóa file PDF"
+                                                >
+                                                    <Trash2 size={20} />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                                 {pdfFormData.pdfUrl && (
@@ -505,11 +552,35 @@ export default function PDFManager() {
                     </div>
                 )}
 
-                {/* QUẢN LÝ ĐỀ THI */}
+                {/* QUẢN LÝ ĐỀ THI - ĐÃ THÊM BỘ LỌC */}
                 <div className="bg-[#0f172a]/90 backdrop-blur-md rounded-[2rem] border border-cyan-900/50 shadow-[0_10px_40px_rgba(0,0,0,0.5)] overflow-hidden mt-8 mb-12">
-                    <div className="bg-slate-950/80 p-5 border-b border-cyan-900/50 flex items-center gap-3">
-                        <FileText className="text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]"/>
-                        <h2 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 uppercase tracking-widest">Danh Sách Đề Thi</h2>
+                    <div className="bg-slate-950/80 p-5 border-b border-cyan-900/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <FileText className="text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]"/>
+                            <div>
+                                <h2 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 uppercase tracking-widest">Danh Sách Đề Thi</h2>
+                                {user?.email === 'luonggioi68@gmail.com' && isSystemFilter && (
+                                    <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest mt-0.5">Đang hiển thị toàn hệ thống (Admin)</p>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <Filter size={16} className="text-cyan-500 hidden xl:block drop-shadow-md"/>
+                            <select value={examFilterGrade} onChange={e => setExamFilterGrade(e.target.value)} className="bg-black/50 border border-slate-700 text-slate-300 focus:text-white text-xs font-bold rounded-lg px-3 py-2.5 outline-none focus:border-cyan-500 transition-all">
+                                <option value="Tất cả">Mọi Khối Lớp</option>
+                                {GRADES.map(g => <option key={`eg-${g}`} value={g}>{g === 'Khác' ? 'Khác' : `Lớp ${g}`}</option>)}
+                            </select>
+                            <select value={examFilterSubject} onChange={e => setExamFilterSubject(e.target.value)} className="bg-black/50 border border-slate-700 text-slate-300 focus:text-white text-xs font-bold rounded-lg px-3 py-2.5 outline-none focus:border-cyan-500 transition-all">
+                                <option value="Tất cả">Mọi Môn Học</option>
+                                {SUBJECTS.map(s => <option key={`es-${s.id}`} value={s.id}>{s.name}</option>)}
+                            </select>
+                            <button
+                                onClick={() => fetchPdfExams(user.uid, user.email, examFilterGrade, examFilterSubject, user?.email === 'luonggioi68@gmail.com')}
+                                className="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all shadow-[0_0_15px_rgba(6,182,212,0.4)]"
+                            >
+                                Lọc
+                            </button>
+                        </div>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left min-w-[800px]">
@@ -537,6 +608,13 @@ export default function PDFManager() {
                                                 <span className="bg-indigo-950 text-indigo-300 px-2 py-1 rounded border border-indigo-800">{SUBJECTS.find(s => s.id === q.subject)?.name || q.subject || '---'}</span>
                                                 {q.allowedClasses && q.allowedClasses.length > 0 && <span className="bg-purple-950 text-purple-300 px-2 py-1 rounded border border-purple-800 shadow-[0_0_8px_rgba(168,85,247,0.3)]">Giao cho: {q.allowedClasses.join(', ')}</span>}
                                                 {q.showAnswers && <span className="bg-emerald-950 text-emerald-400 px-2 py-1 rounded border border-emerald-800 shadow-[0_0_8px_rgba(16,185,129,0.3)]">Mở Đáp Án</span>}
+                                                
+                                                {/* Hiển thị email của người tạo nếu Admin đang xem toàn hệ thống */}
+                                                {isSystemFilter && (
+                                                    <span className="bg-red-950/70 text-red-400 px-2 py-1 rounded border border-red-800 shadow-[0_0_8px_rgba(239,68,68,0.3)] truncate max-w-[200px]" title={q.authorEmail || q.authorName || 'Ẩn danh'}>
+                                                        Tạo bởi: {q.authorEmail || q.authorName || 'Ẩn danh'}
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="p-5 text-center font-black text-cyan-400 text-xl drop-shadow-md">{q.totalQuestions || 0}</td>
