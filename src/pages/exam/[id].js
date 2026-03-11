@@ -336,6 +336,7 @@ export default function ExamRoom() {
     try {
         await addDoc(collection(firestore, "exam_results"), {
             examId: id,
+            examTitle: quiz.title,
             studentName: name,
             studentDob: dob,
             studentClass: className,
@@ -344,7 +345,8 @@ export default function ExamRoom() {
             detail: result.detail,
             violations: violationsRef.current, 
             submitReason: reason, 
-            submittedAt: serverTimestamp()
+            submittedAt: serverTimestamp(), // ĐÃ THÊM DẤU PHẨY
+            teacherId: quiz.authorId // ĐÃ ĐỔI quizData THÀNH quiz
         });
     } catch (e) { console.error("Lỗi lưu điểm", e); }
 

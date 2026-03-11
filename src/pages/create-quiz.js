@@ -506,6 +506,7 @@ export default function CreateQuiz() {
        const model = dynamicGenAI.getGenerativeModel({ model: modelName });
 
       const prompt = `Đóng vai giáo viên môn ${aiSubject} lớp ${aiLevel}. Soạn đề thi chủ đề: "${aiTopic}". Tài liệu tham khảo: ${aiSource}. 
+      TUYỆT ĐỐI KHÔNG ĐẶT CÂU HỎI KIỂU: THEO SÁCH GIÁO KHOA, THEO NỘI DUNG VĂN BẢN, THEO KIẾN THỨC ĐÃ HỌC,... HÃY DỰA HOÀN TOÀN VÀO NGỮ LIỆU ĐẦU VÀO ĐỂ TẠO CÂU HỎI.
       TUYỆT ĐỐI ĐÁP ÁN KHÔNG ĐƯỢC XUẤT RA CÂU TRẢ LỜI DẠNG TẤT CẢ ĐỀU ĐÚNG, A VÀ B ĐỀU ĐÚNG, HOẶC A VÀ B ĐỀU SAI. Mỗi câu hỏi phải có một đáp án đúng duy nhất. CẤU TRÚC ĐỀ THI: - PHẦN 1 (Trắc nghiệm): Tổng ${countTN} câu (${matrix.tn_biet} Biết, ${matrix.tn_hieu} Hiểu, ${matrix.tn_vd} Vận dụng). - PHẦN 2 (Đúng/Sai): Tổng ${matrix.ds_count} câu lớn. Mỗi câu BẮT BUỘC CÓ 4 ý con (${matrix.ds_biet} Biết, ${matrix.ds_hieu} Hiểu, ${matrix.ds_vd} Vận dụng). - PHẦN 3 (Trả lời ngắn): Tổng ${countTL} câu (${matrix.tl_biet} Biết, ${matrix.tl_hieu} Hiểu, ${matrix.tl_vd} Vận dụng). 
       YÊU CẦU BẮT BUỘC:
         1. Tuyệt đối KHÔNG chào hỏi, KHÔNG giải thích thêm. Chỉ in ra chuỗi JSON.
