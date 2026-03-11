@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Trash2, Plus, Upload, RotateCcw, 
   Users, Check, X, FileSpreadsheet, Type, Hash, 
-  Flame, Trophy, Zap, Volume2, VolumeX, Sword, CheckSquare, Square,
-  ArrowLeft
+  Flame, Trophy, Zap, Volume2, VolumeX, Sword, BookOpen
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import confetti from 'canvas-confetti';
@@ -25,7 +24,11 @@ export default function SpinWheelArena() {
   const router = useRouter();
 
   // --- STATE DỮ LIỆU ---
-  const [entries, setEntries] = useState([]);
+  const [classes, setClasses] = useState({}); // Lưu danh sách các lớp { "10A1": [...], "10A2": [...] }
+  const [currentClass, setCurrentClass] = useState(''); // Tên lớp đang chọn
+  const [newClassName, setNewClassName] = useState(''); // Tên lớp mới muốn tạo
+  
+  const [entries, setEntries] = useState([]); // Danh sách học sinh của lớp hiện tại
   const [inputMode, setInputMode] = useState('manual');
   const [textInput, setTextInput] = useState('');
   const [numStart, setNumStart] = useState(1);
@@ -49,7 +52,7 @@ export default function SpinWheelArena() {
   const spinSfxRef = useRef(null);
   const winSfxRef = useRef(null);
 
-  // --- 1. KHỞI TẠO ---
+  // --- 1. KHỞI TẠO & ĐỒNG BỘ DỮ LIỆU ---
   useEffect(() => {
     bgmRef.current = new Audio(AUDIO_SRC.BGM);
     bgmRef.current.loop = true; 
@@ -61,8 +64,30 @@ export default function SpinWheelArena() {
     winSfxRef.current = new Audio(AUDIO_SRC.WIN);
     winSfxRef.current.volume = 1.0; 
 
-    const savedData = localStorage.getItem('spinWheelArenaData');
-    if (savedData) setEntries(JSON.parse(savedData));
+    // Tải dữ liệu các lớp đã lưu
+    const savedClassesData = localStorage.getItem('spinWheelClassesData');
+    if (savedClassesData) {
+      const parsedClasses = JSON.parse(savedClassesData);
+      setClasses(parsedClasses);
+      const classNames = Object.keys(parsedClasses);
+      if (classNames.length > 0) {
+        setCurrentClass(classNames[0]);
+        setEntries(parsedClasses[classNames[0]]);
+      }
+    } else {
+      // Hỗ trợ chuyển đổi dữ liệu cũ (nếu có) sang định dạng lớp mới
+      const oldData = localStorage.getItem('spinWheelArenaData');
+      if (oldData) {
+        const parsedOld = JSON.parse(oldData);
+        if (parsedOld.length > 0) {
+           const initialClass = { "Mặc định": parsedOld };
+           setClasses(initialClass);
+           setCurrentClass("Mặc định");
+           setEntries(parsedOld);
+           localStorage.setItem('spinWheelClassesData', JSON.stringify(initialClass));
+        }
+      }
+    }
 
     return () => {
       if (bgmRef.current) bgmRef.current.pause();
@@ -70,8 +95,22 @@ export default function SpinWheelArena() {
     };
   }, []);
 
+  // Hàm helper: Cập nhật entries và đồng thời lưu vào lớp tương ứng
+  const updateEntries = (action) => {
+    setEntries(prev => {
+        const newEntries = typeof action === 'function' ? action(prev) : action;
+        if (currentClass) {
+            setClasses(prevClasses => {
+                const updatedClasses = { ...prevClasses, [currentClass]: newEntries };
+                localStorage.setItem('spinWheelClassesData', JSON.stringify(updatedClasses));
+                return updatedClasses;
+            });
+        }
+        return newEntries;
+    });
+  };
+
   useEffect(() => {
-    localStorage.setItem('spinWheelArenaData', JSON.stringify(entries));
     drawWheel();
   }, [entries]);
 
@@ -87,21 +126,81 @@ export default function SpinWheelArena() {
     }
   }, [isMuted]);
 
-  // --- 2. LOGIC NHẬP LIỆU ---
+  // --- 2. QUẢN LÝ LỚP HỌC ---
+  const handleAddClass = () => {
+    const name = newClassName.trim();
+    if (!name) return;
+    if (classes[name]) return alert("Tên lớp này đã tồn tại!");
+    
+    setClasses(prev => {
+        const updated = { ...prev, [name]: [] };
+        localStorage.setItem('spinWheelClassesData', JSON.stringify(updated));
+        return updated;
+    });
+    setCurrentClass(name);
+    setEntries([]);
+    setNewClassName('');
+    setRotation(0);
+    setWinner(null);
+  };
+
+  const handleClassChange = (e) => {
+    const newClass = e.target.value;
+    setCurrentClass(newClass);
+    setEntries(classes[newClass] || []);
+    setRotation(0);
+    setWinner(null);
+    setDeleteMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const handleDeleteClass = () => {
+    if (!currentClass) return;
+    if (confirm(`Bạn có chắc muốn xóa lớp ${currentClass} và toàn bộ danh sách trong lớp này?`)) {
+      setClasses(prev => {
+        const updated = { ...prev };
+        delete updated[currentClass];
+        localStorage.setItem('spinWheelClassesData', JSON.stringify(updated));
+        
+        const remaining = Object.keys(updated);
+        if (remaining.length > 0) {
+          setCurrentClass(remaining[0]);
+          setEntries(updated[remaining[0]]);
+        } else {
+          setCurrentClass('');
+          setEntries([]);
+        }
+        return updated;
+      });
+      setRotation(0);
+      setWinner(null);
+    }
+  };
+
+  // --- 3. LOGIC NHẬP LIỆU ---
   const handleManualInput = () => {
+    if (!currentClass) return alert("Vui lòng tạo hoặc chọn một lớp trước khi thêm dữ liệu!");
     const lines = textInput.split('\n').map(line => line.trim()).filter(line => line !== "");
     const newEntries = lines.map((label, index) => ({ id: Date.now() + index, label, active: true }));
-    setEntries(prev => [...prev, ...newEntries]);
+    updateEntries(prev => [...prev, ...newEntries]);
     setTextInput('');
   };
+
   const handleNumberInput = () => {
+    if (!currentClass) return alert("Vui lòng tạo hoặc chọn một lớp trước khi thêm dữ liệu!");
     const newEntries = [];
     for (let i = parseInt(numStart); i <= parseInt(numEnd); i++) {
       newEntries.push({ id: Date.now() + i, label: i.toString(), active: true });
     }
-    setEntries(prev => [...prev, ...newEntries]);
+    updateEntries(prev => [...prev, ...newEntries]);
   };
+
   const handleFileUpload = (e) => {
+    if (!currentClass) {
+        alert("Vui lòng tạo hoặc chọn một lớp trước khi tải file lên!");
+        e.target.value = null;
+        return;
+    }
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -112,19 +211,19 @@ export default function SpinWheelArena() {
       data.forEach((row, idx) => {
         if (row[0]) newEntries.push({ id: Date.now() + idx, label: row[0].toString(), active: true });
       });
-      setEntries(prev => [...prev, ...newEntries]);
+      updateEntries(prev => [...prev, ...newEntries]);
     };
     reader.readAsBinaryString(file);
     e.target.value = null;
   };
 
-  const toggleActive = (id) => setEntries(entries.map(e => e.id === id ? { ...e, active: !e.active } : e));
-  const deleteEntry = (id) => setEntries(entries.filter(e => e.id !== id));
-  const resetStatus = () => { setEntries(entries.map(e => ({ ...e, active: true }))); setRotation(0); setWinner(null); };
+  const toggleActive = (id) => updateEntries(entries.map(e => e.id === id ? { ...e, active: !e.active } : e));
+  const deleteEntry = (id) => updateEntries(entries.filter(e => e.id !== id));
+  const resetStatus = () => { updateEntries(entries.map(e => ({ ...e, active: true }))); setRotation(0); setWinner(null); };
   
   const clearAll = () => { 
-      if (confirm("Xóa toàn bộ danh sách?")) { 
-          setEntries([]); setRotation(0); setWinner(null); setSelectedIds(new Set()); 
+      if (confirm("Xóa toàn bộ danh sách của lớp hiện tại?")) { 
+          updateEntries([]); setRotation(0); setWinner(null); setSelectedIds(new Set()); 
       }
   };
 
@@ -138,7 +237,7 @@ export default function SpinWheelArena() {
   const deleteSelected = () => {
       if (selectedIds.size === 0) return;
       if (confirm(`Bạn có chắc muốn xóa ${selectedIds.size} mục đã chọn?`)) {
-          setEntries(entries.filter(e => !selectedIds.has(e.id)));
+          updateEntries(entries.filter(e => !selectedIds.has(e.id)));
           setSelectedIds(new Set());
           setDeleteMode(false);
       }
@@ -164,11 +263,9 @@ export default function SpinWheelArena() {
 
     if (len === 0) return;
 
-    // Góc quay cho mỗi ô
     const arc = (2 * Math.PI) / len;
     
     activeEntries.forEach((entry, i) => {
-      // Góc bắt đầu của ô hiện tại
       const angle = i * arc;
       
       ctx.beginPath(); ctx.moveTo(center, center);
@@ -176,7 +273,6 @@ export default function SpinWheelArena() {
       ctx.fillStyle = NEON_COLORS[i % NEON_COLORS.length]; ctx.fill();
       ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
       
-      // Vẽ chữ nằm ở giữa ô
       ctx.save(); ctx.translate(center, center); 
       ctx.rotate(angle + arc / 2);
       ctx.textAlign = "right"; ctx.fillStyle = "#fff"; ctx.font = "bold 24px Arial";
@@ -198,7 +294,7 @@ export default function SpinWheelArena() {
     }());
   };
 
-  // --- 6. LOGIC QUAY (ĐÃ ĐƯỢC TOÁN HỌC HÓA CỰC CHUẨN) ---
+  // --- 6. LOGIC QUAY ---
   const spin = () => {
     const activeEntries = entries.filter(e => e.active);
     const numEntries = activeEntries.length;
@@ -221,25 +317,11 @@ export default function SpinWheelArena() {
       spinSfxRef.current.interval = spinInterval;
     }
 
-    // 1. Chọn ngẫu nhiên 1 người chiến thắng
     const winnerIndex = Math.floor(Math.random() * numEntries);
-    
-    // 2. Kích thước 1 ô (tính bằng độ)
     const sliceAngle = 360 / numEntries;
-    
-    // 3. Tính góc từ điểm 0 độ đến TÂM của ô chiến thắng (nếu bánh xe đứng yên)
     const centerOfWinnerSlice = (winnerIndex * sliceAngle) + (sliceAngle / 2);
-    
-    // 4. Vì kim của chúng ta chỉ ở hướng 3h (Tức là nằm đúng ở góc 0 độ hoặc 360 độ của vòng tròn lượng giác).
-    // Nên để cái Tâm của ô chiến thắng chĩa đúng vào kim, chúng ta phải QUAY LÙI bánh xe lại một góc bằng đúng centerOfWinnerSlice.
-    // Lấy 360 độ trừ đi centerOfWinnerSlice là ra góc cần quay.
     const targetAngle = 360 - centerOfWinnerSlice;
-    
-    // 5. Thêm số vòng quay (Spins) để nhìn cho chóng mặt (VD: 8 vòng = 8 * 360)
     const spins = 360 * 8; 
-    
-    // 6. Tính tổng góc quay tuyệt đối (Bỏ qua số vòng đã quay trước đó bằng cách reset rotation về 0 + target)
-    // Để giữ hiệu ứng quay liên tục, ta lấy rotation hiện tại, làm tròn xuống bội số của 360, rồi cộng thêm spins và target
     const currentBase = Math.floor(rotation / 360) * 360;
     const finalRotation = currentBase + spins + targetAngle;
 
@@ -260,9 +342,9 @@ export default function SpinWheelArena() {
       triggerGrandConfetti();
 
       if (removeAfterSpin) {
-        setEntries(prev => prev.map(e => e.id === winnerEntry.id ? { ...e, active: false } : e));
+        updateEntries(prev => prev.map(e => e.id === winnerEntry.id ? { ...e, active: false } : e));
       }
-    }, 5000); // Khớp với transition: 5s trong CSS
+    }, 5000); 
   };
 
   return (
@@ -274,9 +356,6 @@ export default function SpinWheelArena() {
       <header className="shrink-0 bg-black/80 backdrop-blur-md border-b border-orange-600/50 flex flex-col sm:flex-row justify-between items-center px-3 py-2 sm:px-6 sm:h-20 z-20 shadow-[0_5px_20px_rgba(220,38,38,0.3)] gap-2 sm:gap-0">
         <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
           <div className="flex items-center gap-2">
-              <button onClick={() => router.push('/')} className="text-slate-400 hover:text-white transition p-1.5 sm:p-2 rounded-lg hover:bg-slate-800 border border-transparent hover:border-slate-700" title="Về trang chủ">
-                 <ArrowLeft size={20} className="sm:w-6 sm:h-6"/>
-              </button>
               <div className="bg-gradient-to-br from-orange-500 to-red-600 p-1.5 sm:p-2 rounded-lg shadow-lg animate-pulse">
                 <Flame size={20} className="sm:w-7 sm:h-7 text-white" fill="currentColor"/>
               </div>
@@ -284,7 +363,9 @@ export default function SpinWheelArena() {
                 <h1 className="text-lg sm:text-3xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text fire-text leading-tight">
                   VÒNG XOAY GỌI TÊN
                 </h1>
-                <p className="text-[8px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] sm:tracking-[0.3em] leading-tight">Arena Edition</p>
+                <p className="text-[8px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] sm:tracking-[0.3em] leading-tight">
+                  {currentClass ? `LỚP: ${currentClass}` : 'Arena Edition'}
+                </p>
               </div>
           </div>
           
@@ -322,22 +403,19 @@ export default function SpinWheelArena() {
           
           <div className="relative w-full max-w-[280px] sm:max-w-[400px] lg:max-w-[550px] aspect-square mx-auto flex items-center justify-center">
             
-          {/* KIẾM CHỈ VỊ TRÍ GÓC 0 ĐỘ (CĂN CHUẨN XÁC) */}
-<div className="absolute top-1/2 -right-4 sm:-right-8 lg:-right-12 z-30 drop-shadow-[0_0_15px_rgba(0,0,0,0.8)]" style={{ transform: 'translateY(-50%)' }}>
-    {/* Dùng rotate-[-45deg] để mũi kiếm chỉ thẳng tắp sang trái (góc 9h nhìn từ kiếm, tức 0 độ của vòng xoay) */}
-   <Sword className="text-slate-200 fill-slate-300 rotate-[-140deg] drop-shadow-md w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 -mt-2" strokeWidth={1.5} />
-   
-   {/* Chấm tròn đỏ định vị mũi nhọn */}
-   <div className="absolute top-1/2 left-0 -translate-y-1/2 translate-x-2 sm:translate-x-3 lg:translate-x-4 w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 bg-orange-500 rounded-full animate-ping z-40"></div>
-   <div className="absolute top-1/2 left-0 -translate-y-1/2 translate-x-2 sm:translate-x-3 lg:translate-x-4 w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 bg-red-600 rounded-full z-40"></div>
-</div>
+            {/* KIẾM CHỈ VỊ TRÍ */}
+            <div className="absolute top-1/2 -right-4 sm:-right-8 lg:-right-12 z-30 drop-shadow-[0_0_15px_rgba(0,0,0,0.8)]" style={{ transform: 'translateY(-50%)' }}>
+               <Sword className="text-slate-200 fill-slate-300 rotate-[-140deg] drop-shadow-md w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 -mt-2" strokeWidth={1.5} />
+               <div className="absolute top-1/2 left-0 -translate-y-1/2 translate-x-2 sm:translate-x-3 lg:translate-x-4 w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 bg-orange-500 rounded-full animate-ping z-40"></div>
+               <div className="absolute top-1/2 left-0 -translate-y-1/2 translate-x-2 sm:translate-x-3 lg:translate-x-4 w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 bg-red-600 rounded-full z-40"></div>
+            </div>
             
             <div style={{ transform: `rotate(${rotation}deg)`, transition: isSpinning ? 'transform 5s cubic-bezier(0.25, 0.1, 0.25, 1)' : 'none' }} className="rounded-full w-full h-full relative z-10">
               <canvas ref={canvasRef} className="w-full h-full rounded-full" />
             </div>
 
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
-              <button onClick={spin} disabled={isSpinning} className="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-full bg-gradient-to-br from-red-600 to-orange-600 border-2 sm:border-4 border-black shadow-[0_0_30px_rgba(220,38,38,0.6)] flex items-center justify-center group active:scale-95 transition-all disabled:grayscale disabled:opacity-80">
+              <button onClick={spin} disabled={isSpinning || !currentClass} className="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-full bg-gradient-to-br from-red-600 to-orange-600 border-2 sm:border-4 border-black shadow-[0_0_30px_rgba(220,38,38,0.6)] flex items-center justify-center group active:scale-95 transition-all disabled:grayscale disabled:opacity-80">
                 <div className="absolute inset-0 rounded-full border border-white/20 animate-ping"></div>
                 <span className="font-black text-white text-sm sm:text-base lg:text-xl uppercase italic tracking-wider drop-shadow-md group-hover:scale-110 transition-transform">QUAY</span>
               </button>
@@ -361,6 +439,42 @@ export default function SpinWheelArena() {
         </div>
 
         <aside className="w-full lg:w-[400px] bg-[#0a0a0a]/90 border-t lg:border-t-0 lg:border-r border-slate-800 flex flex-col shadow-[0_-10px_20px_rgba(0,0,0,0.5)] lg:shadow-2xl z-20 backdrop-blur-sm h-1/2 lg:h-full shrink-0 order-2 lg:order-1">
+          
+          {/* --- KHU VỰC QUẢN LÝ LỚP HỌC MỚI --- */}
+          <div className="p-3 border-b border-slate-800 bg-[#151515] shrink-0 flex flex-col gap-2.5">
+            <div className="flex items-center gap-2">
+              <select 
+                value={currentClass} 
+                onChange={handleClassChange}
+                className="flex-1 bg-black border border-slate-700 rounded-lg p-2 text-sm text-orange-500 font-bold outline-none focus:border-orange-500 cursor-pointer"
+              >
+                <option value="" disabled>-- Chọn lớp học --</option>
+                {Object.keys(classes).map(c => <option key={c} value={c}>Danh sách: {c}</option>)}
+              </select>
+              <button 
+                onClick={handleDeleteClass} 
+                disabled={!currentClass} 
+                title="Xóa lớp này"
+                className="p-2 bg-red-900/30 text-red-500 hover:bg-red-600 hover:text-white rounded-lg border border-red-900 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Trash2 size={18}/>
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <input 
+                type="text" 
+                value={newClassName} 
+                onChange={(e) => setNewClassName(e.target.value)}
+                placeholder="Tên lớp mới (vd: 10A1)..."
+                className="flex-1 bg-black/50 border border-slate-700 rounded-lg p-2 text-xs text-white outline-none focus:border-orange-500"
+                onKeyDown={(e) => e.key === 'Enter' && handleAddClass()}
+              />
+              <button onClick={handleAddClass} className="px-3 py-2 bg-slate-800 text-white hover:bg-orange-600 rounded-lg border border-slate-700 transition flex items-center gap-1 text-xs font-bold uppercase">
+                <Plus size={14}/> Tạo lớp
+              </button>
+            </div>
+          </div>
+
           <div className="flex border-b border-slate-800 shrink-0">
             {[
               { id: 'manual', icon: <Type size={14} className="sm:w-4 sm:h-4"/>, label: 'Nhập tay' },
@@ -459,7 +573,9 @@ export default function SpinWheelArena() {
                 </div>
               ))}
               {entries.length === 0 && (
-                  <div className="text-center text-slate-600 text-xs italic mt-4">Chưa có người tham gia...</div>
+                  <div className="text-center text-slate-600 text-xs mt-4">
+                     {currentClass ? 'Danh sách trống. Vui lòng thêm dữ liệu.' : 'Chưa có lớp nào được chọn.'}
+                  </div>
               )}
             </div>
           </div>
