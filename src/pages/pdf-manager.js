@@ -107,9 +107,15 @@ export default function PDFManager() {
             });
 
             const stats = {};
-            sortedDocs.forEach((data) => {
+           sortedDocs.forEach((data) => {
+                // Giữ nguyên dòng loại bỏ tài khoản Khách
                 if (!data.studentName || data.studentName.includes('Khách_')) return;
-                
+
+                // 🔴 THÊM DÒNG NÀY ĐỂ FIX LỖI:
+                // Chỉ hiển thị nếu học sinh nhập ĐÚNG Mã GV của thầy. 
+                // (Thêm data.teacherCode !== undefined để không làm mất dữ liệu từ các kỳ thi cũ)
+                if (data.teacherCode !== undefined && data.teacherCode !== tCode) return;
+
                 const grade = data.grade || 'Khác';
                 const subject = data.subject || 'Khác';
                 const sClass = data.studentClassName || 'Chưa phân lớp';

@@ -157,8 +157,15 @@ export default function PDFPlay() {
         handleSubmitRef.current = handleSubmit;
     });
 
-    const handleStartCampaign = () => {
-        // Validation bắt buộc chọn lớp nếu đã nhập Mã GV
+   const handleStartCampaign = () => {
+        // Thêm cảnh báo nếu học sinh đăng nhập nhưng quên nhập Mã GV
+        if (!studentInfo.isGuest && teacherCodeInput.trim().length === 0) {
+            if (!confirm("⚠️ Bạn CHƯA NHẬP Mã Giáo Viên! Điểm của bạn sẽ không được ghi nhận cho giáo viên. Bạn có chắc chắn muốn thi tự do?")) {
+                return; // Dừng lại để học sinh nhập mã
+            }
+        }
+
+        // Validation bắt buộc chọn lớp nếu đã nhập Mã GV (Code cũ của thầy)
         if (!studentInfo.isGuest && teacherCodeInput.trim().length > 0 && !studentClassInput.trim()) {
             alert("⚠️ Vui lòng chọn hoặc nhập Tên lớp của bạn để Giáo viên ghi nhận điểm!");
             return;
