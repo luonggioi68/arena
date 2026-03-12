@@ -333,6 +333,7 @@ export default function HomePage() {
                   const isMixer = index === 2; 
                   const isDuplicate = index === 3; 
                   const isquestion = index === 4; 
+                  const hoclieu= index === 5; 
                   const isSubmit = index === 7; 
                   
                   const title = isKHBD ? "Soạn KHBD" : 
@@ -340,6 +341,7 @@ export default function HomePage() {
                                 isMixer ? "Trộn Đề" : 
                                 isDuplicate ? "Nhân Bản Đề" : 
                                 isquestion ? "Tạo câu hỏi" : 
+                                hoclieu ? "Học liệu" : 
                                 isSubmit ? "Cổng Nộp Bài" : "";
 
                   const handleMenuClick = () => {
@@ -351,6 +353,7 @@ export default function HomePage() {
                               if (isMixer) router.push('/mixer'); 
                               if (isDuplicate) router.push('/clone-test');
                               if (isquestion) router.push('/generate-questions');
+                              if (hoclieu) router.push('/arena-hoc-lieu');
                               if (isSubmit) router.push('/submit');
                           }
                       }
