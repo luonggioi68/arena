@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import {Shield, Download, Eye, BookOpen, FileText, Home, Loader2, Layers, FolderOpen, Settings, Zap, Target, AlertTriangle, Code, Cpu, Terminal, Database as DbIcon, Gamepad2 } from 'lucide-react';
+import { Shield, Download, Eye, BookOpen, FileText, Home, Loader2, Layers, FolderOpen, Settings, Zap, Target, AlertTriangle, Code, Cpu, Terminal, Database as DbIcon, Gamepad2 } from 'lucide-react';
 
 import { auth, firestore } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -94,7 +94,7 @@ export default function PublicHocLieu() {
     );
   }
 
- if (isTeacher === false) {
+  if (isTeacher === false) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center flex-col text-center p-4 relative overflow-hidden selection:bg-red-500 selection:text-white">
         <Head><title>Khu Vực Hạn Chế | Arena Edu</title></Head>
@@ -113,7 +113,6 @@ export default function PublicHocLieu() {
       <div className="absolute top-40 left-10 w-40 md:w-72 h-40 md:h-72 bg-orange-600/20 rounded-full blur-[80px] pointer-events-none"></div>
       <div className="absolute bottom-40 right-10 w-60 md:w-96 h-60 md:h-96 bg-cyan-600/10 rounded-full blur-[80px] pointer-events-none"></div>
 
-      {/* HEADER TỐI ƯU MOBILE */}
       <header className="bg-black/40 backdrop-blur-xl border-b border-orange-500/50 shadow-[0_4px_30px_rgba(249,115,22,0.3)] p-3 md:p-4 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex justify-between items-center relative z-10">
           <div className="flex items-center gap-2 md:gap-3 cursor-pointer group" onClick={() => router.push('/')}>
@@ -143,7 +142,6 @@ export default function PublicHocLieu() {
 
       <main className="max-w-7xl mx-auto px-2 sm:px-4 mt-6 md:mt-12 relative z-10">
         
-        {/* BỘ LỌC CHUẨN MOBILE */}
         {!isTechTab && (
           <div className="bg-black/60 backdrop-blur-md p-3 md:p-6 rounded-xl md:rounded-2xl border border-orange-500/30 shadow-[0_0_30px_rgba(239,68,68,0.1)] mb-6 md:mb-8 relative overflow-hidden animate-in fade-in zoom-in-95 duration-300">
             <div className="grid grid-cols-1 md:grid-cols-[1.5fr_1fr] gap-4 md:gap-6 items-center">
@@ -183,9 +181,7 @@ export default function PublicHocLieu() {
           </div>
         )}
 
-        {/* TABS TRƯỢT NGANG (SCROLLABLE ON MOBILE) */}
         <div className="flex overflow-x-auto hide-scrollbar gap-2 md:gap-3 mb-6 md:mb-8 pb-2 justify-start items-center w-full snap-x">
-          
           <div className="flex gap-2 shrink-0 snap-start">
             <button onClick={() => setActiveTab('dethi')} className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-5 py-2 md:py-2.5 rounded-lg md:rounded-xl font-black uppercase text-[10px] md:text-xs transition-all border shrink-0 ${activeTab === 'dethi' ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white border-transparent shadow-[0_0_15px_rgba(225,29,72,0.6)]' : 'bg-black/50 border-rose-900/50 text-rose-500/70'}`}>
               <FileText size={14} className="md:w-4 md:h-4"/> Đề Thi
@@ -220,9 +216,7 @@ export default function PublicHocLieu() {
           </div>
         </div>
 
-        {/* BẢNG DỮ LIỆU SMART MOBILE */}
         <div className="bg-black/40 backdrop-blur-xl rounded-xl md:rounded-2xl shadow-[0_0_40px_rgba(0,0,0,0.8)] overflow-hidden border border-white/10 relative">
-          
           {loading && (
             <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-20 flex flex-col items-center justify-center">
               <Loader2 size={40} className="text-orange-500 animate-spin" />
@@ -233,11 +227,9 @@ export default function PublicHocLieu() {
             <table className="w-full text-left min-w-[500px] lg:min-w-[800px]">
               <thead className="bg-[#0f172a]/80 text-orange-500 uppercase text-[9px] md:text-xs font-black tracking-widest border-b-2 border-orange-500/30">
                 <tr>
-                  {/* Ẩn cột ID trên Mobile */}
                   <th className="hidden md:table-cell px-4 py-4 w-16 text-center">ID</th>
                   <th className="px-3 md:px-6 py-3 md:py-4">Tên Tài Liệu</th>
                   <th className="px-2 md:px-6 py-3 md:py-4 text-center w-24 md:w-auto">Loại File</th>
-                  {/* Ẩn cột Tác Giả trên Mobile (sẽ ghép vào cột Tên) */}
                   <th className="hidden md:table-cell px-4 py-4 text-center">Tác Giả</th>
                   <th className="px-2 md:px-6 py-3 md:py-4 text-center w-20 md:w-48">Thao Tác</th>
                 </tr>
@@ -258,8 +250,6 @@ export default function PublicHocLieu() {
                             {doc.isFolder ? <FolderOpen size={16} className="text-amber-400 shrink-0 md:w-5 md:h-5" /> : <FileText size={16} className="text-cyan-400 shrink-0 md:w-5 md:h-5" />} 
                             <span className="truncate max-w-[180px] sm:max-w-[250px] md:max-w-[400px]">{doc.title}</span>
                           </div>
-                          
-                          {/* HIỂN THỊ TÁC GIẢ Ở ĐÂY CHỈ DÀNH CHO MOBILE */}
                           <div className="md:hidden mt-1.5 flex items-center gap-2">
                              <span className="text-[8px] text-slate-500 uppercase tracking-widest">
                                Bởi: <span className="text-cyan-400 font-bold">{doc.authorEmail ? doc.authorEmail.split('@')[0] : 'Ẩn danh'}</span>
@@ -318,7 +308,6 @@ export default function PublicHocLieu() {
         </div>
       </main>
 
-      {/* Ẩn thanh cuộn dọc mặc định của trình duyệt cho thanh Tab ngang */}
       <style jsx global>{`
         .animate-spin-slow { animation: spin 4s linear infinite; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }

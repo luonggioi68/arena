@@ -32,7 +32,6 @@ export default function AdminHocLieu() {
     return () => unsubscribe();
   }, [setUser]);
 
-  // ĐÃ THÊM fileFormat VÀO STATE
   const [formData, setFormData] = useState({ title: '', link: '', grade: '10', subject: 'Tin học', type: 'dethi', fileFormat: 'word' });
   const [isSaving, setIsSaving] = useState(false);
   
@@ -74,18 +73,34 @@ export default function AdminHocLieu() {
     }
   };
 
+  // HÀM QUÉT LINK ĐÃ ĐƯỢC NÂNG CẤP THÔNG MINH
   const extractDriveInfo = (url) => {
-    let match = url.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    if (!url) return null;
+    let match;
+    
+    // 1. Nhận diện Thư mục
+    match = url.match(/\/folders\/([a-zA-Z0-9_-]{15,})/);
     if (match) return { id: match[1], isFolder: true };
-    match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+
+    // 2. Nhận diện chuẩn Google Docs, Sheets, Slides, Drive File
+    match = url.match(/\/(?:file|document|spreadsheets|presentation)\/d\/([a-zA-Z0-9_-]{15,})/);
     if (match) return { id: match[1], isFolder: false };
+
+    // 3. Nhận diện tham số id= (Chặn lỗi cắt nhầm vào ouid=)
+    match = url.match(/[?&]id=([a-zA-Z0-9_-]{15,})/);
+    if (match) return { id: match[1], isFolder: false };
+
+    // 4. Quét vét các trường hợp /d/ khác
+    match = url.match(/\/d\/([a-zA-Z0-9_-]{15,})/);
+    if (match) return { id: match[1], isFolder: false };
+
     return null;
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
     const driveInfo = extractDriveInfo(formData.link);
-    if (!driveInfo) return alert('⚠️ Link Drive không hợp lệ!');
+    if (!driveInfo) return alert('⚠️ Link Google không hợp lệ! Vui lòng copy đúng link chia sẻ.');
 
     setIsSaving(true);
     try {
@@ -96,16 +111,12 @@ export default function AdminHocLieu() {
         grade: isFormTechType ? 'N/A' : formData.grade,
         subject: isFormTechType ? 'N/A' : formData.subject,
         type: formData.type,
-        
-        // LƯU ĐỊNH DẠNG FILE LÊN DATABASE
         fileFormat: driveInfo.isFolder ? 'folder' : formData.fileFormat,
-
         authorEmail: user.email,
         authorId: user.uid,
         createdAt: serverTimestamp() 
       });
-      alert('✅ Tải lên thành công!');
-      // Reset form nhưng giữ nguyên khối môn đang chọn cho tiện
+      alert('✅ Tải lên hệ thống thành công!');
       setFormData({ ...formData, title: '', link: '' });
       
       if (hasSearched) fetchDocuments();
@@ -128,10 +139,10 @@ export default function AdminHocLieu() {
 
   if (isTeacher === null) return <div className="min-h-screen bg-[#0f172a] flex items-center justify-center"><Loader2 className="animate-spin text-orange-500" size={40}/></div>;
   if (isTeacher === false) return (
-    <div className="min-h-screen bg-[#0f172a] flex items-center justify-center flex-col text-center p-4 relative overflow-hidden">
-      <AlertTriangle size={80} className="text-red-500 mb-4 animate-pulse relative z-10"/>
-      <h1 className="text-4xl font-black text-white mb-2 uppercase relative z-10">Cấm Truy Cập</h1>
-      <button onClick={() => router.push('/')} className="relative z-10 bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 mt-4 hover:bg-red-600 transition-colors"><ArrowLeft/> Về Trang Chủ</button>
+    <div className="min-h-screen bg-[#0f172a] flex items-center justify-center flex-col text-center p-4">
+      <AlertTriangle className="w-20 h-20 md:w-[100px] md:h-[100px] text-red-500 mb-4 animate-pulse"/>
+      <h1 className="text-4xl font-black text-white mb-2 uppercase">Cấm Truy Cập</h1>
+      <button onClick={() => router.push('/')} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 mt-4 hover:bg-red-600 transition-colors"><ArrowLeft/> Về Trang Chủ</button>
     </div>
   );
 
@@ -159,7 +170,6 @@ export default function AdminHocLieu() {
               <Plus className="text-red-500"/> Tải Lên Học Liệu Mới
             </h2>
             
-            {/* THÊM CỘT CHỌN ĐỊNH DẠNG VÀO GRID */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Phân Loại (Tab)</label>
@@ -186,8 +196,6 @@ export default function AdminHocLieu() {
                   {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
-              
-              {/* SELECT ĐỊNH DẠNG FILE MỚI ĐƯỢC THÊM VÀO */}
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Định Dạng File</label>
                 <select value={formData.fileFormat} onChange={e => setFormData({...formData, fileFormat: e.target.value})} className="w-full bg-slate-900 border border-slate-700 text-white p-3 rounded-xl focus:border-red-500 outline-none">
@@ -208,8 +216,8 @@ export default function AdminHocLieu() {
 
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase mb-2 flex justify-between items-center">
-                <span>Link Drive (Folder / File)</span>
-                <span className="text-[10px] text-red-400 italic normal-case font-normal">* Nếu dán link Thư mục, hệ thống sẽ tự động nhận diện.</span>
+                <span>Link Drive / Docs / Sheets</span>
+                <span className="text-[10px] text-red-400 italic normal-case font-normal">* Hỗ trợ mọi loại link Google</span>
               </label>
               <input type="url" required value={formData.link} onChange={e => setFormData({...formData, link: e.target.value})} placeholder="Dán link chia sẻ (Bất kỳ ai có liên kết)..." className="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white focus:border-red-500 outline-none"/>
             </div>
@@ -254,15 +262,13 @@ export default function AdminHocLieu() {
               </select>
             </div>
             <button onClick={fetchDocuments} disabled={isSearching} className="w-full bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-xl font-bold border border-slate-600 flex items-center justify-center gap-2 transition disabled:opacity-50">
-              {isSearching ? <Loader2 size={18} className="animate-spin" /> : <Search size={18}/>} 
-              LỌC DỮ LIỆU
+              {isSearching ? <Loader2 size={18} className="animate-spin" /> : <Search size={18}/>} LỌC DỮ LIỆU
             </button>
           </div>
         </div>
 
         <div className="bg-[#1e293b] rounded-[2rem] shadow-2xl overflow-hidden border border-white/5 relative">
           {isSearching && <div className="absolute inset-0 bg-[#1e293b]/50 backdrop-blur-sm z-10"></div>}
-
           <div className="overflow-x-auto">
             <table className="w-full text-left min-w-[600px]">
               <thead className="bg-slate-900 text-slate-400 uppercase text-[10px] md:text-xs font-bold">
@@ -276,16 +282,11 @@ export default function AdminHocLieu() {
                 {!hasSearched ? (
                   <tr>
                     <td colSpan="3" className="px-6 py-12 text-center text-slate-500 uppercase tracking-widest font-bold">
-                      <Filter size={40} className="mx-auto mb-4 opacity-50" />
-                      Hãy chọn bộ lọc và bấm "Lọc dữ liệu"
+                      <Filter size={40} className="mx-auto mb-4 opacity-50" /> Chọn bộ lọc và bấm "Lọc dữ liệu"
                     </td>
                   </tr>
                 ) : documents.length === 0 ? (
-                  <tr>
-                    <td colSpan="3" className="px-6 py-12 text-center text-slate-500 italic">
-                      Không tìm thấy tài liệu nào.
-                    </td>
-                  </tr>
+                  <tr><td colSpan="3" className="px-6 py-12 text-center text-slate-500 italic">Không tìm thấy tài liệu nào.</td></tr>
                 ) : (
                   documents.map(doc => {
                     const isOwner = doc.authorEmail === user?.email;
@@ -317,7 +318,7 @@ export default function AdminHocLieu() {
                               <Trash2 size={18}/>
                             </button>
                           ) : (
-                            <span className="text-slate-600 text-[10px] uppercase font-bold bg-slate-800 px-2 py-1.5 rounded-lg border border-slate-700 cursor-not-allowed" title="Chỉ người tạo hoặc Admin mới được xóa">Chỉ Đọc</span>
+                            <span className="text-slate-600 text-[10px] uppercase font-bold bg-slate-800 px-2 py-1.5 rounded-lg border border-slate-700 cursor-not-allowed">Chỉ Đọc</span>
                           )}
                         </td>
                       </tr>
@@ -328,7 +329,6 @@ export default function AdminHocLieu() {
             </table>
           </div>
         </div>
-
       </main>
     </div>
   );
