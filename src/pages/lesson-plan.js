@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Head from 'next/head'; // Bổ sung Head cho trang cấm
 import { useRouter } from 'next/router';
 import { auth, firestore } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -14,16 +15,19 @@ import mammoth from 'mammoth';
 import { 
     ArrowLeft, Sparkles, Download, Loader2, BookOpen, Settings, 
     CheckSquare, Square, FileText, Target, BrainCircuit, Link as LinkIcon, Users, Monitor, AlignLeft,
-    Flame // THÊM ICON LỬA
+    Flame, AlertTriangle, Home // BỔ SUNG ICON BẢO MẬT
 } from 'lucide-react';
 
+const MASTER_EMAILS = ["luonggioi68@gmail.com"]; // Thêm quyền Admin gốc
 const SUBJECTS = ["Tin học", "Toán học", "Ngữ văn", "Tiếng Anh", "Vật lí", "Hóa học", "Sinh học", "Lịch sử", "Địa lí", "GDCD", "Công nghệ"];
 const GRADES = ["12", "11", "10", "9", "8", "7", "6"];
 
 export default function LessonPlanner() {
   const router = useRouter();
   const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true); // Fix lỗi văng trang
+  
+  // STATE MỚI: THEO DÕI QUYỀN GIÁO VIÊN
+  const [isTeacher, setIsTeacher] = useState(null); 
   
   // --- STATES CẤU HÌNH ĐẦU VÀO ---
   const [subject, setSubject] = useState('Tin học');
@@ -51,14 +55,21 @@ export default function LessonPlanner() {
   const [loading, setLoading] = useState(false);
   const [resultMarkdown, setResultMarkdown] = useState('');
 
+  // LOGIC PHÂN QUYỀN BẢO MẬT
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (!u) {
-          router.push('/');
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        // Vào Firestore check role
+        const userDocSnap = await getDoc(doc(firestore, "users", currentUser.uid));
+        const userData = userDocSnap.exists() ? userDocSnap.data() : {};
+        const checkRole = userData.role === 'teacher' || MASTER_EMAILS.includes(currentUser.email);
+        
+        setIsTeacher(checkRole);
+        setUser({ ...currentUser, ...userData });
       } else {
-          setUser(u);
+        // Chưa đăng nhập thì cấm
+        setIsTeacher(false);
       }
-      setAuthLoading(false);
     });
     return () => unsubscribe();
   }, [router]);
@@ -269,14 +280,32 @@ ${nlSoText}
 
   const cleanLessonName = lessonName ? lessonName.trim().replace(/^(BÀI:\s*BÀI\s*|BÀI:\s*|BÀI\s*)/i, 'BÀI ') : 'TÊN BÀI HỌC';
 
-  if (authLoading) {
+  // MÀN HÌNH CHỜ KIỂM TRA QUYỀN
+  if (isTeacher === null) {
       return (
           <div className="min-h-screen bg-black flex items-center justify-center text-orange-500 font-bold shadow-[0_0_20px_rgba(249,115,22,0.5)]">
-              <Flame className="animate-bounce mr-2" size={30} /> ĐANG KHỞI ĐỘNG HỆ THỐNG LÕI...
+              <Flame className="animate-bounce mr-2" size={30} /> ĐANG QUÉT PHÂN QUYỀN CHIẾN BINH...
           </div>
       );
   }
 
+  // MÀN HÌNH TỪ CHỐI TRUY CẬP CHO HỌC SINH/KHÁCH
+  if (isTeacher === false) {
+      return (
+        <div className="min-h-screen bg-[#050505] flex items-center justify-center flex-col text-center p-4 relative overflow-hidden selection:bg-red-500 selection:text-white">
+          <Head><title>Khu Vực Hạn Chế | Arena Edu</title></Head>
+          <div className="absolute top-40 left-10 w-72 h-72 bg-red-600/20 rounded-full blur-[100px] pointer-events-none"></div>
+          <div className="absolute bottom-40 right-10 w-96 h-96 bg-orange-600/10 rounded-full blur-[100px] pointer-events-none"></div>
+          
+          <AlertTriangle className="w-20 h-20 md:w-[100px] md:h-[100px] text-red-500 mb-6 drop-shadow-[0_0_20px_rgba(239,68,68,0.8)] animate-pulse relative z-10"/>
+          <h1 className="text-2xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600 mb-4 uppercase tracking-widest relative z-10">Khu Vực Hạn Chế</h1>
+          <p className="text-slate-400 mb-10 font-bold tracking-widest text-xs md:text-sm relative z-10 px-4 max-w-lg">Công cụ Soạn Giáo Án AI là vũ khí tuyệt mật. Bạn cần đăng nhập bằng tài khoản <span className="text-red-400 font-black">GIÁO VIÊN</span> để sử dụng.</p>
+          <button onClick={() => router.push('/')} className="relative z-10 bg-slate-900/80 hover:bg-cyan-600 text-cyan-400 hover:text-white px-6 md:px-8 py-3 md:py-4 rounded-xl font-black transition-all border border-cyan-500 shadow-[0_0_20px_rgba(6,182,212,0.4)] flex items-center gap-3 uppercase tracking-widest hover:scale-105 active:scale-95 text-xs md:text-base"><Home size={20}/> Trở Về Căn Cứ</button>
+        </div>
+      );
+  }
+
+  // GIAO DIỆN CHÍNH CHO GIÁO VIÊN
   return (
     <div className="min-h-screen bg-[#050505] font-sans flex flex-col h-screen overflow-hidden text-gray-200 relative">
       

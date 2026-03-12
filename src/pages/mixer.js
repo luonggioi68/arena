@@ -1,12 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
+import Head from 'next/head'; // Bổ sung Head cho trang cấm
 import { useRouter } from 'next/router';
-// [ĐÃ BỔ SUNG ICON 'Info']
-import { ArrowLeft, Upload, Target, CheckCircle, Loader2, Flame, Zap, Crosshair, Info } from 'lucide-react';
+import { auth, firestore } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+// [ĐÃ BỔ SUNG ICON BẢO MẬT]
+import { ArrowLeft, Upload, Target, CheckCircle, Loader2, Flame, Zap, Crosshair, Info, AlertTriangle, Home } from 'lucide-react';
+
+const MASTER_EMAILS = ["luonggioi68@gmail.com"]; // Thêm quyền Admin gốc
 
 export default function ExamMixer() {
   const router = useRouter();
   const fileInputRef = useRef(null);
   
+  // STATE BẢO MẬT PHÂN QUYỀN
+  const [isTeacher, setIsTeacher] = useState(null); 
+
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState(null);
 
@@ -19,6 +28,24 @@ export default function ExamMixer() {
     soDe: 4,
     maDeList: ['401', '702', '803', '304']
   });
+
+  // LOGIC PHÂN QUYỀN BẢO MẬT
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        // Vào Firestore check role
+        const userDocSnap = await getDoc(doc(firestore, "users", currentUser.uid));
+        const userData = userDocSnap.exists() ? userDocSnap.data() : {};
+        const checkRole = userData.role === 'teacher' || MASTER_EMAILS.includes(currentUser.email);
+        
+        setIsTeacher(checkRole);
+      } else {
+        // Chưa đăng nhập thì cấm
+        setIsTeacher(false);
+      }
+    });
+    return () => unsubscribe();
+  }, [router]);
 
   useEffect(() => {
     const currentLen = config.maDeList.length;
@@ -81,9 +108,36 @@ export default function ExamMixer() {
       }
   };
 
+  // MÀN HÌNH CHỜ KIỂM TRA QUYỀN
+  if (isTeacher === null) {
+      return (
+          <div className="min-h-screen bg-black flex items-center justify-center text-orange-500 font-bold shadow-[0_0_20px_rgba(249,115,22,0.5)]">
+              <Flame className="animate-bounce mr-2" size={30} /> ĐANG QUÉT PHÂN QUYỀN CHIẾN BINH...
+          </div>
+      );
+  }
+
+  // MÀN HÌNH TỪ CHỐI TRUY CẬP CHO HỌC SINH/KHÁCH
+  if (isTeacher === false) {
+      return (
+        <div className="min-h-screen bg-zinc-950 flex items-center justify-center flex-col text-center p-4 relative overflow-hidden selection:bg-red-500 selection:text-white bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]">
+          <Head><title>Khu Vực Hạn Chế | Arena Edu</title></Head>
+          <div className="absolute top-40 left-10 w-72 h-72 bg-red-600/20 rounded-full blur-[100px] pointer-events-none"></div>
+          <div className="absolute bottom-40 right-10 w-96 h-96 bg-orange-600/10 rounded-full blur-[100px] pointer-events-none"></div>
+          
+          <AlertTriangle className="w-20 h-20 md:w-[100px] md:h-[100px] text-red-500 mb-6 drop-shadow-[0_0_20px_rgba(239,68,68,0.8)] animate-pulse relative z-10"/>
+          <h1 className="text-2xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600 mb-4 uppercase tracking-widest relative z-10">Khu Vực Hạn Chế</h1>
+          <p className="text-slate-400 mb-10 font-bold tracking-widest text-xs md:text-sm relative z-10 px-4 max-w-lg">Công cụ Trộn Đề là vũ khí tuyệt mật. Bạn cần đăng nhập bằng tài khoản <span className="text-red-400 font-black">GIÁO VIÊN</span> để sử dụng.</p>
+          <button onClick={() => router.push('/')} className="relative z-10 bg-slate-900/80 hover:bg-red-600 text-red-400 hover:text-white px-6 md:px-8 py-3 md:py-4 rounded-xl font-black transition-all border border-red-500 shadow-[0_0_20px_rgba(220,38,38,0.4)] flex items-center gap-3 uppercase tracking-widest hover:scale-105 active:scale-95 text-xs md:text-base"><Home size={20}/> Trở Về Căn Cứ</button>
+        </div>
+      );
+  }
+
+  // GIAO DIỆN CHÍNH CHO GIÁO VIÊN
   return (
     <div className="min-h-screen bg-zinc-950 text-red-50 font-sans flex items-center justify-center bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] selection:bg-orange-500 selection:text-white p-2 sm:p-4">
-      
+      <Head><title>Arena Trộn Đề | Hệ Sinh Thái</title></Head>
+
       <div className="w-full max-w-5xl bg-zinc-900/90 rounded-2xl border border-red-600/30 shadow-[0_0_30px_rgba(220,38,38,0.15)] overflow-hidden relative backdrop-blur-sm">
         
         <div className="bg-gradient-to-r from-red-950 via-red-800 to-orange-600 p-4 md:px-6 relative overflow-hidden border-b border-red-500/50 flex items-center justify-between">
@@ -100,8 +154,8 @@ export default function ExamMixer() {
                         <Flame size={28} className="text-orange-400 animate-pulse"/>
                         Arena Trộn Đề
                     </h1>
-                    <p className="text-orange-200/90 text-xs md:text-sm font-bold tracking-wider  flex items-center gap-1 mt-0.5">
-                       <Crosshair size={12}/>  All In One: Trắc nghiệm - Đúng/sai- Trả lời ngắn - Tự luận. Vũ khí tinh nhuệ cho giáo viên!
+                    <p className="text-orange-200/90 text-xs md:text-sm font-bold tracking-wider flex items-center gap-1 mt-0.5">
+                       <Crosshair size={12}/> All In One: Trắc nghiệm - Đúng/sai- Trả lời ngắn - Tự luận. Vũ khí tinh nhuệ cho giáo viên!
                     </p>
                 </div>
             </div>
@@ -152,7 +206,7 @@ export default function ExamMixer() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 
                 <div className="bg-black/30 p-4 rounded-xl border border-zinc-800 flex flex-col">
-                    <h3 className="text-orange-500 font-bold uppercase tracking-widest text-[10px] mb-2">Mã Đề Tự Động, có thể nhập tuỳ chọn số khác hoặc Nhậpmã đề 4 số</h3>
+                    <h3 className="text-orange-500 font-bold uppercase tracking-widest text-[10px] mb-2">Mã Đề Tự Động, có thể nhập tuỳ chọn số khác hoặc Nhập mã đề 4 số</h3>
                     <div className="flex flex-wrap gap-2 overflow-y-auto max-h-[110px] pr-1 custom-scrollbar">
                         {config.maDeList.map((ma, idx) => (
                             <div key={idx} className="bg-zinc-950 border border-red-900/50 p-1 rounded flex items-center w-14 relative group hover:border-orange-500 transition-colors">
@@ -165,7 +219,6 @@ export default function ExamMixer() {
                 <div className="flex flex-col gap-2">
                     <input type="file" accept=".docx" ref={fileInputRef} onChange={(e) => setFile(e.target.files[0])} className="hidden"/>
                     
-                    {/* [MỚI] Nút Link Hướng Dẫn Nằm gọn gàng góc phải */}
                     <div className="flex justify-end mb-1">
                         <a href="/guide.html" target="_blank" rel="noopener noreferrer" className="text-[11px] text-zinc-400 hover:text-orange-400 flex items-center gap-1 transition-colors hover:underline underline-offset-2">
                             <Info size={13} /> Hướng dẫn soạn đề chuẩn

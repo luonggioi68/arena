@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Head from 'next/head'; // Bổ sung Head cho trang cấm truy cập
 import { useRouter } from 'next/router';
 import { auth, firestore } from '@/lib/firebase';
 import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
@@ -11,15 +12,18 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex'; 
 import 'katex/dist/katex.min.css'; 
 import * as mammoth from 'mammoth'; 
-import { ArrowLeft, Sparkles, Loader2, LayoutTemplate, Database, Target, Flame, FileText, AlertCircle, Download, Upload, X, Eraser, Zap, Server } from 'lucide-react';
+import { ArrowLeft, Sparkles, Loader2, LayoutTemplate, Database, Target, Flame, FileText, AlertCircle, Download, Upload, X, Eraser, Zap, Server, AlertTriangle, Home } from 'lucide-react'; // Bổ sung AlertTriangle, Home
 
+const MASTER_EMAILS = ["luonggioi68@gmail.com"]; // Bổ sung quyền Admin tối cao
 const SUBJECTS = ["Tin học", "Toán học", "Ngữ văn", "Tiếng Anh", "Vật lí", "Hóa học", "Sinh học", "Lịch sử", "Địa lí", "GDCD", "Công nghệ"];
 const GRADES = ["12", "11", "10", "9", "8", "7", "6"];
 
 export default function FastQuestionGenerator() {
   const router = useRouter();
   const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  
+  // STATE MỚI: THEO DÕI QUYỀN GIÁO VIÊN
+  const [isTeacher, setIsTeacher] = useState(null); 
   
   const [subject, setSubject] = useState('Tin học');
   const [grade, setGrade] = useState('11');
@@ -44,11 +48,21 @@ export default function FastQuestionGenerator() {
       essay: { b: 0, h: 0, vd: 1 } 
   });
 
+  // LOGIC PHÂN QUYỀN BẢO MẬT MỚI
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (!u) router.push('/');
-      else setUser(u);
-      setAuthLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        // Kiểm tra trong database xem user này có role là teacher không
+        const userDocSnap = await getDoc(doc(firestore, "users", currentUser.uid));
+        const userData = userDocSnap.exists() ? userDocSnap.data() : {};
+        const checkRole = userData.role === 'teacher' || MASTER_EMAILS.includes(currentUser.email);
+        
+        setIsTeacher(checkRole);
+        setUser({ ...currentUser, ...userData });
+      } else {
+        // Chưa đăng nhập thì cấm luôn
+        setIsTeacher(false);
+      }
     });
     return () => unsubscribe();
   }, [router]);
@@ -66,8 +80,9 @@ export default function FastQuestionGenerator() {
               setSelectedSourceLink(''); 
           } catch (e) { console.error("Lỗi tải nguồn:", e); }
       };
-      fetchSources();
-  }, [grade, subject]);
+      // Chỉ tải nguồn nếu đã được xác nhận là giáo viên
+      if (isTeacher) fetchSources();
+  }, [grade, subject, isTeacher]);
 
   const handleMatrixChange = (type, level, value) => {
       let val = parseFloat(value);
@@ -220,7 +235,6 @@ export default function FastQuestionGenerator() {
             ? `\n**NGỮ LIỆU ĐẦU VÀO (GIỚI HẠN TUYỆT ĐỐI):**\n"""\n${finalContextText}\n"""\n`
             : "";
 
-        // CHUẨN BỊ LOGIC TẠO ĐỀ ĐỘNG (BỎ QUA PHẦN KHÔNG CÓ CÂU HỎI)
         let requirementList = [];
         let examStructure = [];
         let answerStructure = [];
@@ -401,14 +415,32 @@ ${answerStructureText}
       document.body.removeChild(fileDownload);
   };
 
-  if (authLoading) {
+  // MÀN HÌNH CHỜ KIỂM TRA QUYỀN
+  if (isTeacher === null) {
       return (
           <div className="min-h-screen bg-black flex items-center justify-center text-orange-500 font-bold shadow-[0_0_20px_rgba(249,115,22,0.5)]">
-              <Flame className="animate-bounce mr-2" size={30} /> ĐANG KHỞI ĐỘNG HỆ THỐNG...
+              <Flame className="animate-bounce mr-2" size={30} /> ĐANG QUÉT PHÂN QUYỀN CHIẾN BINH...
           </div>
       );
   }
 
+  // MÀN HÌNH TỪ CHỐI TRUY CẬP CHO HỌC SINH/KHÁCH
+  if (isTeacher === false) {
+      return (
+        <div className="min-h-screen bg-[#050505] flex items-center justify-center flex-col text-center p-4 relative overflow-hidden selection:bg-red-500 selection:text-white">
+          <Head><title>Khu Vực Hạn Chế | Arena Edu</title></Head>
+          <div className="absolute top-40 left-10 w-72 h-72 bg-red-600/20 rounded-full blur-[100px] pointer-events-none"></div>
+          <div className="absolute bottom-40 right-10 w-96 h-96 bg-orange-600/10 rounded-full blur-[100px] pointer-events-none"></div>
+          
+          <AlertTriangle className="w-20 h-20 md:w-[100px] md:h-[100px] text-red-500 mb-6 drop-shadow-[0_0_20px_rgba(239,68,68,0.8)] animate-pulse relative z-10"/>
+          <h1 className="text-2xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600 mb-4 uppercase tracking-widest relative z-10">Khu Vực Hạn Chế</h1>
+          <p className="text-slate-400 mb-10 font-bold tracking-widest text-xs md:text-sm relative z-10 px-4 max-w-lg">Công cụ Tạo Đề Thi AI là tuyệt mật. Bạn cần đăng nhập bằng tài khoản <span className="text-red-400 font-black">GIÁO VIÊN</span> để sử dụng vũ khí này.</p>
+          <button onClick={() => router.push('/')} className="relative z-10 bg-slate-900/80 hover:bg-cyan-600 text-cyan-400 hover:text-white px-6 md:px-8 py-3 md:py-4 rounded-xl font-black transition-all border border-cyan-500 shadow-[0_0_20px_rgba(6,182,212,0.4)] flex items-center gap-3 uppercase tracking-widest hover:scale-105 active:scale-95 text-xs md:text-base"><Home size={20}/> Trở Về Căn Cứ</button>
+        </div>
+      );
+  }
+
+  // NẾU LÀ GIÁO VIÊN -> RENDER GIAO DIỆN CŨ BÌNH THƯỜNG
   return (
     <div className="min-h-screen bg-[#050505] font-sans flex flex-col h-screen overflow-hidden text-gray-200 relative">
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-red-600/20 blur-[150px] rounded-full pointer-events-none"></div>
