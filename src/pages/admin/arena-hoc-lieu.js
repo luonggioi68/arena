@@ -10,7 +10,9 @@ import useAuthStore from '@/store/useAuthStore';
 
 const MASTER_EMAILS = ["luonggioi68@gmail.com"];
 const GRADES = ['6', '7', '8', '9', '10', '11', '12', 'HSG'];
-const SUBJECTS = ['Tin học', 'Toán học', 'Ngữ văn', 'Tiếng Anh', 'Vật lí', 'Hóa học', 'Sinh học', 'Lịch sử', 'Địa lí', 'GDCD'];
+const SUBJECTS = ['Tin học', 'Toán học', 'Ngữ văn', 'Tiếng Anh', 'Vật lí', 
+    'Hóa học', 'Sinh học', 'Lịch sử', 'Địa lí', 'GDCD','Công nghệ', 'Âm nhạc', 'Mỹ thuật', 'Thể dục','KHTN',
+    'Hoạt động trải nghiệm','Lịch sử - địa lí','Giáo dục kinh tế và pháp luật','Giáo dục quốc phòng an ninh','Tự chọn'];
 
 export default function AdminHocLieu() {
   const router = useRouter();
