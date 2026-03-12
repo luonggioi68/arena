@@ -6,7 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, getDocs, deleteDoc, doc, addDoc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { 
     ArrowLeft, Plus, X, Loader2, Save, Trash2, Edit, Clock, FileText,
-    FileCheck, FileDigit, UploadCloud, CheckCircle, Shield, BookOpen, GraduationCap, FileSpreadsheet, ListChecks, Users, Key, Filter, Target
+    FileCheck, FileDigit, UploadCloud, CheckCircle, Shield, BookOpen, GraduationCap, FileSpreadsheet, ListChecks, Users, Key, Filter, Target, Eye
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -61,6 +61,10 @@ export default function PDFManager() {
     const [examFilterSubject, setExamFilterSubject] = useState('Tất cả');
     const [isSystemFilter, setIsSystemFilter] = useState(false);
 
+    // State quản lý Modal Xem chi tiết bài làm
+    const [selectedAttempt, setSelectedAttempt] = useState(null);
+    const [isFetchingAttempt, setIsFetchingAttempt] = useState(false);
+
     const [pdfFormData, setPdfFormData] = useState({
         format: '2025', title: '', timeLimit: 45, pdfUrl: '', grade: '12', subject: 'Toán học',
         allowedClasses: '', showAnswers: false, answersP1: '', answersP2: '', answersP3: ''    
@@ -90,11 +94,9 @@ export default function PDFManager() {
             const isAdmin = userEmail === 'luonggioi68@gmail.com';
             let qConstraints = [];
 
-            // Nếu không phải admin hoặc admin nhưng không bật lọc toàn hệ thống (để trang nhẹ ban đầu)
             if (!isAdmin || !systemWide) {
                 qConstraints.push(where("authorId", "==", userId));
             } else {
-                // Admin đang tìm kiếm trên toàn hệ thống
                 if (grade !== 'Tất cả') {
                     qConstraints.push(where("grade", "==", grade));
                 }
@@ -104,7 +106,6 @@ export default function PDFManager() {
             const s = await getDocs(q);
             let list = s.docs.map(d => ({ id: d.id, ...d.data() }));
 
-            // Lọc cục bộ các tham số còn lại
             if (grade !== 'Tất cả' && (!isAdmin || !systemWide)) {
                  list = list.filter(exam => exam.grade === grade);
             }
@@ -114,7 +115,7 @@ export default function PDFManager() {
 
             list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
             setPdfExams(list);
-            setIsSystemFilter(systemWide); // Lưu trạng thái có đang hiển thị toàn bộ hay không
+            setIsSystemFilter(systemWide); 
         } catch (e) { console.error(e); }
     };
 
@@ -137,10 +138,7 @@ export default function PDFManager() {
 
             const stats = {};
            sortedDocs.forEach((data) => {
-                // Giữ nguyên dòng loại bỏ tài khoản Khách
                 if (!data.studentName || data.studentName.includes('Khách_')) return;
-
-                // Chỉ hiển thị nếu học sinh nhập ĐÚNG Mã GV của thầy. 
                 if (data.teacherCode !== undefined && data.teacherCode !== tCode) return;
 
                 const grade = data.grade || 'Khác';
@@ -154,12 +152,19 @@ export default function PDFManager() {
                     stats[key] = {
                         key: key,
                         name: data.studentName, className: sClass, grade: grade, subject: subject,
-                        scores: [], docIds: [] 
+                        scores: [], docIds: [], attempts: [] 
                     };
                 }
                 
                 stats[key].docIds.push(data.docId);
                 stats[key].scores.push(score);
+                stats[key].attempts.push({
+                    docId: data.docId,
+                    score: score,
+                    answers: data.answers || { part1: {}, part2: {}, part3: {} },
+                    examId: data.examId,
+                    examTitle: data.examTitle
+                });
             });
 
             const resultsArray = Object.values(stats).sort((a,b) => Math.max(...b.scores) - Math.max(...a.scores));
@@ -179,7 +184,6 @@ export default function PDFManager() {
         setIsUploadingPdf(true);
         const formData = new FormData();
         formData.append("file", file);
-        // Ép buộc dùng chung Cloudinary của hệ thống để tránh lỗi CORS cho giáo viên khác
         formData.append("upload_preset", 'gameedu'); 
 
         try {
@@ -194,7 +198,7 @@ export default function PDFManager() {
         } catch (err) { alert("Lỗi mạng: " + err.message); } 
         finally { 
             setIsUploadingPdf(false); 
-            e.target.value = ''; // Reset lại input để có thể chọn lại cùng 1 file
+            e.target.value = ''; 
         }
     };
 
@@ -335,7 +339,6 @@ export default function PDFManager() {
                 alert(`✅ Đã lưu bộ đề thành công với ${totalQ} câu hỏi!`);
             }
             handleCancelForm(); 
-            // Load lại danh sách dựa theo bộ lọc hiện tại
             fetchPdfExams(user.uid, user.email, examFilterGrade, examFilterSubject, isSystemFilter); 
         } catch (err) { alert('Lỗi lưu dữ liệu: ' + err.message); }
     };
@@ -381,10 +384,72 @@ export default function PDFManager() {
         setIsDeletingStudents(false);
     };
 
+    const handleViewAttemptDetails = async (attempt, studentName) => {
+        setIsFetchingAttempt(true);
+        try {
+            let examData = pdfExams.find(e => e.id === attempt.examId);
+            if (!examData) {
+                const docSnap = await getDoc(doc(firestore, "pdf_exams", attempt.examId));
+                if (docSnap.exists()) {
+                    examData = { id: docSnap.id, ...docSnap.data() };
+                }
+            }
+            setSelectedAttempt({ ...attempt, studentName, examData });
+        } catch (err) {
+            console.error(err);
+            alert("Lỗi tải chi tiết bài làm: " + err.message);
+        } finally {
+            setIsFetchingAttempt(false);
+        }
+    };
+
+    // ========== TÍNH TOÁN THỐNG KÊ TRƯỚC KHI RENDER MODAL ==========
+    let p1Correct = 0, p1Total = 0, p1Score = 0;
+    let p2Score = 0, p2Total = 0;
+    let p3Correct = 0, p3Total = 0, p3Score = 0;
+
+    if (selectedAttempt && selectedAttempt.examData) {
+        // Tính thống kê Phần 1
+        if (selectedAttempt.examData.answerKey?.part1) {
+            p1Total = Object.keys(selectedAttempt.examData.answerKey.part1).length;
+            Object.entries(selectedAttempt.examData.answerKey.part1).forEach(([q, trueAns]) => {
+                if (selectedAttempt.answers?.part1?.[q] === trueAns) p1Correct++;
+            });
+            p1Score = p1Correct * 0.25;
+        }
+
+        // Tính thống kê Phần 2
+        if (selectedAttempt.examData.answerKey?.part2) {
+            p2Total = Object.keys(selectedAttempt.examData.answerKey.part2).length;
+            Object.entries(selectedAttempt.examData.answerKey.part2).forEach(([q, ansArrData]) => {
+                const ansArr = Array.isArray(ansArrData) ? ansArrData : Object.values(ansArrData || {});
+                const stuAnsObj = selectedAttempt.answers?.part2?.[q] || {};
+                let matchCount = 0;
+                ansArr.forEach((trueVal, idx) => { if(stuAnsObj[idx] === trueVal) matchCount++; });
+                if(matchCount === 1) p2Score += 0.1;
+                else if(matchCount === 2) p2Score += 0.25;
+                else if(matchCount === 3) p2Score += 0.5;
+                else if(matchCount === 4) p2Score += 1.0;
+            });
+        }
+
+        // Tính thống kê Phần 3
+        if (selectedAttempt.examData.answerKey?.part3) {
+            p3Total = Object.keys(selectedAttempt.examData.answerKey.part3).length;
+            Object.entries(selectedAttempt.examData.answerKey.part3).forEach(([q, trueAns]) => {
+                const stuAnsRaw = selectedAttempt.answers?.part3?.[q] || "";
+                const stuAns = String(stuAnsRaw).trim().toLowerCase();
+                const trueAnsLower = String(trueAns).trim().toLowerCase();
+                if (stuAns === trueAnsLower && stuAns !== "") p3Correct++;
+            });
+            p3Score = p3Correct * 0.5;
+        }
+    }
+
     if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617] text-white"><Loader2 className="animate-spin text-cyan-400 drop-shadow-[0_0_20px_#06b6d4]" size={60} /></div>;
 
     return (
-        <div className="min-h-screen bg-[#020617] text-slate-200 font-sans selection:bg-cyan-500 selection:text-white pb-20">
+        <div className="min-h-screen bg-[#020617] text-slate-200 font-sans selection:bg-cyan-500 selection:text-white pb-20 relative">
             <div className="fixed inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-cyan-900/20 via-[#020617] to-black -z-20"></div>
 
             <header className="sticky top-0 z-50 bg-[#020617]/80 backdrop-blur-xl border-b border-cyan-500/30 shadow-[0_5px_30px_rgba(6,182,212,0.2)]">
@@ -486,7 +551,6 @@ export default function PDFManager() {
                                                 <input type="file" className="hidden" accept=".pdf" onChange={handlePdfUpload} />
                                             </label>
                                             
-                                            {/* Thêm nút Xóa file PDF hiện tại */}
                                             {pdfFormData.pdfUrl && (
                                                 <button
                                                     type="button"
@@ -609,7 +673,6 @@ export default function PDFManager() {
                                                 {q.allowedClasses && q.allowedClasses.length > 0 && <span className="bg-purple-950 text-purple-300 px-2 py-1 rounded border border-purple-800 shadow-[0_0_8px_rgba(168,85,247,0.3)]">Giao cho: {q.allowedClasses.join(', ')}</span>}
                                                 {q.showAnswers && <span className="bg-emerald-950 text-emerald-400 px-2 py-1 rounded border border-emerald-800 shadow-[0_0_8px_rgba(16,185,129,0.3)]">Mở Đáp Án</span>}
                                                 
-                                                {/* Hiển thị email của người tạo nếu Admin đang xem toàn hệ thống */}
                                                 {isSystemFilter && (
                                                     <span className="bg-red-950/70 text-red-400 px-2 py-1 rounded border border-red-800 shadow-[0_0_8px_rgba(239,68,68,0.3)] truncate max-w-[200px]" title={q.authorEmail || q.authorName || 'Ẩn danh'}>
                                                         Tạo bởi: {q.authorEmail || q.authorName || 'Ẩn danh'}
@@ -690,7 +753,7 @@ export default function PDFManager() {
                                     </th>
                                     <th className="p-5 w-12 text-center">TT</th>
                                     <th className="p-5 w-1/4">Họ Tên & Lớp</th>
-                                    <th className="p-5">Chi Tiết Lượt Thi</th>
+                                    <th className="p-5">Chi Tiết Lượt Thi (Bấm vào để xem)</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/60">
@@ -713,11 +776,16 @@ export default function PDFManager() {
                                         </td>
                                         <td className="p-5">
                                             <div className="flex flex-wrap gap-2.5">
-                                                {hs.scores.map((sc, i) => (
-                                                    <div key={`sc-${i}`} className="bg-black/50 border border-cyan-800/60 px-2.5 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 hover:border-cyan-400 hover:shadow-[0_0_10px_rgba(6,182,212,0.3)] transition-colors">
-                                                        <span className="text-[10px] text-slate-400 uppercase font-black">L{i + 1}:</span>
-                                                        <span className="text-sm font-black text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]">{sc.toFixed(2)}</span>
-                                                    </div>
+                                                {hs.attempts.map((attempt, i) => (
+                                                    <button 
+                                                        key={`sc-${i}`} 
+                                                        onClick={() => handleViewAttemptDetails(attempt, hs.name)}
+                                                        className="bg-black/50 border border-cyan-800/60 px-2.5 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 hover:border-cyan-400 hover:shadow-[0_0_10px_rgba(6,182,212,0.3)] transition-colors cursor-pointer group/btn"
+                                                        title="Xem chi tiết bài làm"
+                                                    >
+                                                        <span className="text-[10px] text-slate-400 uppercase font-black group-hover/btn:text-cyan-300">L{i + 1}:</span>
+                                                        <span className="text-sm font-black text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)] group-hover/btn:scale-110 transition-transform">{attempt.score.toFixed(2)}</span>
+                                                    </button>
                                                 ))}
                                             </div>
                                         </td>
@@ -735,6 +803,197 @@ export default function PDFManager() {
                     </div>
                 </div>
             </main>
+
+            {/* MODAL XEM CHI TIẾT BÀI LÀM */}
+            {isFetchingAttempt && (
+                <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center">
+                    <Loader2 className="animate-spin text-orange-500" size={50} />
+                </div>
+            )}
+
+            {selectedAttempt && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm">
+                     <div className="bg-[#0f172a] border-2 border-orange-500/50 rounded-[2rem] w-full max-w-5xl max-h-[90vh] shadow-[0_0_50px_rgba(249,115,22,0.3)] flex flex-col relative animate-in zoom-in-95 duration-200">
+                         {/* Header Modal */}
+                         <div className="p-6 border-b border-slate-800 flex justify-between items-start shrink-0 relative overflow-hidden">
+                             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-400 to-red-600"></div>
+                             <div>
+                                 <h2 className="text-xl md:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 uppercase tracking-tighter flex items-center gap-2">
+                                     <Eye size={24} className="text-orange-500" /> BÁO CÁO CHI TIẾT TRẬN ĐÁNH
+                                 </h2>
+                                 <div className="flex flex-wrap gap-4 mt-3">
+                                     <div className="bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-700/50">
+                                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-0.5">Chiến binh</span>
+                                         <span className="text-sm font-black text-white">{selectedAttempt.studentName}</span>
+                                     </div>
+                                     <div className="bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-700/50">
+                                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-0.5">Nhiệm vụ</span>
+                                         <span className="text-sm font-black text-white truncate max-w-[200px] inline-block align-bottom" title={selectedAttempt.examTitle}>{selectedAttempt.examTitle}</span>
+                                     </div>
+                                     <div className="bg-orange-950/30 px-3 py-1.5 rounded-lg border border-orange-500/30">
+                                         <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest block mb-0.5">Điểm Tổng Lực</span>
+                                         <span className="text-xl font-black text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)] leading-none">{selectedAttempt.score.toFixed(2)}</span>
+                                     </div>
+                                 </div>
+                             </div>
+                             <button onClick={() => setSelectedAttempt(null)} className="p-2 bg-slate-900 hover:bg-red-900/50 text-slate-400 hover:text-red-400 rounded-xl transition-all border border-slate-800">
+                                 <X size={20} />
+                             </button>
+                         </div>
+
+                         {/* Nội dung chi tiết */}
+                         <div className="p-6 overflow-y-auto custom-scrollbar flex-1 min-h-0 bg-black/40">
+                             {!selectedAttempt.examData ? (
+                                 <div className="text-center py-10">
+                                     <FileCheck size={40} className="mx-auto text-red-500/50 mb-3" />
+                                     <p className="text-red-400 font-bold">Rất tiếc, bộ đề gốc đã bị xóa khỏi hệ thống.</p>
+                                     <p className="text-sm text-slate-500">Không thể đối chiếu đáp án chi tiết.</p>
+                                 </div>
+                             ) : (
+                                 <div className="space-y-8">
+                                     {/* PHẦN 1: TRẮC NGHIỆM */}
+                                     {selectedAttempt.examData.answerKey?.part1 && Object.keys(selectedAttempt.examData.answerKey.part1).length > 0 && (
+                                         <div>
+                                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-cyan-900/50 pb-2">
+                                                 <h4 className="text-cyan-500 font-black text-sm uppercase tracking-widest flex items-center gap-2">
+                                                     <Target size={16}/> I. TRẮC NGHIỆM (0.25đ / Câu)
+                                                 </h4>
+                                                 <div className="bg-cyan-950/50 text-cyan-300 px-3 py-1.5 rounded-lg border border-cyan-800 text-[10px] md:text-xs font-black shadow-inner flex items-center gap-3">
+                                                     <span>ĐÚNG: <span className="text-white bg-black/50 px-2 py-0.5 rounded ml-1">{p1Correct}/{p1Total}</span></span>
+                                                     <span className="w-px h-3 bg-cyan-700"></span>
+                                                     <span>ĐIỂM: <span className="text-emerald-400 bg-black/50 px-2 py-0.5 rounded ml-1">{p1Score.toFixed(2)}</span></span>
+                                                 </div>
+                                             </div>
+                                             <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
+                                                 {Object.entries(selectedAttempt.examData.answerKey.part1).sort(([a],[b])=>a-b).map(([q, trueAns]) => {
+                                                     const stuAns = selectedAttempt.answers?.part1?.[q];
+                                                     const isCorrect = stuAns === trueAns;
+                                                     return (
+                                                         <div key={q} className={`flex flex-col items-center justify-center p-2.5 rounded-xl border relative shadow-sm ${isCorrect ? 'bg-emerald-950/30 border-emerald-500/40' : 'bg-red-950/30 border-red-500/40'}`}>
+                                                             <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1.5">Câu {q}</span>
+                                                             <div className="flex items-center gap-1.5 text-base font-black">
+                                                                 <span className={isCorrect ? 'text-emerald-400 drop-shadow-md' : 'text-red-400 line-through'}>{stuAns || '-'}</span>
+                                                                 {!isCorrect && <span className="text-emerald-400 drop-shadow-md">{trueAns}</span>}
+                                                             </div>
+                                                             {isCorrect && <CheckCircle size={10} className="text-emerald-500 absolute top-1.5 right-1.5" />}
+                                                         </div>
+                                                     )
+                                                 })}
+                                             </div>
+                                         </div>
+                                     )}
+
+                                     {/* PHẦN 2: ĐÚNG / SAI */}
+                                     {selectedAttempt.examData.answerKey?.part2 && Object.keys(selectedAttempt.examData.answerKey.part2).length > 0 && (
+                                         <div>
+                                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-yellow-900/50 pb-2">
+                                                 <h4 className="text-yellow-500 font-black text-sm uppercase tracking-widest flex items-center gap-2">
+                                                     <CheckCircle size={16}/> II. ĐÚNG / SAI (Tối đa 1đ / Câu)
+                                                 </h4>
+                                                 <div className="bg-yellow-950/50 text-yellow-300 px-3 py-1.5 rounded-lg border border-yellow-800 text-[10px] md:text-xs font-black shadow-inner flex items-center gap-2">
+                                                     <span>TỔNG ĐIỂM: <span className="text-emerald-400 bg-black/50 px-2 py-0.5 rounded ml-1">{p2Score.toFixed(2)}</span></span>
+                                                 </div>
+                                             </div>
+                                             <div className="space-y-3">
+                                                 {Object.entries(selectedAttempt.examData.answerKey.part2).sort(([a],[b])=>a-b).map(([q, ansArrData]) => {
+                                                     const ansArr = Array.isArray(ansArrData) ? ansArrData : Object.values(ansArrData || {});
+                                                     const stuAnsObj = selectedAttempt.answers?.part2?.[q] || {};
+                                                     
+                                                     let matchCount = 0;
+                                                     ansArr.forEach((trueVal, idx) => { if(stuAnsObj[idx] === trueVal) matchCount++; });
+                                                     
+                                                     let qScore = 0;
+                                                     if(matchCount === 1) qScore = 0.1;
+                                                     else if(matchCount === 2) qScore = 0.25;
+                                                     else if(matchCount === 3) qScore = 0.5;
+                                                     else if(matchCount === 4) qScore = 1.0;
+
+                                                     return (
+                                                         <div key={q} className="bg-slate-900/50 border border-slate-800 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center gap-4 shadow-inner">
+                                                             <div className="flex items-center justify-between sm:flex-col sm:items-start sm:justify-center min-w-[100px] shrink-0">
+                                                                 <span className="text-slate-300 font-black text-sm uppercase">Câu {q}</span>
+                                                                 <span className="text-[10px] font-black text-yellow-400 bg-yellow-900/30 px-2.5 py-1 rounded border border-yellow-500/20">+{qScore}đ</span>
+                                                             </div>
+                                                             <div className="flex flex-wrap gap-3 flex-1">
+                                                                 {ansArr.map((trueVal, i) => {
+                                                                     const stuAns = stuAnsObj[i];
+                                                                     const isCorrect = stuAns === trueVal;
+                                                                     return (
+                                                                         <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-xl border flex-1 min-w-[120px] justify-between shadow-sm ${isCorrect ? 'bg-emerald-950/30 border-emerald-500/40' : 'bg-red-950/30 border-red-500/40'}`}>
+                                                                             <span className="text-[11px] font-black text-slate-500 uppercase bg-black/50 w-6 h-6 flex items-center justify-center rounded-md border border-slate-800">Ý {['A','B','C','D'][i]}</span>
+                                                                             <div className="flex items-center gap-1.5 text-sm font-black">
+                                                                                 <span className={isCorrect ? 'text-emerald-400 drop-shadow-md' : 'text-red-400 line-through'}>{stuAns || '-'}</span>
+                                                                                 {!isCorrect && <span className="text-emerald-400 drop-shadow-md">({trueVal})</span>}
+                                                                             </div>
+                                                                         </div>
+                                                                     )
+                                                                 })}
+                                                             </div>
+                                                         </div>
+                                                     )
+                                                 })}
+                                             </div>
+                                         </div>
+                                     )}
+
+                                     {/* PHẦN 3: TRẢ LỜI NGẮN */}
+                                     {selectedAttempt.examData.answerKey?.part3 && Object.keys(selectedAttempt.examData.answerKey.part3).length > 0 && (
+                                         <div>
+                                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-orange-900/50 pb-2">
+                                                 <h4 className="text-orange-500 font-black text-sm uppercase tracking-widest flex items-center gap-2">
+                                                     <Edit size={16}/> III. TRẢ LỜI NGẮN (0.5đ / Câu)
+                                                 </h4>
+                                                 <div className="bg-orange-950/50 text-orange-300 px-3 py-1.5 rounded-lg border border-orange-800 text-[10px] md:text-xs font-black shadow-inner flex items-center gap-3">
+                                                     <span>ĐÚNG: <span className="text-white bg-black/50 px-2 py-0.5 rounded ml-1">{p3Correct}/{p3Total}</span></span>
+                                                     <span className="w-px h-3 bg-orange-700"></span>
+                                                     <span>ĐIỂM: <span className="text-emerald-400 bg-black/50 px-2 py-0.5 rounded ml-1">{p3Score.toFixed(2)}</span></span>
+                                                 </div>
+                                             </div>
+                                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                 {Object.entries(selectedAttempt.examData.answerKey.part3).sort(([a],[b])=>a-b).map(([q, trueAns]) => {
+                                                     const stuAnsRaw = selectedAttempt.answers?.part3?.[q] || "";
+                                                     const stuAns = String(stuAnsRaw).trim().toLowerCase();
+                                                     const trueAnsLower = String(trueAns).trim().toLowerCase();
+                                                     const isCorrect = stuAns === trueAnsLower && stuAns !== "";
+                                                     
+                                                     return (
+                                                         <div key={q} className={`flex flex-col p-4 rounded-2xl border shadow-sm ${isCorrect ? 'bg-emerald-950/30 border-emerald-500/40' : 'bg-red-950/30 border-red-500/40'}`}>
+                                                             <div className="flex justify-between items-center mb-3">
+                                                                 <span className="text-slate-300 font-black text-xs uppercase bg-black/50 px-2 py-1 rounded border border-slate-800">Câu {q}</span>
+                                                                 {isCorrect && <span className="text-[10px] font-black text-emerald-400 bg-emerald-900/30 px-2 py-0.5 rounded border border-emerald-500/20">+0.5đ</span>}
+                                                             </div>
+                                                             <div className="flex flex-col gap-2">
+                                                                 <div className="flex justify-between items-center bg-black/40 p-2 rounded-lg border border-slate-800/50">
+                                                                     <span className="text-[10px] text-slate-500 uppercase font-black">HS Điền:</span>
+                                                                     <span className={`text-sm font-black ${isCorrect ? 'text-emerald-400 drop-shadow-md' : 'text-red-400 line-through'}`}>{stuAnsRaw || '(Trống)'}</span>
+                                                                 </div>
+                                                                 {!isCorrect && (
+                                                                     <div className="flex justify-between items-center bg-emerald-950/20 p-2 rounded-lg border border-emerald-900/50">
+                                                                         <span className="text-[10px] text-emerald-500/80 uppercase font-black">Đ/A Gốc:</span>
+                                                                         <span className="text-sm font-black text-emerald-400 drop-shadow-md">{trueAns}</span>
+                                                                     </div>
+                                                                 )}
+                                                             </div>
+                                                         </div>
+                                                     )
+                                                 })}
+                                             </div>
+                                         </div>
+                                     )}
+                                 </div>
+                             )}
+                         </div>
+                     </div>
+                     
+                     {/* CSS cho thanh cuộn bên trong Modal */}
+                     <style jsx>{`
+                        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                        .custom-scrollbar::-webkit-scrollbar-thumb { background: #ea580c; border-radius: 4px; }
+                        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #dc2626; }
+                     `}</style>
+                </div>
+            )}
         </div>
     );
 }
