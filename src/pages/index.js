@@ -334,6 +334,7 @@ export default function HomePage() {
                   const isDuplicate = index === 3; 
                   const isquestion = index === 4; 
                   const hoclieu= index === 5; 
+                  const copydrive= index === 6; 
                   const isSubmit = index === 7; 
                   
                   const title = isKHBD ? "Soạn KHBD" : 
@@ -342,6 +343,7 @@ export default function HomePage() {
                                 isDuplicate ? "Nhân Bản Đề" : 
                                 isquestion ? "Tạo câu hỏi" : 
                                 hoclieu ? "Học liệu" : 
+                                copydrive ? "Drive Copy" :
                                 isSubmit ? "Cổng Nộp Bài" : "";
 
                   const handleMenuClick = () => {
@@ -354,6 +356,7 @@ export default function HomePage() {
                               if (isDuplicate) router.push('/clone-test');
                               if (isquestion) router.push('/generate-questions');
                               if (hoclieu) router.push('/arena-hoc-lieu');
+                                if (copydrive) router.push('/copydrive');
                               if (isSubmit) router.push('/submit');
                           }
                       }
