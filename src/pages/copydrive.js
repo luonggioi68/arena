@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 export default function CopyDrivePage() {
   useEffect(() => {
-    const scriptUrl = "https://script.google.com/macros/s/AKfycbxImhTa9NRDwGvZff8EqL5YXseDzr0wnR2hYOotnOWTJUhx2o8ermHvyqBB3l_sxSr2/exec";
+    const scriptUrl = "https://script.google.com/macros/s/AKfycbxSxxQVNYar585uFy60A7HHxemW-3M84tIzjuJ7OBhsSDzHCawtLtVNxkA_FOPQAko/exec";
 
     // 1. Container chính
     const container = document.createElement('div');
