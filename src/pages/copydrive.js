@@ -35,7 +35,7 @@ export default function CopyDrivePage() {
     // Nếu chưa check xong hoặc không phải giáo viên -> Không làm gì cả
     if (isTeacher !== true) return;
 
-    const scriptUrl = "https://script.google.com/macros/s/AKfycbxSxxQVNYar585uFy60A7HHxemW-3M84tIzjuJ7OBhsSDzHCawtLtVNxkA_FOPQAko/exec";
+    const scriptUrl = "https://script.google.com/macros/s/AKfycbxImhTa9NRDwGvZff8EqL5YXseDzr0wnR2hYOotnOWTJUhx2o8ermHvyqBB3l_sxSr2/exec?embedded=true";
 
     const container = document.createElement('div');
     container.id = "drive-wrapper";
