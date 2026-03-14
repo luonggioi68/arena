@@ -19,13 +19,11 @@ export default function TugOfWarHost() {
     const timerRef = useRef(null);
     const isInitialized = useRef(false);
 
-    // === STATE & REFS CHO ÂM THANH / PHÁO HOA ===
     const [isMuted, setIsMuted] = useState(false);
     const bgmRef = useRef(null);
     const winAudioRef = useRef(null);
     const fireworksFired = useRef(false);
 
-    // 1. Khởi tạo Audio khi load trang
     useEffect(() => {
         if (typeof window !== 'undefined') {
             bgmRef.current = new Audio('https://cdn.pixabay.com/audio/2022/10/25/audio_40b08db6c8.mp3');
@@ -37,13 +35,11 @@ export default function TugOfWarHost() {
         }
     }, []);
 
-    // 2. Xử lý logic Tắt/Bật tiếng
     useEffect(() => {
         if (bgmRef.current) bgmRef.current.muted = isMuted;
         if (winAudioRef.current) winAudioRef.current.muted = isMuted;
     }, [isMuted]);
 
-    // 3. Hàm kích hoạt pháo hoa
     const triggerFireworks = () => {
         import('canvas-confetti').then((module) => {
             const confetti = module.default;
@@ -59,7 +55,6 @@ export default function TugOfWarHost() {
         });
     };
 
-    // 4. Lắng nghe trạng thái Game để phát nhạc và pháo hoa
     useEffect(() => {
         if (session?.status === 'PLAYING') {
             if (!isMuted) bgmRef.current?.play().catch(e => console.log("Trình duyệt chặn Autoplay:", e));
@@ -104,6 +99,8 @@ export default function TugOfWarHost() {
                     blueScore: 0,
                     blueQIndex: 0,
                     redQIndex: 0,
+                    blueFinishedCount: 0, // Lưu số lượng hs Đội Xanh đã làm xong
+                    redFinishedCount: 0,  // Lưu số lượng hs Đội Đỏ đã làm xong
                     redPlayers: [],  
                     bluePlayers: [], 
                     winner: null,
@@ -128,8 +125,31 @@ export default function TugOfWarHost() {
                 setSession(data);
 
                 if (data.status === 'PLAYING') {
-                    if (data.ropePosition >= data.winMargin) handleEndGame('RED');
-                    if (data.ropePosition <= -data.winMargin) handleEndGame('BLUE');
+                    // === LOGIC MỚI: KIỂM TRA CHỐT GAME ===
+                    const totalBlue = data.bluePlayers?.length || 0;
+                    const totalRed = data.redPlayers?.length || 0;
+                    const blueDone = data.blueFinishedCount || 0;
+                    const redDone = data.redFinishedCount || 0;
+
+                    const isBlueAllDone = totalBlue > 0 && blueDone >= totalBlue;
+                    const isRedAllDone = totalRed > 0 && redDone >= totalRed;
+                    const hasPlayers = totalBlue > 0 || totalRed > 0;
+
+                    // 1. Nếu kéo đứt dây
+                    if (data.ropePosition >= data.winMargin) {
+                        handleEndGame('RED');
+                    } 
+                    // 2. Nếu kéo đứt dây
+                    else if (data.ropePosition <= -data.winMargin) {
+                        handleEndGame('BLUE');
+                    } 
+                    // 3. Nếu TẤT CẢ hs của cả 2 đội đều đã hoàn thành hết số câu hỏi
+                    else if (hasPlayers && (totalBlue === 0 || isBlueAllDone) && (totalRed === 0 || isRedAllDone)) {
+                        let winner = 'DRAW';
+                        if (data.ropePosition > 0) winner = 'RED';
+                        else if (data.ropePosition < 0) winner = 'BLUE';
+                        handleEndGame(winner);
+                    }
                 }
             } else {
                 setErrorMsg("Phiên chơi đã bị xóa hoặc không tồn tại.");
@@ -144,24 +164,28 @@ export default function TugOfWarHost() {
             timerRef.current = setInterval(() => {
                 setTimeLeft(prev => prev - 1);
             }, 1000);
+
+            if (timeLeft % 3 === 0 && sessionId) {
+                updateDoc(doc(firestore, 'game_sessions_tug', sessionId), { 
+                    syncTimeLeft: timeLeft 
+                }).catch(e => console.log("Lỗi đồng bộ:", e));
+            }
+
         } else if (timeLeft === 0 && session?.status === 'PLAYING') {
             const winner = session.ropePosition > 0 ? 'RED' : (session.ropePosition < 0 ? 'BLUE' : 'DRAW');
             handleEndGame(winner);
         }
 
         return () => clearInterval(timerRef.current);
-    }, [session?.status, timeLeft]);
+    }, [session?.status, timeLeft, sessionId]);
 
     const handleStartGame = async () => {
         try {
             setTimeLeft(timeSetting * 60);
-            const endTime = Date.now() + (timeSetting * 60 * 1000); 
-            
             await updateDoc(doc(firestore, 'game_sessions_tug', sessionId), { 
                 status: 'PLAYING',
-                endTime: endTime
+                syncTimeLeft: timeSetting * 60
             });
-            // Phát nhạc luôn khi host bấm nút (Vượt qua chính sách chặn Autoplay)
             if (!isMuted) bgmRef.current?.play().catch(e => console.log(e));
         } catch (err) {
             setErrorMsg("Không thể bắt đầu game: " + err.message);
@@ -202,14 +226,36 @@ export default function TugOfWarHost() {
     const displayMins = String(Math.floor(currentSeconds / 60)).padStart(2, '0');
     const displaySecs = String(currentSeconds % 60).padStart(2, '0');
 
+    // === TÍNH TOÁN CÂU HỎI TRUNG BÌNH CỦA ĐỘI (CHỐNG LỖI LẶP LẠI) ===
     let blueCurrentQ = null;
     let redCurrentQ = null;
+    let isBlueFinished = false;
+    let isRedFinished = false;
+    let currentBlueIndexToDisplay = 0;
+    let currentRedIndexToDisplay = 0;
     
     if (questions.length > 0 && session) {
-        const blueIndex = (session.blueQIndex || 0) % questions.length;
-        const redIndex = (session.redQIndex || 0) % questions.length;
-        blueCurrentQ = questions[blueIndex];
-        redCurrentQ = questions[redIndex];
+        const totalBlue = session.bluePlayers?.length || 1;
+        const totalRed = session.redPlayers?.length || 1;
+        
+        const blueDone = session.blueFinishedCount || 0;
+        const redDone = session.redFinishedCount || 0;
+
+        isBlueFinished = (blueDone >= totalBlue && session.bluePlayers?.length > 0);
+        isRedFinished = (redDone >= totalRed && session.redPlayers?.length > 0);
+
+        if (!isBlueFinished) {
+            // Lấy tổng số lần trả lời chia cho số học sinh để ra "Câu hỏi trung bình"
+            const blueAvg = Math.floor((session.blueQIndex || 0) / totalBlue);
+            currentBlueIndexToDisplay = Math.min(blueAvg, questions.length - 1);
+            blueCurrentQ = questions[currentBlueIndexToDisplay];
+        }
+
+        if (!isRedFinished) {
+            const redAvg = Math.floor((session.redQIndex || 0) / totalRed);
+            currentRedIndexToDisplay = Math.min(redAvg, questions.length - 1);
+            redCurrentQ = questions[currentRedIndexToDisplay];
+        }
     }
 
     return (
@@ -218,7 +264,6 @@ export default function TugOfWarHost() {
             <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-cyan-600/10 blur-[150px] rounded-full pointer-events-none"></div>
             <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-red-600/10 blur-[150px] rounded-full pointer-events-none"></div>
 
-            {/* 1. HEADER */}
             <header className="p-2 md:p-3 flex justify-between items-center border-b border-orange-500/30 z-30 bg-[#0a0a0a]/90 backdrop-blur-xl shadow-lg shrink-0">
                 <div className="flex items-center gap-3">
                     <div className="bg-gradient-to-br from-yellow-400 to-red-600 p-2 rounded-xl shadow-[0_0_15px_rgba(239,68,68,0.5)]">
@@ -248,8 +293,6 @@ export default function TugOfWarHost() {
                     </div>
 
                     <div className="flex items-center gap-3 border-l border-white/10 pl-3 md:pl-4">
-                        
-                        {/* NÚT TẮT/BẬT ÂM THANH */}
                         <button 
                             onClick={() => setIsMuted(!isMuted)}
                             className={`p-2 md:p-3 rounded-lg border flex items-center justify-center transition-all ${isMuted ? 'bg-red-500/20 border-red-500/50 text-red-400 shadow-[0_0_10px_rgba(239,68,68,0.3)]' : 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.3)] hover:scale-105'}`}
@@ -282,22 +325,13 @@ export default function TugOfWarHost() {
                     <p className="text-4xl text-slate-300 font-black tracking-widest mt-6">
                         Tỉ số: <span className="text-cyan-400">TIA CHỚP ({session.blueScore})</span> - <span className="text-red-500">TINH HOA ({session.redScore})</span>
                     </p>
-                    <button 
-                        onClick={() => { 
-                            bgmRef.current?.pause(); 
-                            winAudioRef.current?.pause(); 
-                            router.push('/dashboard'); 
-                        }} 
-                        className="mt-16 bg-white text-black px-12 py-5 rounded-2xl font-black text-2xl uppercase hover:scale-110 transition-transform shadow-[0_0_50px_rgba(255,255,255,0.5)]"
-                    >
+                    <button onClick={() => { bgmRef.current?.pause(); winAudioRef.current?.pause(); router.push('/dashboard'); }} className="mt-16 bg-white text-black px-12 py-5 rounded-2xl font-black text-2xl uppercase hover:scale-110 transition-transform shadow-[0_0_50px_rgba(255,255,255,0.5)]">
                         Trở về Căn Cứ
                     </button>
                 </div>
             )}
 
-            {/* 2. KHU VỰC MAIN (GIỮ NGUYÊN HOÀN TOÀN CỦA THẦY) */}
             <main className="flex-1 flex flex-col relative p-4 gap-4 overflow-hidden">
-                
                 <div className="w-full flex justify-between z-30 shrink-0">
                     <div className="flex flex-col w-1/3 max-w-[250px]">
                         <div className="flex items-center gap-3 bg-[#0a192f]/80 backdrop-blur p-2 md:p-3 rounded-2xl border-2 border-cyan-500 shadow-[0_0_20px_rgba(6,182,212,0.4)]">
@@ -332,38 +366,43 @@ export default function TugOfWarHost() {
                     
                     {/* ===== TRÁI: ĐỘI TIA CHỚP ===== */}
                     <div className={`w-[32%] flex flex-col bg-[#0a192f]/80 backdrop-blur-md border-2 border-cyan-500/50 rounded-3xl p-4 shadow-[0_0_30px_rgba(6,182,212,0.2)] transition-opacity duration-500 overflow-hidden ${session.status === 'PLAYING' ? 'opacity-100' : 'opacity-0'}`}>
-                        <div className="flex items-center gap-2 mb-3 border-b border-cyan-500/30 pb-2 shrink-0">
-                            <Target size={18} className="text-cyan-400" />
-                            <h3 className="font-black text-cyan-400 uppercase tracking-widest text-sm">Mật lệnh {(session?.blueQIndex || 0) + 1}</h3>
-                        </div>
-                        {blueCurrentQ ? (
-                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-                                <h2 
-                                    className="text-lg md:text-xl font-black text-white leading-relaxed break-words"
-                                    dangerouslySetInnerHTML={{ __html: blueCurrentQ.q }}
-                                />
-                                {blueCurrentQ.img && !blueCurrentQ.q.includes('[img]') && (
-                                    <img src={blueCurrentQ.img} alt="Hình" className="max-h-32 mt-3 rounded-xl border border-slate-700 mx-auto" />
-                                )}
-                                
-                                {blueCurrentQ.a && blueCurrentQ.a.length > 0 && (
-                                    <div className="mt-4 flex flex-col gap-2">
-                                        {blueCurrentQ.a.map((opt, idx) => (
-                                            <div key={idx} className="flex items-start gap-2 bg-cyan-950/40 p-2 rounded-xl border border-cyan-500/30 shadow-inner">
-                                                <span className="font-black text-cyan-400 bg-black/80 w-6 h-6 rounded flex items-center justify-center shrink-0 text-xs shadow-[0_0_10px_rgba(6,182,212,0.4)] mt-0.5">
-                                                    {['A','B','C','D'][idx]}
-                                                </span>
-                                                <div className="flex flex-col text-left text-slate-200">
-                                                    <span dangerouslySetInnerHTML={{ __html: opt }} className="text-sm font-bold leading-snug break-words"/>
-                                                    {blueCurrentQ.aImages && blueCurrentQ.aImages[idx] && (
-                                                        <img src={blueCurrentQ.aImages[idx]} className="max-h-12 mt-1 rounded object-contain border border-slate-700"/>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                        {isBlueFinished ? (
+                            <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                                <Trophy size={60} className="text-cyan-400 mb-4 animate-bounce drop-shadow-[0_0_20px_rgba(6,182,212,0.8)]" />
+                                <h3 className="text-2xl font-black text-cyan-400 uppercase tracking-widest drop-shadow-md">ĐÃ HOÀN THÀNH</h3>
+                                <p className="text-slate-300 font-bold mt-2">Toàn bộ chiến binh Tia Chớp đã giải xong mật lệnh!</p>
                             </div>
+                        ) : blueCurrentQ ? (
+                            <>
+                                <div className="flex items-center gap-2 mb-3 border-b border-cyan-500/30 pb-2 shrink-0">
+                                    <Target size={18} className="text-cyan-400" />
+                                    <h3 className="font-black text-cyan-400 uppercase tracking-widest text-sm">Mật lệnh {currentBlueIndexToDisplay + 1}</h3>
+                                </div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                                    <h2 className="text-lg md:text-xl font-black text-white leading-relaxed break-words" dangerouslySetInnerHTML={{ __html: blueCurrentQ.q }} />
+                                    {blueCurrentQ.img && !blueCurrentQ.q.includes('[img]') && (
+                                        <img src={blueCurrentQ.img} alt="Hình" className="max-h-32 mt-3 rounded-xl border border-slate-700 mx-auto" />
+                                    )}
+                                    
+                                    {blueCurrentQ.a && blueCurrentQ.a.length > 0 && (
+                                        <div className="mt-4 flex flex-col gap-2">
+                                            {blueCurrentQ.a.map((opt, idx) => (
+                                                <div key={idx} className="flex items-start gap-2 bg-cyan-950/40 p-2 rounded-xl border border-cyan-500/30 shadow-inner">
+                                                    <span className="font-black text-cyan-400 bg-black/80 w-6 h-6 rounded flex items-center justify-center shrink-0 text-xs shadow-[0_0_10px_rgba(6,182,212,0.4)] mt-0.5">
+                                                        {['A','B','C','D'][idx]}
+                                                    </span>
+                                                    <div className="flex flex-col text-left text-slate-200">
+                                                        <span dangerouslySetInnerHTML={{ __html: opt }} className="text-sm font-bold leading-snug break-words"/>
+                                                        {blueCurrentQ.aImages && blueCurrentQ.aImages[idx] && (
+                                                            <img src={blueCurrentQ.aImages[idx]} className="max-h-12 mt-1 rounded object-contain border border-slate-700"/>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </>
                         ) : (
                             <div className="flex-1 flex items-center justify-center text-slate-500 italic text-sm">Đang tải mật lệnh...</div>
                         )}
@@ -392,38 +431,43 @@ export default function TugOfWarHost() {
 
                     {/* ===== PHẢI: ĐỘI TINH HOA ===== */}
                     <div className={`w-[32%] flex flex-col bg-[#2a0808]/80 backdrop-blur-md border-2 border-red-500/50 rounded-3xl p-4 shadow-[0_0_30px_rgba(239,68,68,0.2)] transition-opacity duration-500 overflow-hidden ${session.status === 'PLAYING' ? 'opacity-100' : 'opacity-0'}`}>
-                        <div className="flex items-center gap-2 mb-3 border-b border-red-500/30 pb-2 shrink-0 flex-row-reverse text-right">
-                            <Target size={18} className="text-red-500" />
-                            <h3 className="font-black text-red-500 uppercase tracking-widest text-sm">Mật lệnh {(session?.redQIndex || 0) + 1}</h3>
-                        </div>
-                        {redCurrentQ ? (
-                            <div className="flex-1 overflow-y-auto custom-scrollbar pl-2 text-right">
-                                <h2 
-                                    className="text-lg md:text-xl font-black text-white leading-relaxed break-words"
-                                    dangerouslySetInnerHTML={{ __html: redCurrentQ.q }}
-                                />
-                                {redCurrentQ.img && !redCurrentQ.q.includes('[img]') && (
-                                    <img src={redCurrentQ.img} alt="Hình" className="max-h-32 mt-3 rounded-xl border border-slate-700 mx-auto" />
-                                )}
-
-                                {redCurrentQ.a && redCurrentQ.a.length > 0 && (
-                                    <div className="mt-4 flex flex-col gap-2">
-                                        {redCurrentQ.a.map((opt, idx) => (
-                                            <div key={idx} className="flex items-start gap-2 bg-red-950/40 p-2 rounded-xl border border-red-500/30 shadow-inner flex-row-reverse">
-                                                <span className="font-black text-red-500 bg-black/80 w-6 h-6 rounded flex items-center justify-center shrink-0 text-xs shadow-[0_0_10px_rgba(239,68,68,0.4)] mt-0.5">
-                                                    {['A','B','C','D'][idx]}
-                                                </span>
-                                                <div className="flex flex-col text-right text-slate-200">
-                                                    <span dangerouslySetInnerHTML={{ __html: opt }} className="text-sm font-bold leading-snug break-words"/>
-                                                    {redCurrentQ.aImages && redCurrentQ.aImages[idx] && (
-                                                        <img src={redCurrentQ.aImages[idx]} className="max-h-12 mt-1 rounded object-contain border border-slate-700 ml-auto"/>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                        {isRedFinished ? (
+                            <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                                <Trophy size={60} className="text-red-500 mb-4 animate-bounce drop-shadow-[0_0_20px_rgba(239,68,68,0.8)]" />
+                                <h3 className="text-2xl font-black text-red-500 uppercase tracking-widest drop-shadow-md">ĐÃ HOÀN THÀNH</h3>
+                                <p className="text-slate-300 font-bold mt-2">Toàn bộ chiến binh Tinh Hoa đã giải xong mật lệnh!</p>
                             </div>
+                        ) : redCurrentQ ? (
+                            <>
+                                <div className="flex items-center gap-2 mb-3 border-b border-red-500/30 pb-2 shrink-0 flex-row-reverse text-right">
+                                    <Target size={18} className="text-red-500" />
+                                    <h3 className="font-black text-red-500 uppercase tracking-widest text-sm">Mật lệnh {currentRedIndexToDisplay + 1}</h3>
+                                </div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pl-2 text-right">
+                                    <h2 className="text-lg md:text-xl font-black text-white leading-relaxed break-words" dangerouslySetInnerHTML={{ __html: redCurrentQ.q }} />
+                                    {redCurrentQ.img && !redCurrentQ.q.includes('[img]') && (
+                                        <img src={redCurrentQ.img} alt="Hình" className="max-h-32 mt-3 rounded-xl border border-slate-700 mx-auto" />
+                                    )}
+
+                                    {redCurrentQ.a && redCurrentQ.a.length > 0 && (
+                                        <div className="mt-4 flex flex-col gap-2">
+                                            {redCurrentQ.a.map((opt, idx) => (
+                                                <div key={idx} className="flex items-start gap-2 bg-red-950/40 p-2 rounded-xl border border-red-500/30 shadow-inner flex-row-reverse">
+                                                    <span className="font-black text-red-500 bg-black/80 w-6 h-6 rounded flex items-center justify-center shrink-0 text-xs shadow-[0_0_10px_rgba(239,68,68,0.4)] mt-0.5">
+                                                        {['A','B','C','D'][idx]}
+                                                    </span>
+                                                    <div className="flex flex-col text-right text-slate-200">
+                                                        <span dangerouslySetInnerHTML={{ __html: opt }} className="text-sm font-bold leading-snug break-words"/>
+                                                        {redCurrentQ.aImages && redCurrentQ.aImages[idx] && (
+                                                            <img src={redCurrentQ.aImages[idx]} className="max-h-12 mt-1 rounded object-contain border border-slate-700 ml-auto"/>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </>
                         ) : (
                             <div className="flex-1 flex items-center justify-center text-slate-500 italic text-sm">Đang tải mật lệnh...</div>
                         )}

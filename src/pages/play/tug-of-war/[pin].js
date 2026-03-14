@@ -24,15 +24,13 @@ export default function TugOfWarPlayer() {
     const [freezeTimer, setFreezeTimer] = useState(0);
     const [timeLeft, setTimeLeft] = useState(0);
 
-    // === STATE & REFS CHO ÂM THANH / PHÁO HOA ===
-    const [isMuted, setIsMuted] = useState(false); // Mặc định bật tiếng
+    const [isMuted, setIsMuted] = useState(false); 
     const bgmRef = useRef(null);
     const correctAudioRef = useRef(null);
     const wrongAudioRef = useRef(null);
     const winAudioRef = useRef(null);
     const fireworksFired = useRef(false);
 
-    // 1. Khởi tạo Audio khi load trang
     useEffect(() => {
         if (typeof window !== 'undefined') {
             bgmRef.current = new Audio('https://cdn.pixabay.com/audio/2022/10/25/audio_40b08db6c8.mp3');
@@ -45,14 +43,12 @@ export default function TugOfWarPlayer() {
         }
     }, []);
 
-    // 2. Xử lý Nút Tắt/Mở tiếng cho tất cả Audio
     useEffect(() => {
         if (bgmRef.current) bgmRef.current.muted = isMuted;
         if (correctAudioRef.current) correctAudioRef.current.muted = isMuted;
         if (wrongAudioRef.current) wrongAudioRef.current.muted = isMuted;
         if (winAudioRef.current) winAudioRef.current.muted = isMuted;
 
-        // Nếu người dùng chủ động Unmute khi đang chơi, hãy thử play lại BGM
         if (!isMuted && session?.status === 'PLAYING') {
             bgmRef.current?.play().catch(e => console.log(e));
         }
@@ -123,16 +119,17 @@ export default function TugOfWarPlayer() {
 
     useEffect(() => {
         let interval;
-        if (session?.status === 'PLAYING' && session?.endTime) {
+        if (session?.status === 'PLAYING') {
+            if (session.syncTimeLeft !== undefined) {
+                setTimeLeft(session.syncTimeLeft);
+            }
+            
             interval = setInterval(() => {
-                const now = Date.now();
-                const distance = session.endTime - now;
-                if (distance <= 0) { clearInterval(interval); setTimeLeft(0); } 
-                else { setTimeLeft(Math.floor(distance / 1000)); }
+                setTimeLeft(prev => (prev > 0 ? prev - 1 : 0));
             }, 1000);
         }
         return () => clearInterval(interval);
-    }, [session?.status, session?.endTime]);
+    }, [session?.status, session?.syncTimeLeft]);
 
     useEffect(() => {
         let interval;
@@ -147,7 +144,6 @@ export default function TugOfWarPlayer() {
         setTeam(selectedTeam);
         setIsJoined(true); 
 
-        // Khởi động Audio để vượt Autoplay block
         if (!isMuted) {
             bgmRef.current?.play().then(() => { if (session?.status !== 'PLAYING') bgmRef.current.pause(); }).catch(e => console.log(e));
         }
@@ -169,6 +165,10 @@ export default function TugOfWarPlayer() {
 
         const teamScoreField = team === 'RED' ? 'redScore' : 'blueScore';
         const teamIndexField = team === 'RED' ? 'redQIndex' : 'blueQIndex';
+        const teamFinishedField = team === 'RED' ? 'redFinishedCount' : 'blueFinishedCount';
+
+        // Đã gỡ bỏ % questions.length. Xác định xem đây có phải câu cuối không
+        const isLastQuestion = currentQIndex >= questions.length - 1;
 
         if (isCorrect) {
             if (!isMuted && correctAudioRef.current) {
@@ -177,13 +177,18 @@ export default function TugOfWarPlayer() {
             }
 
             const ropeMove = team === 'RED' ? 1 : -1;
+            let updates = {
+                ropePosition: increment(ropeMove),
+                [teamScoreField]: increment(1),
+                [teamIndexField]: increment(1) 
+            };
+            
+            // Ghi nhận học sinh này đã làm xong nếu là câu cuối
+            if (isLastQuestion) updates[teamFinishedField] = increment(1);
+
             try {
-                await updateDoc(doc(firestore, 'game_sessions_tug', session.id), {
-                    ropePosition: increment(ropeMove),
-                    [teamScoreField]: increment(1),
-                    [teamIndexField]: increment(1) 
-                });
-                setCurrentQIndex((prev) => (prev + 1) % questions.length);
+                await updateDoc(doc(firestore, 'game_sessions_tug', session.id), updates);
+                setCurrentQIndex((prev) => prev + 1);
                 setQuestionCounter(prev => prev + 1);
             } catch (err) { console.error(err); }
         } else {
@@ -194,8 +199,15 @@ export default function TugOfWarPlayer() {
 
             setIsFrozen(true);
             setFreezeTimer(3);
-            try { await updateDoc(doc(firestore, 'game_sessions_tug', session.id), { [teamIndexField]: increment(1) }); } catch (err) { console.error(err); }
-            setCurrentQIndex((prev) => (prev + 1) % questions.length); 
+            
+            let updates = { [teamIndexField]: increment(1) };
+            if (isLastQuestion) updates[teamFinishedField] = increment(1);
+
+            try { 
+                await updateDoc(doc(firestore, 'game_sessions_tug', session.id), updates); 
+            } catch (err) { console.error(err); }
+            
+            setCurrentQIndex((prev) => prev + 1); 
             setQuestionCounter(prev => prev + 1);
         }
     };
@@ -293,6 +305,9 @@ export default function TugOfWarPlayer() {
     const currentQ = questions[currentQIndex] || {};
     const questionText = currentQ.q || "Câu hỏi không có nội dung";
     const optionList = currentQ.a || [];
+    
+    // BIẾN KIỂM TRA ĐÃ HOÀN THÀNH TOÀN BỘ CÂU HỎI
+    const isFinished = currentQIndex >= questions.length;
 
     return (
         <div className="h-[100dvh] bg-[#0a0a0a] text-white flex flex-col font-sans relative overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
@@ -317,15 +332,12 @@ export default function TugOfWarPlayer() {
                     </div>
 
                     <div className="flex gap-1 md:gap-2">
-                        
-                        {/* NÚT TẮT/BẬT ÂM THANH CHO MOBILE */}
                         <button 
                             onClick={() => setIsMuted(!isMuted)}
                             className={`px-2 md:px-3 py-1.5 rounded-xl border flex flex-col items-center justify-center transition-all ${isMuted ? 'bg-red-500/20 border-red-500/50 text-red-400 shadow-[0_0_8px_rgba(239,68,68,0.3)]' : 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.3)] active:scale-95'}`}
                         >
                             {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
                         </button>
-
                         <div className="bg-slate-900 border border-slate-700 px-2 md:px-3 py-1 md:py-1.5 rounded-xl flex flex-col items-center justify-center">
                             <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1"><Clock size={10}/> Thời gian</span>
                             <span className={`font-mono font-black text-xs md:text-sm mt-0.5 ${timeLeft <= 60 ? 'text-red-500 animate-pulse drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]' : 'text-green-400'}`}>{session.status === 'PLAYING' ? `${displayMins}:${displaySecs}` : '--:--'}</span>
@@ -348,47 +360,76 @@ export default function TugOfWarPlayer() {
                 </div>
             </div>
 
-            <div className="flex-1 flex flex-col p-2 md:p-4 gap-2 md:gap-3 overflow-hidden relative">
-                
-                <div className={`bg-[#111] p-3 md:p-5 rounded-2xl border-2 ${themeBorder} text-left shadow-[0_0_20px_rgba(0,0,0,0.8)] shrink-0 flex flex-col max-h-[45%] overflow-hidden relative`}>
-                    <div className={`absolute top-0 left-0 w-full h-1 ${team === 'RED' ? 'bg-red-500' : 'bg-cyan-400'} shrink-0`}></div>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar">
-                        <div className="mb-1 flex items-center"><span className={`text-[10px] md:text-sm font-black uppercase tracking-widest ${themeColor} drop-shadow-md`}>MẬT LỆNH SỐ {questionCounter}:</span></div>
-                        <h2 className="text-lg md:text-2xl font-black leading-snug text-white break-words w-full drop-shadow-md" dangerouslySetInnerHTML={{ __html: questionText }} />
-                        {currentQ.img && !questionText.includes('[img]') && (<img src={currentQ.img} alt="Minh họa" className="max-h-24 md:max-h-40 mt-2 rounded-xl border border-slate-700 object-contain shadow-lg" />)}
+            {/* ===== MAIN AREA: NẾU HẾT CÂU HỎI THÌ HIỂN THỊ CHÚC MỪNG ===== */}
+            {isFinished ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 text-center animate-in zoom-in duration-500 relative z-20">
+                    <div className={`bg-[#111]/80 backdrop-blur-xl p-8 rounded-3xl border-2 ${themeBorder} shadow-[0_0_30px_rgba(0,0,0,0.8)] w-full max-w-lg`}>
+                        <Trophy size={80} className="text-yellow-400 mx-auto mb-6 animate-bounce drop-shadow-[0_0_30px_rgba(250,204,21,0.8)]" />
+                        <h2 className={`text-2xl md:text-3xl font-black uppercase tracking-widest mb-3 ${themeColor} drop-shadow-md`}>
+                            XUẤT SẮC!
+                        </h2>
+                        <p className="text-slate-300 font-bold text-sm md:text-base leading-relaxed">
+                            Bạn đã hoàn thành toàn bộ mật lệnh.<br/>
+                            Hãy tiếp sức cho đồng đội bằng cách hò reo cổ vũ nhé!
+                        </p>
                     </div>
-                </div>
 
-                <div className="flex-1 flex flex-col md:grid md:grid-cols-2 gap-2 overflow-hidden pb-1">
-                    {optionList.length > 0 ? (
-                        optionList.map((opt, idx) => {
-                            const labels = ['A', 'B', 'C', 'D'];
-                            return (
-                                <button key={idx} onClick={() => handleAnswer(opt, idx)} className={`bg-[#0a0a0a] hover:${team === 'RED' ? 'bg-red-950/40' : 'bg-cyan-950/40'} text-white rounded-xl md:rounded-2xl font-bold text-sm md:text-lg p-2 md:p-3 text-left border border-slate-800 active:bg-slate-700 transition-colors flex items-center gap-3 shadow-lg flex-1 overflow-hidden group`}>
-                                    <span className={`bg-black w-8 h-8 md:w-12 md:h-12 text-sm md:text-xl rounded-lg md:rounded-xl flex items-center justify-center shrink-0 font-black border border-white/10 group-hover:border-transparent ${themeColor} group-hover:scale-110 transition-transform`}>{labels[idx] || '-'}</span>
-                                    <div className="flex flex-col flex-1 overflow-y-auto custom-scrollbar max-h-full">
-                                        <span dangerouslySetInnerHTML={{ __html: opt }} className="break-words leading-tight"/>
-                                        {currentQ.aImages && currentQ.aImages[idx] && (<img src={currentQ.aImages[idx]} alt="Hình đáp án" className="h-8 md:h-14 mt-1 rounded object-contain"/>)}
-                                    </div>
-                                </button>
-                            );
-                        })
-                    ) : (<div className="text-center text-slate-500 p-4 border border-dashed border-slate-700 rounded-xl flex-1 flex items-center justify-center">Không tìm thấy danh sách đáp án</div>)}
-                </div>
-
-                {isFrozen && (
-                    <div className="absolute inset-0 bg-black/95 backdrop-blur-xl z-50 flex flex-col items-center justify-center animate-in fade-in duration-200 rounded-2xl m-2 border-2 border-red-600 shadow-[0_0_50px_rgba(239,68,68,0.5)]">
-                        <AlertTriangle size={60} className="text-red-500 mb-3 animate-bounce drop-shadow-[0_0_20px_rgba(239,68,68,1)]" />
-                        <h2 className="text-2xl md:text-3xl font-black text-red-500 uppercase tracking-widest mb-1 text-center drop-shadow-md">ĐÓNG BĂNG!</h2>
-                        <p className="text-slate-400 font-bold mb-6 text-sm text-center px-4">Lệch nhịp rồi! Chờ reset năng lượng...</p>
-                        <div className="w-20 h-20 md:w-28 md:h-28 rounded-full border-[8px] border-slate-900 border-t-red-500 flex items-center justify-center animate-spin shadow-[0_0_40px_rgba(239,68,68,0.8)]">
-                            <div className="w-16 h-16 md:w-24 md:h-24 bg-black rounded-full flex items-center justify-center absolute animate-none" style={{ animationDirection: 'reverse' }}>
-                                <span className="text-4xl md:text-6xl font-black text-white font-mono drop-shadow-[0_0_10px_currentColor]">{freezeTimer}</span>
+                    {/* Vẫn giữ overlay đóng băng đè lên trên nếu trả lời sai câu cuối cùng */}
+                    {isFrozen && (
+                        <div className="absolute inset-0 bg-black/95 backdrop-blur-xl z-50 flex flex-col items-center justify-center animate-in fade-in duration-200 rounded-2xl m-2 border-2 border-red-600 shadow-[0_0_50px_rgba(239,68,68,0.5)]">
+                            <AlertTriangle size={60} className="text-red-500 mb-3 animate-bounce drop-shadow-[0_0_20px_rgba(239,68,68,1)]" />
+                            <h2 className="text-2xl md:text-3xl font-black text-red-500 uppercase tracking-widest mb-1 text-center drop-shadow-md">ĐÓNG BĂNG!</h2>
+                            <p className="text-slate-400 font-bold mb-6 text-sm text-center px-4">Lệch nhịp rồi! Chờ reset năng lượng...</p>
+                            <div className="w-20 h-20 md:w-28 md:h-28 rounded-full border-[8px] border-slate-900 border-t-red-500 flex items-center justify-center animate-spin shadow-[0_0_40px_rgba(239,68,68,0.8)]">
+                                <div className="w-16 h-16 md:w-24 md:h-24 bg-black rounded-full flex items-center justify-center absolute animate-none" style={{ animationDirection: 'reverse' }}>
+                                    <span className="text-4xl md:text-6xl font-black text-white font-mono drop-shadow-[0_0_10px_currentColor]">{freezeTimer}</span>
+                                </div>
                             </div>
                         </div>
+                    )}
+                </div>
+            ) : (
+                <div className="flex-1 flex flex-col p-2 md:p-4 gap-2 md:gap-3 overflow-hidden relative">
+                    <div className={`bg-[#111] p-3 md:p-5 rounded-2xl border-2 ${themeBorder} text-left shadow-[0_0_20px_rgba(0,0,0,0.8)] shrink-0 flex flex-col max-h-[45%] overflow-hidden relative`}>
+                        <div className={`absolute top-0 left-0 w-full h-1 ${team === 'RED' ? 'bg-red-500' : 'bg-cyan-400'} shrink-0`}></div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar">
+                            <div className="mb-1 flex items-center"><span className={`text-[10px] md:text-sm font-black uppercase tracking-widest ${themeColor} drop-shadow-md`}>MẬT LỆNH SỐ {questionCounter}:</span></div>
+                            <h2 className="text-lg md:text-2xl font-black leading-snug text-white break-words w-full drop-shadow-md" dangerouslySetInnerHTML={{ __html: questionText }} />
+                            {currentQ.img && !questionText.includes('[img]') && (<img src={currentQ.img} alt="Minh họa" className="max-h-24 md:max-h-40 mt-2 rounded-xl border border-slate-700 object-contain shadow-lg" />)}
+                        </div>
                     </div>
-                )}
-            </div>
+
+                    <div className="flex-1 flex flex-col md:grid md:grid-cols-2 gap-2 overflow-hidden pb-1">
+                        {optionList.length > 0 ? (
+                            optionList.map((opt, idx) => {
+                                const labels = ['A', 'B', 'C', 'D'];
+                                return (
+                                    <button key={idx} onClick={() => handleAnswer(opt, idx)} className={`bg-[#0a0a0a] hover:${team === 'RED' ? 'bg-red-950/40' : 'bg-cyan-950/40'} text-white rounded-xl md:rounded-2xl font-bold text-sm md:text-lg p-2 md:p-3 text-left border border-slate-800 active:bg-slate-700 transition-colors flex items-center gap-3 shadow-lg flex-1 overflow-hidden group`}>
+                                        <span className={`bg-black w-8 h-8 md:w-12 md:h-12 text-sm md:text-xl rounded-lg md:rounded-xl flex items-center justify-center shrink-0 font-black border border-white/10 group-hover:border-transparent ${themeColor} group-hover:scale-110 transition-transform`}>{labels[idx] || '-'}</span>
+                                        <div className="flex flex-col flex-1 overflow-y-auto custom-scrollbar max-h-full">
+                                            <span dangerouslySetInnerHTML={{ __html: opt }} className="break-words leading-tight"/>
+                                            {currentQ.aImages && currentQ.aImages[idx] && (<img src={currentQ.aImages[idx]} alt="Hình đáp án" className="h-8 md:h-14 mt-1 rounded object-contain"/>)}
+                                        </div>
+                                    </button>
+                                );
+                            })
+                        ) : (<div className="text-center text-slate-500 p-4 border border-dashed border-slate-700 rounded-xl flex-1 flex items-center justify-center">Không tìm thấy danh sách đáp án</div>)}
+                    </div>
+
+                    {isFrozen && (
+                        <div className="absolute inset-0 bg-black/95 backdrop-blur-xl z-50 flex flex-col items-center justify-center animate-in fade-in duration-200 rounded-2xl m-2 border-2 border-red-600 shadow-[0_0_50px_rgba(239,68,68,0.5)]">
+                            <AlertTriangle size={60} className="text-red-500 mb-3 animate-bounce drop-shadow-[0_0_20px_rgba(239,68,68,1)]" />
+                            <h2 className="text-2xl md:text-3xl font-black text-red-500 uppercase tracking-widest mb-1 text-center drop-shadow-md">ĐÓNG BĂNG!</h2>
+                            <p className="text-slate-400 font-bold mb-6 text-sm text-center px-4">Lệch nhịp rồi! Chờ reset năng lượng...</p>
+                            <div className="w-20 h-20 md:w-28 md:h-28 rounded-full border-[8px] border-slate-900 border-t-red-500 flex items-center justify-center animate-spin shadow-[0_0_40px_rgba(239,68,68,0.8)]">
+                                <div className="w-16 h-16 md:w-24 md:h-24 bg-black rounded-full flex items-center justify-center absolute animate-none" style={{ animationDirection: 'reverse' }}>
+                                    <span className="text-4xl md:text-6xl font-black text-white font-mono drop-shadow-[0_0_10px_currentColor]">{freezeTimer}</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <style jsx global>{`
                 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
