@@ -414,7 +414,61 @@ export default function HomePage() {
                   <CyberCard title="Arena Ôn Thi" subtitle="Hệ thống luyện thi PDF" icon={Trophy} color="pink" delay={500} onClick={() => router.push('/arena-on-thi')}/>
               </div>
           </div>
+  <div className="w-full grid grid-cols-4 md:grid-cols-8 gap-1.5 md:gap-2 shrink-0 relative z-20">
+              {[...Array(8)].map((_, index) => {
+                  const iskeoco = index === 0;
+                  const isTest = index === 1;
+                  const isMixer = index === 2; 
+                  const isDuplicate = index === 3; 
+                  const isquestion = index === 4; 
+                  const hoclieu= index === 5; 
+                  const copydrive= index === 6; 
+                  const isSubmit = index === 7; 
+                  
+                  const title = iskeoco ? "Game Kéo Co" : 
+                                isTest ? " " : 
+                                isMixer ? " " : 
+                                isDuplicate ? " " : 
+                                isquestion ? "" : 
+                                hoclieu ? " " : 
+                                copydrive ? "" :
+                                isSubmit ? "" : "";
 
+                  const handleMenuClick = () => {
+                      if (title) {
+                          if (!user) { setShowAuthModal(true); setAuthMode('LOGIN'); } 
+                          else {
+                              if (iskeoco) router.push('/play/tug-of-war');
+                              if (isTest) router.push('/create-test');
+                              if (isMixer) router.push('/mixer'); 
+                              if (isDuplicate) router.push('/clone-test');
+                              if (isquestion) router.push('/generate-questions');
+                              if (hoclieu) router.push('/arena-hoc-lieu');
+                                if (copydrive) router.push('/copydrive');
+                              if (isSubmit) router.push('/submit');
+                          }
+                      }
+                  };
+
+                  return (
+                      <button 
+                          key={index} onClick={handleMenuClick}
+                          className={`relative group h-[40px] md:h-[50px] rounded-lg md:rounded-xl font-black text-[8px] sm:text-[9px] md:text-[10px] uppercase tracking-wider md:tracking-widest text-white transition-all transform outline-none border-x border-t border-orange-400/80 border-b-2 md:border-b-4 border-b-red-900 overflow-hidden p-1 shadow-md
+                              ${title ? 'hover:-translate-y-0.5 cursor-pointer' : 'cursor-default opacity-80'}`}
+                      >
+                          <div className="absolute inset-0 bg-gradient-to-br from-red-600 via-orange-600 to-yellow-500"></div>
+                          <div className="absolute inset-0 bg-gradient-to-t from-yellow-300/0 to-yellow-200/40 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                          <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/30 to-transparent"></div>
+                          
+                          {title && (
+                              <span className="relative z-10 drop-shadow-md leading-tight flex items-center justify-center text-center h-full w-full">
+                                  {title}
+                              </span>
+                          )}
+                      </button>
+                  );
+              })}
+          </div>
           <div className="shrink-0 w-full bg-black/80 backdrop-blur-xl border-t-2 border-cyan-600/50 rounded-xl md:rounded-2xl overflow-hidden shadow-lg relative z-20 h-[55px] md:h-[70px] mt-auto">
               <div className="flex w-full h-full bg-slate-900/50 overflow-x-auto no-scrollbar md:grid md:grid-cols-8">
                   {[...Array(8)].map((_, index) => {
