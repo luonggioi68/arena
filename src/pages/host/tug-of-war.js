@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { firestore } from '@/lib/firebase';
 import { doc, getDoc, setDoc, updateDoc, onSnapshot, collection, serverTimestamp } from 'firebase/firestore';
-import { Activity, Play, Trophy, Loader2, AlertTriangle, Zap, Flame, Target, Volume2, VolumeX, Info, X, BookOpen } from 'lucide-react';
+import { Activity, Play, Trophy, Loader2, AlertTriangle, Zap, Flame, Target, Volume2, VolumeX, Info, X, BookOpen, Users, Home, StopCircle } from 'lucide-react';
 
 export default function TugOfWarHost() {
     const router = useRouter();
@@ -15,12 +15,13 @@ export default function TugOfWarHost() {
     const [questions, setQuestions] = useState([]);
     
     const [timeSetting, setTimeSetting] = useState(5);
+    const [winMarginSetting, setWinMarginSetting] = useState(15); // STATE MỚI: Cài đặt điểm Knock-out
     const [timeLeft, setTimeLeft] = useState(300);
     const timerRef = useRef(null);
     const isInitialized = useRef(false);
 
     const [isMuted, setIsMuted] = useState(false);
-    const [showRules, setShowRules] = useState(false); // STATE BẬT/TẮT HƯỚNG DẪN
+    const [showRules, setShowRules] = useState(false);
     
     const bgmRef = useRef(null);
     const winAudioRef = useRef(null);
@@ -96,7 +97,7 @@ export default function TugOfWarHost() {
                     examId: examId,
                     status: 'WAITING', 
                     ropePosition: 0,
-                    winMargin: 15, 
+                    winMargin: 15, // Giá trị mặc định
                     redScore: 0,
                     blueScore: 0,
                     blueQIndex: 0,
@@ -182,7 +183,8 @@ export default function TugOfWarHost() {
             setTimeLeft(timeSetting * 60);
             await updateDoc(doc(firestore, 'game_sessions_tug', sessionId), { 
                 status: 'PLAYING',
-                syncTimeLeft: timeSetting * 60
+                syncTimeLeft: timeSetting * 60,
+                winMargin: winMarginSetting // Cập nhật giới hạn Knock-out mới
             });
             if (!isMuted) bgmRef.current?.play().catch(e => console.log(e));
         } catch (err) {
@@ -196,6 +198,13 @@ export default function TugOfWarHost() {
             status: 'FINISHED',
             winner: winnerTeam 
         });
+    };
+
+    // HÀM ÉP KẾT THÚC GAME NGAY LẬP TỨC
+    const handleForceEndGame = () => {
+        if (!session) return;
+        const winner = session.ropePosition > 0 ? 'RED' : (session.ropePosition < 0 ? 'BLUE' : 'DRAW');
+        handleEndGame(winner);
     };
 
     const calculateImageOffset = () => {
@@ -257,11 +266,9 @@ export default function TugOfWarHost() {
     return (
         <div className="h-screen bg-[#020617] text-white flex flex-col font-sans overflow-hidden relative selection:bg-orange-500 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
             
-            {/* VÙNG ÁNH SÁNG */}
             <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-cyan-600/10 blur-[150px] rounded-full pointer-events-none"></div>
             <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-red-600/10 blur-[150px] rounded-full pointer-events-none"></div>
 
-            {/* POPUP HƯỚNG DẪN CHƠI */}
             {showRules && (
                 <div className="absolute inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
                     <div className="bg-[#0a0a0a] border-2 border-orange-500/50 rounded-3xl p-6 md:p-8 max-w-3xl w-full shadow-[0_0_50px_rgba(249,115,22,0.4)] relative">
@@ -276,7 +283,8 @@ export default function TugOfWarHost() {
                         <div className="space-y-4 text-sm md:text-base text-slate-300 leading-relaxed max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
                             <div className="bg-slate-900/50 p-5 rounded-2xl border border-white/10 shadow-inner">
                                 <h3 className="text-orange-400 font-black mb-2 uppercase tracking-widest text-xs flex items-center gap-2"><Target size={16}/> 1. Nhiệm vụ</h3>
-                                <p>Học sinh quét mã QR hoặc truy cập trang, nhập <strong>Mã Phòng</strong> và chọn phe (<strong>Tia Chớp</strong> hoặc <strong>Tinh Hoa</strong>). Trả lời các câu hỏi để giúp đội mình lôi sợi dây về phía sân nhà.</p>
+                                <p>Học sinh quét mã QR hoặc truy cập trang, nhập <strong>Mã Phòng</strong> và chọn phe (<strong>Tia Chớp</strong> hoặc <strong>Tinh Hoa</strong>). Trả lời các câu hỏi để giúp đội mình lôi sợi dây về phía sân nhà.
+                                <strong> Một đội có thể 20-30 học sinh, cùng làm trên các thiết bị khác nhau, điểm sẽ cộng dồn chung vào đội</strong> </p>
                             </div>
 
                             <div className="bg-cyan-900/20 p-5 rounded-2xl border border-cyan-500/30 shadow-inner">
@@ -290,7 +298,7 @@ export default function TugOfWarHost() {
                             <div className="bg-red-900/20 p-5 rounded-2xl border border-red-500/30 shadow-inner">
                                 <h3 className="text-red-400 font-black mb-2 uppercase tracking-widest text-xs flex items-center gap-2"><Trophy size={16}/> 3. Cách thức Phân thắng bại</h3>
                                 <ul className="list-disc pl-5 space-y-2">
-                                    <li><strong className="text-yellow-400">Thắng Knock-out:</strong> Một đội quá áp đảo, kéo tuột dây về biên (chênh lệch 15 điểm) sẽ kết thúc game ngay lập tức.</li>
+                                    <li><strong className="text-yellow-400">Thắng Knock-out:</strong> GV có thể đặt số điểm K.O, Một đội quá áp đảo, kéo tuột dây về biên giới hạn sẽ kết thúc game ngay lập tức.</li>
                                     <li><strong className="text-yellow-400">Hết giờ:</strong> Khi đồng hồ về 00:00, đội nào đang lợi thế về vị trí dây sẽ thắng.</li>
                                     <li><strong className="text-yellow-400">Hoàn thành bài:</strong> Toàn bộ học sinh hai bên đều đã giải xong tất cả mật lệnh, hệ thống sẽ chốt điểm hiện tại.</li>
                                 </ul>
@@ -304,17 +312,24 @@ export default function TugOfWarHost() {
                 </div>
             )}
 
-            {/* HEADER */}
             <header className="p-2 md:p-3 flex justify-between items-center border-b border-orange-500/30 z-30 bg-[#0a0a0a]/90 backdrop-blur-xl shadow-lg shrink-0">
                 <div className="flex items-center gap-3">
-                    <div className="bg-gradient-to-br from-yellow-400 to-red-600 p-2 rounded-xl shadow-[0_0_15px_rgba(239,68,68,0.5)]">
+                    <button 
+                        onClick={() => router.push('/dashboard')} 
+                        className="p-2 bg-slate-800/80 hover:bg-slate-700 rounded-xl border border-white/10 text-slate-300 hover:text-white transition-all shadow-[0_0_10px_rgba(0,0,0,0.5)]" 
+                        title="Trở về Trang chủ"
+                    >
+                        <Home size={20} />
+                    </button>
+
+                    <div className="bg-gradient-to-br from-yellow-400 to-red-600 p-2 rounded-xl shadow-[0_0_15px_rgba(239,68,68,0.5)] hidden sm:flex">
                         <Flame size={20} className="text-white animate-pulse" />
                     </div>
                     <div>
-                        <h1 className="text-xl md:text-2xl font-black uppercase italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600 drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">
+                        <h1 className="text-lg md:text-2xl font-black uppercase italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600 drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">
                             ARENA KÉO CO
                         </h1>
-                        <p className="text-orange-400 font-black tracking-[0.2em] text-[8px] md:text-[10px] mt-0.5 drop-shadow-md">
+                        <p className="text-orange-400 font-black tracking-[0.2em] text-[8px] md:text-[10px] mt-0.5 drop-shadow-md hidden sm:block">
                             SỨC MẠNH LÀ CHIẾN THẮNG
                         </p>
                     </div>
@@ -326,22 +341,27 @@ export default function TugOfWarHost() {
                             Mã Phòng: <span className="text-white text-xl md:text-2xl font-black bg-slate-800 px-2 py-0.5 rounded border border-slate-600 shadow-[0_0_10px_rgba(255,255,255,0.2)]">{session.pin}</span>
                         </p>
                         {session.status === 'WAITING' && (
-                            <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded border border-orange-500/30 shadow-[0_0_10px_rgba(249,115,22,0.2)]">
-                                <label className="text-[8px] font-bold text-orange-400 uppercase tracking-widest">Thi Đấu (Phút):</label>
-                                <input type="number" min="1" max="60" value={timeSetting} onChange={(e) => setTimeSetting(parseInt(e.target.value) || 5)} className="w-10 bg-black border border-orange-500 text-white font-black text-center rounded outline-none focus:ring-2 focus:ring-orange-500 text-xs" />
+                            <div className="flex gap-2 mt-0.5">
+                                <div className="flex items-center gap-1 bg-slate-900 px-1.5 py-0.5 rounded border border-orange-500/30">
+                                    <label className="text-[8px] font-bold text-orange-400 uppercase">Phút:</label>
+                                    <input type="number" min="1" max="60" value={timeSetting} onChange={(e) => setTimeSetting(parseInt(e.target.value) || 5)} className="w-8 bg-black border border-orange-500 text-white font-black text-center rounded outline-none focus:ring-2 focus:ring-orange-500 text-[10px]" />
+                                </div>
+                                <div className="flex items-center gap-1 bg-slate-900 px-1.5 py-0.5 rounded border border-red-500/30" title="Điểm cách biệt để phân thắng bại (Knock-out)">
+                                    <label className="text-[8px] font-bold text-red-400 uppercase">K.O:</label>
+                                    <input type="number" min="1" max="50" value={winMarginSetting} onChange={(e) => setWinMarginSetting(parseInt(e.target.value) || 15)} className="w-8 bg-black border border-red-500 text-white font-black text-center rounded outline-none focus:ring-2 focus:ring-red-500 text-[10px]" />
+                                </div>
                             </div>
                         )}
                     </div>
 
                     <div className="flex items-center gap-3 border-l border-white/10 pl-3 md:pl-4">
                         
-                        {/* NÚT HƯỚNG DẪN CHƠI */}
                         <button 
                             onClick={() => setShowRules(true)}
-                            className="p-2 md:p-3 rounded-lg border border-orange-500/50 bg-orange-500/20 text-orange-400 hover:scale-105 transition-all shadow-[0_0_10px_rgba(249,115,22,0.3)]"
+                            className="p-2 md:p-3 rounded-lg border border-orange-500/50 bg-orange-500/20 text-orange-400 hover:scale-105 transition-all shadow-[0_0_10px_rgba(249,115,22,0.3)] hidden sm:block"
                             title="Hướng dẫn luật chơi"
                         >
-                            <Info size={20} />
+                            <Info size={18} />
                         </button>
 
                         <button 
@@ -349,7 +369,7 @@ export default function TugOfWarHost() {
                             className={`p-2 md:p-3 rounded-lg border flex items-center justify-center transition-all ${isMuted ? 'bg-red-500/20 border-red-500/50 text-red-400 shadow-[0_0_10px_rgba(239,68,68,0.3)]' : 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.3)] hover:scale-105'}`}
                             title={isMuted ? "Bật âm thanh" : "Tắt âm thanh"}
                         >
-                            {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                            {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
                         </button>
 
                         <div className="text-center">
@@ -358,16 +378,27 @@ export default function TugOfWarHost() {
                                 {displayMins}:{displaySecs}
                             </p>
                         </div>
+
                         {session.status === 'WAITING' && (
-                            <button onClick={handleStartGame} className="bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-400 hover:to-red-500 text-white px-4 py-2 rounded-lg font-black uppercase text-sm shadow-[0_0_20px_rgba(239,68,68,0.6)] hover:scale-105 transition-all flex items-center gap-1 border border-red-400/50 group">
+                            <button onClick={handleStartGame} className="bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-400 hover:to-red-500 text-white px-4 py-2 rounded-lg font-black uppercase text-sm shadow-[0_0_20px_rgba(239,68,68,0.6)] hover:scale-105 transition-all flex items-center gap-1 border border-red-400/50 group ml-2">
                                 <Flame fill="currentColor" size={16} className="group-hover:animate-bounce"/> BẮT ĐẦU
+                            </button>
+                        )}
+
+                        {/* NÚT KẾT THÚC NGAY */}
+                        {session.status === 'PLAYING' && (
+                            <button 
+                                onClick={handleForceEndGame} 
+                                className="bg-red-600/80 hover:bg-red-500 text-white px-3 py-2 rounded-lg font-black uppercase text-xs shadow-[0_0_15px_rgba(239,68,68,0.5)] hover:scale-105 transition-all flex items-center gap-1 border border-red-400/50 ml-2"
+                                title="Chốt điểm và kết thúc ngay lập tức"
+                            >
+                                <StopCircle size={16} /> <span className="hidden md:block">KẾT THÚC</span>
                             </button>
                         )}
                     </div>
                 </div>
             </header>
 
-            {/* MÀN HÌNH KẾT THÚC */}
             {session.status === 'FINISHED' && (
                 <div className="absolute inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center animate-in zoom-in duration-500">
                     <Trophy size={180} className="text-yellow-400 mb-8 drop-shadow-[0_0_80px_rgba(250,204,21,1)] animate-bounce" />
@@ -383,7 +414,6 @@ export default function TugOfWarHost() {
                 </div>
             )}
 
-            {/* KHU VỰC MAIN */}
             <main className="flex-1 flex flex-col relative p-4 gap-4 overflow-hidden">
                 <div className="w-full flex justify-between z-30 shrink-0">
                     <div className="flex flex-col w-1/3 max-w-[250px]">
@@ -417,43 +447,70 @@ export default function TugOfWarHost() {
 
                 <div className="flex-1 flex justify-between relative z-20 overflow-hidden min-h-0">
                     
-                    {/* TRÁI: ĐỘI TIA CHỚP */}
-                    <div className={`w-[32%] flex flex-col bg-[#0a192f]/80 backdrop-blur-md border-2 border-cyan-500/50 rounded-3xl p-4 shadow-[0_0_30px_rgba(6,182,212,0.2)] transition-opacity duration-500 overflow-hidden ${session.status === 'PLAYING' ? 'opacity-100' : 'opacity-0'}`}>
-                        <div className="flex items-center gap-2 mb-3 border-b border-cyan-500/30 pb-2 shrink-0">
-                            <Target size={18} className="text-cyan-400" />
-                            <h3 className="font-black text-cyan-400 uppercase tracking-widest text-sm">Mật lệnh {currentBlueIndexToDisplay + 1}</h3>
-                        </div>
-                        {blueCurrentQ ? (
-                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-                                <h2 className="text-lg md:text-xl font-black text-white leading-relaxed break-words" dangerouslySetInnerHTML={{ __html: blueCurrentQ.q }} />
-                                {blueCurrentQ.img && !blueCurrentQ.q.includes('[img]') && (
-                                    <img src={blueCurrentQ.img} alt="Hình" className="max-h-32 mt-3 rounded-xl border border-slate-700 mx-auto" />
-                                )}
-                                
-                                {blueCurrentQ.a && blueCurrentQ.a.length > 0 && (
-                                    <div className="mt-4 flex flex-col gap-2">
-                                        {blueCurrentQ.a.map((opt, idx) => (
-                                            <div key={idx} className="flex items-start gap-2 bg-cyan-950/40 p-2 rounded-xl border border-cyan-500/30 shadow-inner">
-                                                <span className="font-black text-cyan-400 bg-black/80 w-6 h-6 rounded flex items-center justify-center shrink-0 text-xs shadow-[0_0_10px_rgba(6,182,212,0.4)] mt-0.5">
-                                                    {['A','B','C','D'][idx]}
-                                                </span>
-                                                <div className="flex flex-col text-left text-slate-200">
-                                                    <span dangerouslySetInnerHTML={{ __html: opt }} className="text-sm font-bold leading-snug break-words"/>
-                                                    {blueCurrentQ.aImages && blueCurrentQ.aImages[idx] && (
-                                                        <img src={blueCurrentQ.aImages[idx]} className="max-h-12 mt-1 rounded object-contain border border-slate-700"/>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                    <div className={`w-[32%] flex flex-col bg-[#0a192f]/80 backdrop-blur-md border-2 border-cyan-500/50 rounded-3xl p-4 shadow-[0_0_30px_rgba(6,182,212,0.2)] overflow-hidden ${session.status === 'WAITING' || session.status === 'PLAYING' ? 'opacity-100' : 'opacity-0'}`}>
+                        {session.status === 'WAITING' ? (
+                            <>
+                                <div className="flex items-center gap-2 mb-3 border-b border-cyan-500/30 pb-2 shrink-0">
+                                    <Users size={18} className="text-cyan-400" />
+                                    <h3 className="font-black text-cyan-400 uppercase tracking-widest text-sm">CHIẾN BINH TIA CHỚP</h3>
+                                </div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 flex flex-wrap gap-2 content-start">
+                                    {session.bluePlayers && session.bluePlayers.length > 0 ? (
+                                        session.bluePlayers.map((player, idx) => (
+                                            <span key={idx} className="bg-cyan-950/60 border border-cyan-500/50 text-cyan-100 px-3 py-1.5 rounded-lg text-sm font-bold shadow-[0_0_10px_rgba(6,182,212,0.2)] animate-in zoom-in duration-300">
+                                                {player}
+                                            </span>
+                                        ))
+                                    ) : (
+                                        <div className="w-full h-full flex flex-col items-center justify-center text-cyan-500/50 gap-2">
+                                            <Loader2 className="animate-spin" size={24} />
+                                            <span className="italic text-sm font-bold animate-pulse">Đang đợi gia nhập...</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        ) : isBlueFinished ? (
+                            <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                                <Trophy size={60} className="text-cyan-400 mb-4 animate-bounce drop-shadow-[0_0_20px_rgba(6,182,212,0.8)]" />
+                                <h3 className="text-2xl font-black text-cyan-400 uppercase tracking-widest drop-shadow-md">ĐÃ HOÀN THÀNH</h3>
+                                <p className="text-slate-300 font-bold mt-2">Toàn bộ chiến binh Tia Chớp đã giải xong mật lệnh!</p>
                             </div>
+                        ) : blueCurrentQ ? (
+                            <>
+                                <div className="flex items-center gap-2 mb-3 border-b border-cyan-500/30 pb-2 shrink-0">
+                                    <Target size={18} className="text-cyan-400" />
+                                    <h3 className="font-black text-cyan-400 uppercase tracking-widest text-sm">Mật lệnh {currentBlueIndexToDisplay + 1}</h3>
+                                </div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                                    <h2 className="text-lg md:text-xl font-black text-white leading-relaxed break-words" dangerouslySetInnerHTML={{ __html: blueCurrentQ.q }} />
+                                    {blueCurrentQ.img && !blueCurrentQ.q.includes('[img]') && (
+                                        <img src={blueCurrentQ.img} alt="Hình" className="max-h-32 mt-3 rounded-xl border border-slate-700 mx-auto" />
+                                    )}
+                                    
+                                    {blueCurrentQ.a && blueCurrentQ.a.length > 0 && (
+                                        <div className="mt-4 flex flex-col gap-2">
+                                            {blueCurrentQ.a.map((opt, idx) => (
+                                                <div key={idx} className="flex items-start gap-2 bg-cyan-950/40 p-2 rounded-xl border border-cyan-500/30 shadow-inner">
+                                                    <span className="font-black text-cyan-400 bg-black/80 w-6 h-6 rounded flex items-center justify-center shrink-0 text-xs shadow-[0_0_10px_rgba(6,182,212,0.4)] mt-0.5">
+                                                        {['A','B','C','D'][idx]}
+                                                    </span>
+                                                    <div className="flex flex-col text-left text-slate-200">
+                                                        <span dangerouslySetInnerHTML={{ __html: opt }} className="text-sm font-bold leading-snug break-words"/>
+                                                        {blueCurrentQ.aImages && blueCurrentQ.aImages[idx] && (
+                                                            <img src={blueCurrentQ.aImages[idx]} className="max-h-12 mt-1 rounded object-contain border border-slate-700"/>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </>
                         ) : (
                             <div className="flex-1 flex items-center justify-center text-slate-500 italic text-sm">Đang tải mật lệnh...</div>
                         )}
                     </div>
 
-                    {/* GIỮA: HOẠT ẢNH KÉO CO */}
                     <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center z-10">
                         <div className="absolute left-1/2 top-0 bottom-8 w-[4px] bg-yellow-400 z-0 border-l-[4px] border-dashed border-yellow-200/50 -translate-x-1/2 shadow-[0_0_30px_rgba(250,204,21,1)]"></div>
                         <div 
@@ -474,40 +531,68 @@ export default function TugOfWarHost() {
                         </div>
                     </div>
 
-                    {/* PHẢI: ĐỘI TINH HOA */}
-                    <div className={`w-[32%] flex flex-col bg-[#2a0808]/80 backdrop-blur-md border-2 border-red-500/50 rounded-3xl p-4 shadow-[0_0_30px_rgba(239,68,68,0.2)] transition-opacity duration-500 overflow-hidden ${session.status === 'PLAYING' ? 'opacity-100' : 'opacity-0'}`}>
-                        <div className="flex items-center gap-2 mb-3 border-b border-red-500/30 pb-2 shrink-0 flex-row-reverse text-right">
-                            <Target size={18} className="text-red-500" />
-                            <h3 className="font-black text-red-500 uppercase tracking-widest text-sm">Mật lệnh {currentRedIndexToDisplay + 1}</h3>
-                        </div>
-                        {redCurrentQ ? (
-                            <div className="flex-1 overflow-y-auto custom-scrollbar pl-2 text-right">
-                                <h2 
-                                    className="text-lg md:text-xl font-black text-white leading-relaxed break-words"
-                                    dangerouslySetInnerHTML={{ __html: redCurrentQ.q }}
-                                />
-                                {redCurrentQ.img && !redCurrentQ.q.includes('[img]') && (
-                                    <img src={redCurrentQ.img} alt="Hình" className="max-h-32 mt-3 rounded-xl border border-slate-700 mx-auto" />
-                                )}
-
-                                {redCurrentQ.a && redCurrentQ.a.length > 0 && (
-                                    <div className="mt-4 flex flex-col gap-2">
-                                        {redCurrentQ.a.map((opt, idx) => (
-                                            <div key={idx} className="flex items-start gap-2 bg-red-950/40 p-2 rounded-xl border border-red-500/30 shadow-inner flex-row-reverse">
-                                                <span className="font-black text-red-500 bg-black/80 w-6 h-6 rounded flex items-center justify-center shrink-0 text-xs shadow-[0_0_10px_rgba(239,68,68,0.4)] mt-0.5">
-                                                    {['A','B','C','D'][idx]}
-                                                </span>
-                                                <div className="flex flex-col text-right text-slate-200">
-                                                    <span dangerouslySetInnerHTML={{ __html: opt }} className="text-sm font-bold leading-snug break-words"/>
-                                                    {redCurrentQ.aImages && redCurrentQ.aImages[idx] && (
-                                                        <img src={redCurrentQ.aImages[idx]} className="max-h-12 mt-1 rounded object-contain border border-slate-700 ml-auto"/>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                    <div className={`w-[32%] flex flex-col bg-[#2a0808]/80 backdrop-blur-md border-2 border-red-500/50 rounded-3xl p-4 shadow-[0_0_30px_rgba(239,68,68,0.2)] overflow-hidden ${session.status === 'WAITING' || session.status === 'PLAYING' ? 'opacity-100' : 'opacity-0'}`}>
+                        {session.status === 'WAITING' ? (
+                            <>
+                                <div className="flex items-center gap-2 mb-3 border-b border-red-500/30 pb-2 shrink-0 flex-row-reverse text-right">
+                                    <Users size={18} className="text-red-500" />
+                                    <h3 className="font-black text-red-500 uppercase tracking-widest text-sm">CHIẾN BINH TINH HOA</h3>
+                                </div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pl-2 flex flex-wrap gap-2 content-start flex-row-reverse">
+                                    {session.redPlayers && session.redPlayers.length > 0 ? (
+                                        session.redPlayers.map((player, idx) => (
+                                            <span key={idx} className="bg-red-950/60 border border-red-500/50 text-red-100 px-3 py-1.5 rounded-lg text-sm font-bold shadow-[0_0_10px_rgba(239,68,68,0.2)] animate-in zoom-in duration-300">
+                                                {player}
+                                            </span>
+                                        ))
+                                    ) : (
+                                        <div className="w-full h-full flex flex-col items-center justify-center text-red-500/50 gap-2">
+                                            <Loader2 className="animate-spin" size={24} />
+                                            <span className="italic text-sm font-bold animate-pulse">Đang đợi gia nhập...</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        ) : isRedFinished ? (
+                            <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                                <Trophy size={60} className="text-red-500 mb-4 animate-bounce drop-shadow-[0_0_20px_rgba(239,68,68,0.8)]" />
+                                <h3 className="text-2xl font-black text-red-500 uppercase tracking-widest drop-shadow-md">ĐÃ HOÀN THÀNH</h3>
+                                <p className="text-slate-300 font-bold mt-2">Toàn bộ chiến binh Tinh Hoa đã giải xong mật lệnh!</p>
                             </div>
+                        ) : redCurrentQ ? (
+                            <>
+                                <div className="flex items-center gap-2 mb-3 border-b border-red-500/30 pb-2 shrink-0 flex-row-reverse text-right">
+                                    <Target size={18} className="text-red-500" />
+                                    <h3 className="font-black text-red-500 uppercase tracking-widest text-sm">Mật lệnh {currentRedIndexToDisplay + 1}</h3>
+                                </div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pl-2 text-right">
+                                    <h2 
+                                        className="text-lg md:text-xl font-black text-white leading-relaxed break-words"
+                                        dangerouslySetInnerHTML={{ __html: redCurrentQ.q }}
+                                    />
+                                    {redCurrentQ.img && !redCurrentQ.q.includes('[img]') && (
+                                        <img src={redCurrentQ.img} alt="Hình" className="max-h-32 mt-3 rounded-xl border border-slate-700 mx-auto" />
+                                    )}
+
+                                    {redCurrentQ.a && redCurrentQ.a.length > 0 && (
+                                        <div className="mt-4 flex flex-col gap-2">
+                                            {redCurrentQ.a.map((opt, idx) => (
+                                                <div key={idx} className="flex items-start gap-2 bg-red-950/40 p-2 rounded-xl border border-red-500/30 shadow-inner flex-row-reverse">
+                                                    <span className="font-black text-red-500 bg-black/80 w-6 h-6 rounded flex items-center justify-center shrink-0 text-xs shadow-[0_0_10px_rgba(239,68,68,0.4)] mt-0.5">
+                                                        {['A','B','C','D'][idx]}
+                                                    </span>
+                                                    <div className="flex flex-col text-right text-slate-200">
+                                                        <span dangerouslySetInnerHTML={{ __html: opt }} className="text-sm font-bold leading-snug break-words"/>
+                                                        {redCurrentQ.aImages && redCurrentQ.aImages[idx] && (
+                                                            <img src={redCurrentQ.aImages[idx]} className="max-h-12 mt-1 rounded object-contain border border-slate-700 ml-auto"/>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </>
                         ) : (
                             <div className="flex-1 flex items-center justify-center text-slate-500 italic text-sm">Đang tải mật lệnh...</div>
                         )}
