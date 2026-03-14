@@ -13,6 +13,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@google/generative-ai": "^0.24.1",
+    "@react-oauth/google": "^0.13.4",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "docxtemplater": "^3.68.3",
