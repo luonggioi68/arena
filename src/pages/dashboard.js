@@ -558,15 +558,16 @@ export default function Dashboard() {
             <Zap size={18} className="text-yellow-300 animate-pulse" fill="currentColor"/> 
             <span className="group-hover:tracking-widest transition-all">Nhanh Như Chớp</span>
         </button>
-        <button onClick={() => handleMoveToRepo(q.id)} className="col-span-5 bg-slate-800 hover:bg-rose-900/50 text-rose-400 hover:text-white py-2 rounded-xl font-bold uppercase text-[10px] flex items-center justify-center gap-2 mt-2 border border-slate-700 hover:border-rose-500/50 transition-all"><Archive size={14}/> Chuyển sang Kho Game</button>
-        {/* Thêm nút Kéo Co Kiến Thức với phong cách Neon */}
+            {/* Thêm nút Kéo Co Kiến Thức với phong cách Neon */}
 <button 
     onClick={() => router.push(`/host/tug-of-war?id=${q.id}`)} 
     className="col-span-5 mt-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white py-3 rounded-xl font-black uppercase italic text-xs shadow-[0_0_15px_rgba(16,185,129,0.5)] transition-all flex items-center justify-center gap-2 group border border-green-400/30"
 >
     <Activity size={18} className="text-white group-hover:scale-110 transition-transform" /> 
-    <span className="group-hover:tracking-widest transition-all">Kéo Co Kiến Thức</span>
+    <span className="group-hover:tracking-widest transition-all">Arena Kéo Co</span>
 </button>
+        <button onClick={() => handleMoveToRepo(q.id)} className="col-span-5 bg-slate-800 hover:bg-rose-900/50 text-rose-400 hover:text-white py-2 rounded-xl font-bold uppercase text-[10px] flex items-center justify-center gap-2 mt-2 border border-slate-700 hover:border-rose-500/50 transition-all"><Archive size={14}/> Chuyển sang Kho Game</button>
+    
         </div></div></div>)}</div></div>)}
         
         {/* TAB GAME REPO */}
