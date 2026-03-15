@@ -84,7 +84,7 @@ export default function CloneTestGenerator() {
        // Thay đổi dòng 85 trong clone-test.js
 else if (fileType === 'pdf') {
     // 1. Chỉ định đường dẫn chi tiết để Turbopack/Webpack tìm thấy file
-    const pdfjsLib = await import('pdfjs-dist/build/pdf.mjs');
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
     // 2. Thiết lập Worker từ CDN (giữ nguyên logic của bạn)
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
