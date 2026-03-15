@@ -83,23 +83,31 @@ export default function CloneTestGenerator() {
           }
        // Thay đổi dòng 85 trong clone-test.js
 else if (fileType === 'pdf') {
-    // Sử dụng đường dẫn trực tiếp đến file build của legacy (độ tương thích cao hơn)
-    const pdfjsLib = await import('pdfjs-dist/build/pdf');
+    // 1. Chỉ định đường dẫn chi tiết để Turbopack/Webpack tìm thấy file
+    const pdfjsLib = await import('pdfjs-dist/build/pdf.mjs');
+
+    // 2. Thiết lập Worker từ CDN (giữ nguyên logic của bạn)
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
     const arrayBuffer = await file.arrayBuffer();
-    // Thêm .promise vào getDocument
-    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-    const pdf = await loadingTask.promise;
-    
-    let fullText = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map(item => item.str).join(' ');
-        fullText += pageText + '\n';
+
+    try {
+        // 3. Khởi tạo tác vụ đọc PDF
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdf = await loadingTask.promise;
+        
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(item => item.str).join(' ');
+            fullText += pageText + '\n';
+        }
+        setUploadedText(fullText);
+    } catch (pdfError) {
+        console.error("Lỗi xử lý nội dung PDF:", pdfError);
+        throw new Error("Không thể trích xuất văn bản từ file PDF này.");
     }
-    setUploadedText(fullText);
 }
       } catch (error) {
           console.error("Lỗi đọc file:", error);
