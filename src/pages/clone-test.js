@@ -81,21 +81,39 @@ export default function CloneTestGenerator() {
               const result = await mammoth.extractRawText({ arrayBuffer });
               setUploadedText(result.value);
           }
-          else if (fileType === 'pdf') {
-              const pdfjsLib = await import('pdfjs-dist');
-              pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+         else if (fileType === 'pdf') {
+    setIsExtracting(true);
+    try {
+        // GIẢI PHÁP MẠNH: Tải trực tiếp từ CDN để né lỗi Build/Turbopack
+        if (!window.pdfjsLib) {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+            document.head.appendChild(script);
+            await new Promise((resolve) => (script.onload = resolve));
+        }
 
-              const arrayBuffer = await file.arrayBuffer();
-              const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-              let fullText = '';
-              for (let i = 1; i <= pdf.numPages; i++) {
-                  const page = await pdf.getPage(i);
-                  const textContent = await page.getTextContent();
-                  const pageText = textContent.items.map(item => item.str).join(' ');
-                  fullText += pageText + '\n';
-              }
-              setUploadedText(fullText);
-          }
+        const pdfjsLib = window['pdfjs-dist/build/pdf'];
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        const arrayBuffer = await file.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdf = await loadingTask.promise;
+        
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(item => item.str).join(' ');
+            fullText += pageText + '\n';
+        }
+        setUploadedText(fullText);
+    } catch (error) {
+        console.error("Lỗi đọc PDF:", error);
+        alert("Không thể đọc file PDF. Hãy thử dùng file Word hoặc Text!");
+    } finally {
+        setIsExtracting(false);
+    }
+}
       } catch (error) {
           console.error("Lỗi đọc file:", error);
           alert("Có lỗi xảy ra khi đọc file!");
