@@ -426,7 +426,7 @@ export default function HomePage() {
                   const isSubmit = index === 7; 
                   
                   const title = iskeoco ? "Game Kéo Co" : 
-                                isTest ? " " : 
+                                isTest ? "Viết Sáng kiến" : 
                                 isMixer ? " " : 
                                 isDuplicate ? " " : 
                                 isquestion ? "" : 
@@ -439,7 +439,7 @@ export default function HomePage() {
                           if (!user) { setShowAuthModal(true); setAuthMode('LOGIN'); } 
                           else {
                               if (iskeoco) router.push('/play/tug-of-war');
-                              if (isTest) router.push('/create-test');
+                              if (isTest) router.push('/ArenaInitiative');
                               if (isMixer) router.push('/mixer'); 
                               if (isDuplicate) router.push('/clone-test');
                               if (isquestion) router.push('/generate-questions');
@@ -478,11 +478,30 @@ export default function HomePage() {
                       const isGrade = index >= 3 && index <= 7;
                       const gradeNum = isGrade ? index - 2 : null;
 
-                      const handleClick = () => {
-                          if (isSpin) router.push('/bottom/SpinWheel');
-                          else if (isVote) router.push('/bottom/VoteArena');
-                          else if (isGrade) router.push(`/training?grade=${gradeNum}`);
-                      };
+                   const handleMenuClick = () => {
+                      if (title) {
+                          // 1. MỞ CỬA RIÊNG CHO GAME KÉO CO (Không cần đăng nhập)
+                          if (iskeoco) {
+                              router.push('/play/tug-of-war');
+                              return; // Dừng hàm lại, không chạy xuống dưới nữa
+                          }
+                          
+                          // 2. CÁC NÚT CÒN LẠI VẪN BẮT BUỘC ĐĂNG NHẬP (Dành cho Giáo viên)
+                          if (!user) { 
+                              setShowAuthModal(true); 
+                              setAuthMode('LOGIN'); 
+                          } 
+                          else {
+                              if (isTest) router.push('/ArenaInitiative');
+                              if (isMixer) router.push('/mixer'); 
+                              if (isDuplicate) router.push('/clone-test');
+                              if (isquestion) router.push('/generate-questions');
+                              if (hoclieu) router.push('/arena-hoc-lieu');
+                              if (copydrive) router.push('/copydrive');
+                              if (isSubmit) router.push('/submit');
+                          }
+                      }
+                  };
 
                       return (
                           <button key={index} onClick={handleClick} className={`group relative h-full flex flex-col items-center justify-center transition-colors border-r border-cyan-900/30 last:border-r-0 cursor-pointer min-w-[65px] md:min-w-0 flex-1 flex-shrink-0`}>
