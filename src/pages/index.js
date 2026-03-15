@@ -268,8 +268,12 @@ export default function HomePage() {
                       <div className="flex items-center gap-2 group cursor-pointer">
                         <div className="bg-gradient-to-br from-cyan-600 to-blue-700 p-1.5 md:p-2 rounded-lg shadow-[0_0_15px_rgba(6,182,212,0.4)] border border-white/10 group-hover:rotate-12 transition-transform"><Gamepad2 className="text-white w-4 h-4 md:w-5 md:h-5" /></div>
                         <div className="leading-none">
-                            <h1 className="text-sm md:text-xl font-black italic tracking-tighter text-white uppercase drop-shadow-md">ARENA <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">EDU</span></h1>
-                            <p className="text-[6px] md:text-[8px] font-bold text-slate-300 uppercase tracking-[0.4em]">Connect</p>
+                          <h1 className="text-sm md:text-xl font-black italic uppercase tracking-tighter text-white drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">
+                                  ARENA <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-orange-500 to-yellow-400">EDU</span> connect
+                              </h1>
+                            <p className="text-[6px] md:text-[10px] font-bold text-cyan-400 uppercase tracking-[0.2em] md:tracking-[0.3em] drop-shadow-[0_0_5px_rgba(6,182,212,0.8)] leading-tight mt-0.5">
+                                  lophoctuongtac.com
+                              </p>
                         </div>
                       </div>
                   )}
@@ -468,7 +472,7 @@ export default function HomePage() {
               })}
           </div>
 
-          <div className="shrink-0 w-full bg-black/80 backdrop-blur-xl border-t-2 border-cyan-600/50 rounded-xl md:rounded-2xl overflow-hidden shadow-lg relative z-20 h-[55px] md:h-[70px] mt-auto">
+       <div className="shrink-0 w-full bg-black/80 backdrop-blur-xl border-t-2 border-cyan-600/50 rounded-xl md:rounded-2xl overflow-hidden shadow-lg relative z-20 h-[55px] md:h-[70px] mt-auto">
               <div className="flex w-full h-full bg-slate-900/50 overflow-x-auto no-scrollbar md:grid md:grid-cols-8">
                   {[...Array(8)].map((_, index) => {
                       const isSpin = index === 0;
@@ -481,8 +485,9 @@ export default function HomePage() {
                           <button 
                               key={index} 
                               onClick={() => {
-                                  if (isSpin) router.push('/vong-xoay'); 
-                                  else if (isVote) router.push('/vote');
+                                  // ĐÃ SỬA LẠI ĐƯỜNG DẪN KHỚP VỚI TÊN FILE CỦA THẦY
+                                  if (isSpin) router.push('/bottom/SpinWheel'); 
+                                  else if (isVote) router.push('/bottom/VoteArena');
                                   else if (isPracticeBox) router.push('/training');
                                   else if (isGrade) handleGradeClick(gradeNum);
                               }} 
