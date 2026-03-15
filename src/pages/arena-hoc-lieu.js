@@ -19,7 +19,7 @@ const TECH_TABS = [
   { id: 'python', label: 'Python', icon: Terminal },
   { id: 'c_cpp', label: 'C/C++', icon: Code },
   { id: 'sql_web', label: 'SQL_WEB', icon: DbIcon },
-  { id: 'ai', label: 'AI', icon: Cpu }
+  { id: 'ai', label: 'AI + CANVA', icon: Cpu }
 ];
 
 const getFileFormatConfig = (doc) => {
@@ -232,7 +232,7 @@ export default function PublicHocLieu() {
                   <th className="hidden md:table-cell px-4 py-4 w-16 text-center">ID</th>
                   <th className="px-3 md:px-6 py-3 md:py-4">Tên Tài Liệu</th>
                   <th className="px-2 md:px-6 py-3 md:py-4 text-center w-24 md:w-auto">Loại File</th>
-                  <th className="hidden md:table-cell px-4 py-4 text-center">Tác Giả</th>
+                  <th className="hidden md:table-cell px-4 py-4 text-center">Ngày Tải Lên</th>
                   <th className="px-2 md:px-6 py-3 md:py-4 text-center w-20 md:w-48">Thao Tác</th>
                 </tr>
               </thead>
@@ -254,7 +254,7 @@ export default function PublicHocLieu() {
                           </div>
                           <div className="md:hidden mt-1.5 flex items-center gap-2">
                              <span className="text-[8px] text-slate-500 uppercase tracking-widest">
-                               Bởi: <span className="text-cyan-400 font-bold">{doc.authorEmail ? doc.authorEmail.split('@')[0] : 'Ẩn danh'}</span>
+                               Ngày: <span className="text-cyan-400 font-bold">{doc.createdAt?.toDate ? doc.createdAt.toDate().toLocaleDateString('vi-VN') : '---'}</span>
                              </span>
                           </div>
                         </td>
@@ -267,7 +267,7 @@ export default function PublicHocLieu() {
 
                         <td className="hidden md:table-cell px-4 py-5 text-center text-slate-400 text-xs font-bold tracking-widest">
                           <span className="bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-lg text-[10px]">
-                            {doc.authorEmail ? doc.authorEmail.split('@')[0] : 'Ẩn danh'}
+                            {doc.createdAt?.toDate ? doc.createdAt.toDate().toLocaleDateString('vi-VN') : '---'}
                           </span>
                         </td>
 

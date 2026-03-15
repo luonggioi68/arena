@@ -183,7 +183,7 @@ export default function AdminHocLieu() {
                   <option value="python" className="bg-red-900/50">▶ PYTHON</option>
                   <option value="c_cpp" className="bg-red-900/50">▶ C / C++</option>
                   <option value="sql_web" className="bg-red-900/50">▶ SQL WEB</option>
-                  <option value="ai" className="bg-red-900/50">▶ TRÍ TUỆ NHÂN TẠO (AI)</option>
+                  <option value="ai" className="bg-red-900/50">▶ AI + CANVA</option>
                 </select>
               </div>
               <div className={isFormTechType ? "opacity-30 pointer-events-none" : ""}>
