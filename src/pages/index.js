@@ -503,31 +503,42 @@ export default function HomePage() {
                       }
                   };
 
-                      return (
-                          <button key={index} onClick={handleClick} className={`group relative h-full flex flex-col items-center justify-center transition-colors border-r border-cyan-900/30 last:border-r-0 cursor-pointer min-w-[65px] md:min-w-0 flex-1 flex-shrink-0`}>
-                              
-                              {(isSpin || isVote || isPracticeBox) && <div className="absolute inset-0 bg-gradient-to-b from-cyan-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>}
-                              
-                              {isGrade && (
-                                  <>
-                                      <div className="absolute inset-0 bg-gradient-to-b from-red-900/40 to-orange-900/40 group-hover:opacity-0 transition-opacity"></div>
-                                      <div className="absolute inset-0 bg-gradient-to-b from-red-600/80 via-orange-500/80 to-yellow-500/80 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                  </>
-                              )}
-                              
-                              <div className="relative z-10 flex flex-col items-center justify-center h-full w-full gap-0.5 md:gap-1">
-                                  {isSpin ? (
-                                      <><Disc size={16} className="md:w-6 md:h-6 text-cyan-300 group-hover:rotate-180 transition-transform duration-700"/><span className="text-[8px] md:text-[9px] font-black uppercase text-cyan-100 tracking-wider text-center leading-tight">Vòng Xoay</span></>
-                                  ) : isVote ? (
-                                      <><BarChart2 size={16} className="md:w-6 md:h-6 text-cyan-300 group-hover:scale-110 transition-transform"/><span className="text-[8px] md:text-[9px] font-black uppercase text-cyan-100 tracking-wider text-center leading-tight">Vote</span></>
-                                  ) : isPracticeBox ? (
-                                      <><Target size={16} className="md:w-6 md:h-6 text-emerald-400 group-hover:scale-110 transition-transform"/><span className="text-[8px] md:text-[10px] font-black uppercase text-emerald-200 tracking-wider text-center leading-tight">Luyện Tập</span></>
-                                  ) : isGrade ? (
-                                      <><span className="text-lg md:text-xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:text-white leading-none drop-shadow-md">{gradeNum}</span><span className="text-[7px] md:text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none">Lớp</span></>
-                                  ) : null}
-                              </div>
-                          </button>
-                      );
+                      // ... đoạn code map phía trên
+return (
+    <button 
+        key={index} 
+        onClick={() => {
+            // Xác định chức năng dựa trên index tương ứng với menu dưới
+            if (isSpin) router.push('/vong-xoay'); // Thêm route nếu có
+            else if (isVote) router.push('/vote');
+            else if (isPracticeBox) router.push('/training');
+            else if (isGrade) handleGradeClick(gradeNum);
+        }} 
+        className={`group relative h-full flex flex-col items-center justify-center transition-colors border-r border-cyan-900/30 last:border-r-0 cursor-pointer min-w-[65px] md:min-w-0 flex-1 flex-shrink-0`}
+    >
+        {/* Giữ nguyên phần nội dung bên trong button (isSpin, isVote, isGrade...) */}
+        {(isSpin || isVote || isPracticeBox) && <div className="absolute inset-0 bg-gradient-to-b from-cyan-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>}
+        
+        {isGrade && (
+            <>
+                <div className="absolute inset-0 bg-gradient-to-b from-red-900/40 to-orange-900/40 group-hover:opacity-0 transition-opacity"></div>
+                <div className="absolute inset-0 bg-gradient-to-b from-red-600/80 via-orange-500/80 to-yellow-500/80 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            </>
+        )}
+        
+        <div className="relative z-10 flex flex-col items-center justify-center h-full w-full gap-0.5 md:gap-1">
+            {isSpin ? (
+                <><Disc size={16} className="md:w-6 md:h-6 text-cyan-300 group-hover:rotate-180 transition-transform duration-700"/><span className="text-[8px] md:text-[9px] font-black uppercase text-cyan-100 tracking-wider text-center leading-tight">Vòng Xoay</span></>
+            ) : isVote ? (
+                <><BarChart2 size={16} className="md:w-6 md:h-6 text-cyan-300 group-hover:scale-110 transition-transform"/><span className="text-[8px] md:text-[9px] font-black uppercase text-cyan-100 tracking-wider text-center leading-tight">Vote</span></>
+            ) : isPracticeBox ? (
+                <><Target size={16} className="md:w-6 md:h-6 text-emerald-400 group-hover:scale-110 transition-transform"/><span className="text-[8px] md:text-[10px] font-black uppercase text-emerald-200 tracking-wider text-center leading-tight">Luyện Tập</span></>
+            ) : isGrade ? (
+                <><span className="text-lg md:text-xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:text-white leading-none drop-shadow-md">{gradeNum}</span><span className="text-[7px] md:text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none">Lớp</span></>
+            ) : null}
+        </div>
+    </button>
+);
                   })}
               </div>
           </div>
