@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { auth, firestore } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore'; // BỔ SUNG getDoc ở đây
 import { Save, Settings, QrCode, Image, Cpu, Clock, HelpCircle, ArrowRight, ChevronDown, ChevronUp, Loader2, Info } from 'lucide-react';
 
 export default function SetupConfig() {
@@ -26,16 +26,31 @@ export default function SetupConfig() {
     });
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (!currentUser) {
                 // Sửa lỗi Turbopack: dùng replace thay vì push khi chưa có user
                 router.replace('/');
             } else {
                 setUser(currentUser);
-                setUserConfig(prev => ({
-                    ...prev,
-                    submissionCode: Math.random().toString(36).substring(2, 6).toUpperCase()
-                }));
+                
+                // === BỔ SUNG LOGIC KÉO DỮ LIỆU CŨ TỪ FIREBASE ===
+                try {
+                    const docRef = doc(firestore, "user_configs", currentUser.uid);
+                    const docSnap = await getDoc(docRef);
+
+                    if (docSnap.exists()) {
+                        // Nếu đã có cấu hình, đắp dữ liệu cũ vào state (Dấu xanh sẽ sáng lên)
+                        setUserConfig(prev => ({ ...prev, ...docSnap.data() }));
+                    } else {
+                        // Nếu là người mới hoàn toàn, mới tạo mã nộp bài random
+                        setUserConfig(prev => ({
+                            ...prev,
+                            submissionCode: Math.random().toString(36).substring(2, 6).toUpperCase()
+                        }));
+                    }
+                } catch (error) {
+                    console.error("Lỗi khi tải cấu hình cũ:", error);
+                }
             }
         });
         return () => unsubscribe();
@@ -98,7 +113,61 @@ export default function SetupConfig() {
                 {/* CỘT TRÁI: FORM CẤU HÌNH */}
                 <div className="bg-[#1e293b] p-4 md:p-5 rounded-2xl border border-cyan-500/30 shadow-xl relative overflow-hidden flex flex-col justify-between">
                     <form onSubmit={handleSaveConfig} className="space-y-4 relative z-10 flex-1">
-                        
+                           <div>
+                            <div className="flex justify-between items-end border-b border-white/10 pb-1 mb-1.5">
+                                <h3 className="text-purple-400 font-bold uppercase text-xs flex items-center gap-1.5">
+                                    <Cpu size={14}/> Trí Tuệ Nhân Tạo (Gemini)
+                                </h3>
+                                {/* Hiển thị trạng thái dấu tròn đậm giống Dashboard */}
+                                <div className="flex items-center gap-1.5">
+                                    <div className={`w-2.5 h-2.5 rounded-full ${userConfig.geminiKey ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-slate-600'}`}></div>
+                                    <span className={`text-[10px] font-bold uppercase ${userConfig.geminiKey ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                        {userConfig.geminiKey ? 'Đã nhập Key' : 'Chưa có Key'}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                                <div className="sm:col-span-3 relative group">
+                                    <label className="block text-[10px] font-bold text-slate-400 mb-1">Gemini API Key</label>
+                                    <div className="relative">
+                                        <input 
+                                            type="password" 
+                                            required 
+                                            value={userConfig.geminiKey} 
+                                            onChange={e=>setUserConfig({...userConfig, geminiKey: e.target.value})} 
+                                            placeholder="AIzaSy..." 
+                                            className={`w-full bg-slate-900 border ${userConfig.geminiKey ? 'border-emerald-500/50' : 'border-slate-700'} p-2.5 pr-10 rounded-lg text-white outline-none focus:border-purple-500 font-mono text-xs transition-all`}
+                                        />
+                                        {/* Nút bấm tiện ích để dán nhanh (Paste) */}
+                                        <button 
+                                            type="button"
+                                            onClick={async () => {
+                                                try {
+                                                    const text = await navigator.clipboard.readText();
+                                                    setUserConfig({...userConfig, geminiKey: text});
+                                                } catch (err) {
+                                                    alert("Vui lòng dán thủ công hoặc cấp quyền truy cập Clipboard cho trình duyệt.");
+                                                }
+                                            }}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-cyan-400 p-1.5 transition-colors"
+                                            title="Dán nhanh từ bộ nhớ tạm"
+                                        >
+                                            <Save size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <label className="block text-[10px] font-bold text-slate-400 mb-1">Phiên bản Model</label>
+                                    <select value={userConfig.geminiModel} onChange={e=>setUserConfig({...userConfig, geminiModel: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-purple-500 text-xs">
+                                        <option value="gemini-3-flash-preview">gemini-3-flash-preview(free)</option>
+                                        <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+                                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Nhanh free)</option>                                        
+                                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
+                                        <option value="gemini-1.5-pro">Gemini-1.5-pro</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
                         <div className="bg-slate-900/50 p-3 rounded-xl border border-blue-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
                                 <h3 className="text-blue-400 font-bold uppercase text-xs flex items-center gap-1.5 mb-0.5"><QrCode size={14}/> Mã Nộp Bài Cho Học Sinh</h3>
@@ -121,28 +190,7 @@ export default function SetupConfig() {
                             </div>
                         </div>
 
-                        <div>
-                            <div className="flex justify-between items-end border-b border-white/10 pb-1 mb-1.5">
-                                <h3 className="text-purple-400 font-bold uppercase text-xs flex items-center gap-1.5"><Cpu size={14}/> Trí Tuệ Nhân Tạo (Gemini)</h3>
-                                <span className="text-[11px] text-slate-400 italic hidden sm:block">Dùng tạo đề AI, Soạn KHBD...</span>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-                                <div className="sm:col-span-3">
-                                    <label className="block text-[10px] font-bold text-slate-400 mb-1">Gemini API Key</label>
-                                    <input type="password" required value={userConfig.geminiKey} onChange={e=>setUserConfig({...userConfig, geminiKey: e.target.value})} placeholder="AIzaSy..." className="w-full bg-slate-900 border border-slate-700 p-2 rounded-lg text-white outline-none focus:border-purple-500 font-mono text-xs"/>
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <label className="block text-[10px] font-bold text-slate-400 mb-1">Phiên bản Model</label>
-                                    <select value={userConfig.geminiModel} onChange={e=>setUserConfig({...userConfig, geminiModel: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-lg text-white outline-none focus:border-purple-500 text-xs">
-                                        <option value="gemini-3-flash-preview">gemini-3-flash-preview(free)</option>
-                                        <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
-                                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Nhanh free)</option>                                        
-                                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
-                                        <option value="gemini-1.5-pro">Gemini-1.5-pro</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
+                     
 
                         <div>
                             <div className="flex justify-between items-end border-b border-white/10 pb-1 mb-1.5">
