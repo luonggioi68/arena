@@ -429,7 +429,7 @@ export default function HomePage() {
                                 isquestion ? "" : 
                                 hoclieu ? " " : 
                                 copydrive ? "" :
-                                isSubmit ? "" : "";
+                                isSubmit ? "Nhập API KEY" : "";
 
                   const handleMenuClick = () => {
                       if (title) {
@@ -447,7 +447,7 @@ export default function HomePage() {
                               if (isquestion) router.push('/generate-questions');
                               if (hoclieu) router.push('/arena-hoc-lieu');
                               if (copydrive) router.push('/copydrive');
-                              if (isSubmit) router.push('/submit');
+                              if (isSubmit) router.push('/setup-config');
                           }
                       }
                   };
