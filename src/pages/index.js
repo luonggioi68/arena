@@ -4,7 +4,7 @@ import {
     signInWithPopup, signOut, onAuthStateChanged, 
     createUserWithEmailAndPassword, signInWithEmailAndPassword, 
     sendPasswordResetEmail, updateProfile, 
-    sendEmailVerification // [MỚI] Thêm hàm gửi email xác thực
+    sendEmailVerification
 } from 'firebase/auth';
 import { auth, googleProvider, firestore } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, increment, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore'; 
@@ -105,7 +105,6 @@ export default function HomePage() {
               const user = userCredential.user;
               await updateProfile(user, { displayName: authData.name });
 
-              // [MỚI] GỬI EMAIL XÁC THỰC SAU KHI TẠO TÀI KHOẢN
               await sendEmailVerification(user);
 
               await setDoc(doc(firestore, 'users', user.uid), {
@@ -118,31 +117,25 @@ export default function HomePage() {
                   createdAt: serverTimestamp()
               });
 
-              // [MỚI] ĐĂNG XUẤT NGAY ĐỂ ÉP NGƯỜI DÙNG VÀO MAIL KÍCH HOẠT
               await signOut(auth);
               
               setAuthSuccess("Đăng ký thành công! Vui lòng kiểm tra hộp thư Email (kể cả Thư rác/Spam) để kích hoạt tài khoản.");
               
-              // Chuyển về màn hình đăng nhập sau 5 giây
               setTimeout(() => {
                   setAuthMode('LOGIN');
                   setAuthSuccess('');
-                  setAuthData({...authData, password: ''}); // Xóa pass cho an toàn
+                  setAuthData({...authData, password: ''}); 
               }, 5000);
 
       } else if (authMode === 'LOGIN') {
               const userCredential = await signInWithEmailAndPassword(auth, authData.email, authData.password);
               const user = userCredential.user;
 
-              // 1. KIỂM TRA TÀI KHOẢN CŨ HAY MỚI (Luật Đặc Xá)
               const creationTime = new Date(user.metadata.creationTime).getTime();
-              // Mốc thời gian trước lúc cập nhật tính năng xác thực (VD: lấy ngày 5/3/2026)
               const updateTime = new Date('2026-03-05T00:00:00').getTime(); 
               const isOldAccount = creationTime < updateTime;
 
-              // 2. KIỂM TRA XÁC THỰC MAIL (Chỉ áp dụng với tài khoản MỚI)
               if (!isOldAccount && !user.emailVerified) {
-                  // Tự động gửi lại mail phòng khi user làm thất lạc
                   try { await sendEmailVerification(user); } catch(e) { console.error(e) }
 
                   await signOut(auth); 
@@ -151,7 +144,6 @@ export default function HomePage() {
                   return; 
               }
 
-              // 3. KIỂM TRA XEM ĐÃ CẤU HÌNH SETUP-CONFIG CHƯA (Dành cho cả tài khoản cũ & mới)
               const configRef = doc(firestore, 'user_configs', user.uid);
               const configSnap = await getDoc(configRef);
 
@@ -356,7 +348,7 @@ export default function HomePage() {
                               if (isDuplicate) router.push('/clone-test');
                               if (isquestion) router.push('/generate-questions');
                               if (hoclieu) router.push('/arena-hoc-lieu');
-                                if (copydrive) router.push('/copydrive');
+                              if (copydrive) router.push('/copydrive');
                               if (isSubmit) router.push('/submit');
                           }
                       }
@@ -414,7 +406,8 @@ export default function HomePage() {
                   <CyberCard title="Arena Ôn Thi" subtitle="Hệ thống luyện thi PDF" icon={Trophy} color="pink" delay={500} onClick={() => router.push('/arena-on-thi')}/>
               </div>
           </div>
-  <div className="w-full grid grid-cols-4 md:grid-cols-8 gap-1.5 md:gap-2 shrink-0 relative z-20">
+
+          <div className="w-full grid grid-cols-4 md:grid-cols-8 gap-1.5 md:gap-2 shrink-0 relative z-20">
               {[...Array(8)].map((_, index) => {
                   const iskeoco = index === 0;
                   const isTest = index === 1;
@@ -436,15 +429,20 @@ export default function HomePage() {
 
                   const handleMenuClick = () => {
                       if (title) {
+                          // MỞ CỬA CHO HỌC SINH VÀO GAME KÉO CO KHÔNG CẦN ĐĂNG NHẬP
+                          if (iskeoco) {
+                              router.push('/play/tug-of-war/'); 
+                              return;
+                          }
+
                           if (!user) { setShowAuthModal(true); setAuthMode('LOGIN'); } 
                           else {
-                              if (iskeoco) router.push('/play/tug-of-war');
                               if (isTest) router.push('/ArenaInitiative');
                               if (isMixer) router.push('/mixer'); 
                               if (isDuplicate) router.push('/clone-test');
                               if (isquestion) router.push('/generate-questions');
                               if (hoclieu) router.push('/arena-hoc-lieu');
-                                if (copydrive) router.push('/copydrive');
+                              if (copydrive) router.push('/copydrive');
                               if (isSubmit) router.push('/submit');
                           }
                       }
@@ -469,6 +467,7 @@ export default function HomePage() {
                   );
               })}
           </div>
+
           <div className="shrink-0 w-full bg-black/80 backdrop-blur-xl border-t-2 border-cyan-600/50 rounded-xl md:rounded-2xl overflow-hidden shadow-lg relative z-20 h-[55px] md:h-[70px] mt-auto">
               <div className="flex w-full h-full bg-slate-900/50 overflow-x-auto no-scrollbar md:grid md:grid-cols-8">
                   {[...Array(8)].map((_, index) => {
@@ -478,67 +477,39 @@ export default function HomePage() {
                       const isGrade = index >= 3 && index <= 7;
                       const gradeNum = isGrade ? index - 2 : null;
 
-                   const handleMenuClick = () => {
-                      if (title) {
-                          // 1. MỞ CỬA RIÊNG CHO GAME KÉO CO (Không cần đăng nhập)
-                          if (iskeoco) {
-                              router.push('/play/tug-of-war');
-                              return; // Dừng hàm lại, không chạy xuống dưới nữa
-                          }
-                          
-                          // 2. CÁC NÚT CÒN LẠI VẪN BẮT BUỘC ĐĂNG NHẬP (Dành cho Giáo viên)
-                          if (!user) { 
-                              setShowAuthModal(true); 
-                              setAuthMode('LOGIN'); 
-                          } 
-                          else {
-                              if (isTest) router.push('/ArenaInitiative');
-                              if (isMixer) router.push('/mixer'); 
-                              if (isDuplicate) router.push('/clone-test');
-                              if (isquestion) router.push('/generate-questions');
-                              if (hoclieu) router.push('/arena-hoc-lieu');
-                              if (copydrive) router.push('/copydrive');
-                              if (isSubmit) router.push('/submit');
-                          }
-                      }
-                  };
-
-                      // ... đoạn code map phía trên
-return (
-    <button 
-        key={index} 
-        onClick={() => {
-            // Xác định chức năng dựa trên index tương ứng với menu dưới
-            if (isSpin) router.push('/vong-xoay'); // Thêm route nếu có
-            else if (isVote) router.push('/vote');
-            else if (isPracticeBox) router.push('/training');
-            else if (isGrade) handleGradeClick(gradeNum);
-        }} 
-        className={`group relative h-full flex flex-col items-center justify-center transition-colors border-r border-cyan-900/30 last:border-r-0 cursor-pointer min-w-[65px] md:min-w-0 flex-1 flex-shrink-0`}
-    >
-        {/* Giữ nguyên phần nội dung bên trong button (isSpin, isVote, isGrade...) */}
-        {(isSpin || isVote || isPracticeBox) && <div className="absolute inset-0 bg-gradient-to-b from-cyan-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>}
-        
-        {isGrade && (
-            <>
-                <div className="absolute inset-0 bg-gradient-to-b from-red-900/40 to-orange-900/40 group-hover:opacity-0 transition-opacity"></div>
-                <div className="absolute inset-0 bg-gradient-to-b from-red-600/80 via-orange-500/80 to-yellow-500/80 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-            </>
-        )}
-        
-        <div className="relative z-10 flex flex-col items-center justify-center h-full w-full gap-0.5 md:gap-1">
-            {isSpin ? (
-                <><Disc size={16} className="md:w-6 md:h-6 text-cyan-300 group-hover:rotate-180 transition-transform duration-700"/><span className="text-[8px] md:text-[9px] font-black uppercase text-cyan-100 tracking-wider text-center leading-tight">Vòng Xoay</span></>
-            ) : isVote ? (
-                <><BarChart2 size={16} className="md:w-6 md:h-6 text-cyan-300 group-hover:scale-110 transition-transform"/><span className="text-[8px] md:text-[9px] font-black uppercase text-cyan-100 tracking-wider text-center leading-tight">Vote</span></>
-            ) : isPracticeBox ? (
-                <><Target size={16} className="md:w-6 md:h-6 text-emerald-400 group-hover:scale-110 transition-transform"/><span className="text-[8px] md:text-[10px] font-black uppercase text-emerald-200 tracking-wider text-center leading-tight">Luyện Tập</span></>
-            ) : isGrade ? (
-                <><span className="text-lg md:text-xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:text-white leading-none drop-shadow-md">{gradeNum}</span><span className="text-[7px] md:text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none">Lớp</span></>
-            ) : null}
-        </div>
-    </button>
-);
+                      return (
+                          <button 
+                              key={index} 
+                              onClick={() => {
+                                  if (isSpin) router.push('/vong-xoay'); 
+                                  else if (isVote) router.push('/vote');
+                                  else if (isPracticeBox) router.push('/training');
+                                  else if (isGrade) handleGradeClick(gradeNum);
+                              }} 
+                              className={`group relative h-full flex flex-col items-center justify-center transition-colors border-r border-cyan-900/30 last:border-r-0 cursor-pointer min-w-[65px] md:min-w-0 flex-1 flex-shrink-0`}
+                          >
+                              {(isSpin || isVote || isPracticeBox) && <div className="absolute inset-0 bg-gradient-to-b from-cyan-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>}
+                              
+                              {isGrade && (
+                                  <>
+                                      <div className="absolute inset-0 bg-gradient-to-b from-red-900/40 to-orange-900/40 group-hover:opacity-0 transition-opacity"></div>
+                                      <div className="absolute inset-0 bg-gradient-to-b from-red-600/80 via-orange-500/80 to-yellow-500/80 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                  </>
+                              )}
+                              
+                              <div className="relative z-10 flex flex-col items-center justify-center h-full w-full gap-0.5 md:gap-1">
+                                  {isSpin ? (
+                                      <><Disc size={16} className="md:w-6 md:h-6 text-cyan-300 group-hover:rotate-180 transition-transform duration-700"/><span className="text-[8px] md:text-[9px] font-black uppercase text-cyan-100 tracking-wider text-center leading-tight">Vòng Xoay</span></>
+                                  ) : isVote ? (
+                                      <><BarChart2 size={16} className="md:w-6 md:h-6 text-cyan-300 group-hover:scale-110 transition-transform"/><span className="text-[8px] md:text-[9px] font-black uppercase text-cyan-100 tracking-wider text-center leading-tight">Vote</span></>
+                                  ) : isPracticeBox ? (
+                                      <><Target size={16} className="md:w-6 md:h-6 text-emerald-400 group-hover:scale-110 transition-transform"/><span className="text-[8px] md:text-[10px] font-black uppercase text-emerald-200 tracking-wider text-center leading-tight">Luyện Tập</span></>
+                                  ) : isGrade ? (
+                                      <><span className="text-lg md:text-xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-orange-300 group-hover:text-white leading-none drop-shadow-md">{gradeNum}</span><span className="text-[7px] md:text-[8px] font-bold text-red-300 group-hover:text-yellow-100 uppercase tracking-widest leading-none">Lớp</span></>
+                                  ) : null}
+                              </div>
+                          </button>
+                      );
                   })}
               </div>
           </div>
